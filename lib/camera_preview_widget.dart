@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
@@ -17,6 +19,7 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
   bool _isCameraOpen = false;
   Image? _image;
   double fps = 30;
+  Timer? timer;
   @override
   void initState() {
     super.initState();
@@ -36,25 +39,33 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
     }
   }
 
-  void _updateFrame() async {
+  void _updateFrame() {
     if (!_isCameraOpen) return;
 
-    final (success, frame) = await _vc.readAsync();
-    int processingTime = (1000 / fps).round();
-    if (success) {
-      _frame = frame;
-      print(_frame.sum().toString());
-      final (success, image) = (await cv.imencodeAsync('.jpg', _frame));
-      if (success == false) {
-        print('failed to encode image');
+    timer = Timer.periodic(Duration(milliseconds: (1000 / fps).round()),
+        (timer) async {
+      if (!_isCameraOpen) {
+        timer.cancel();
         return;
       }
 
-      _image = Image.memory(image);
-      setState(() {});
-    }
-
-    Future.delayed(Duration(milliseconds: processingTime), _updateFrame);
+      final (success, frame) = await _vc.readAsync();
+      if (success) {
+        _frame = frame;
+        // print(_frame.sum().toString());
+        final (success, image) = (await cv.imencodeAsync('.jpg', _frame));
+        if (success == false) {
+          // print('failed to encode image');
+          return;
+        }
+        setState(() {
+          _image = Image.memory(
+            image,
+            gaplessPlayback: true,
+          );
+        });
+      }
+    });
   }
 
   @override
@@ -65,14 +76,16 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
     if (_image == null) {
       return Center(child: CircularProgressIndicator());
     }
-    print('camera index ${widget.cameraIndex} is open, with image $_image');
-    return _image ?? Center(child: CircularProgressIndicator());
+
+    // print('camera index ${widget.cameraIndex} is open, with image $_image');
+    return _image!;
   }
 
   @override
   void dispose() {
     _vc.release();
     _frame.dispose();
+    timer?.cancel();
     super.dispose();
   }
 }
