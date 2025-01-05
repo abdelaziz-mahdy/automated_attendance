@@ -1,6 +1,5 @@
 import 'package:cameras_viewer/models/camera_model.dart';
 import 'package:cameras_viewer/widgets/camera_preview_widget.dart';
-import 'package:cameras_viewer/services/camera_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,13 +17,11 @@ class _CameraGridViewState extends State<CameraGridView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       cameraModel.fetchCameras();
     });
-    // TODO: implement initState
     super.initState();
   }
 
   @override
   void didChangeDependencies() {
-    // TODO: implement didChangeDependencies
     super.didChangeDependencies();
   }
 

@@ -8,6 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 Future<void> main() async {
+  initializeServices();
+
+  runApp(MyApp());
+}
+
+void initializeServices() {
   final faceExtractionService = FaceExtractionService();
   final faceFeaturesExtractionService = FaceFeaturesExtractionService();
   final faceComparisonService = FaceComparisonService();
@@ -19,8 +25,6 @@ Future<void> main() async {
   faceExtractionService.initialize(faceDetectionModelPath);
   faceFeaturesExtractionService.initialize(faceRecognitionModelPath);
   faceComparisonService.initialize(faceRecognitionModelPath);
-
-  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
