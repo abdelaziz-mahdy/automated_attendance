@@ -35,7 +35,7 @@ Future<void> initializeServices() async {
   final faceDetectionModelPath =
       await _copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
   final faceFeaturesExtractionModelPath = await _copyAssetFileToTmp(
-      "assets/face_features_extraction_sface_2021dec.onnx");
+      "assets/face_recognition_sface_2021dec.onnx");
   // Initialize services
   faceExtractionService.initialize(faceDetectionModelPath);
   faceFeaturesExtractionService.initialize(faceFeaturesExtractionModelPath);
