@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cameras_viewer/services/face_comparison_service.dart';
 import 'package:cameras_viewer/services/face_extraction_service.dart';
 import 'package:cameras_viewer/services/face_features_extraction_service.dart';
@@ -5,26 +7,39 @@ import 'package:cameras_viewer/views/camera_grid_view.dart';
 import 'package:cameras_viewer/models/camera_model.dart';
 import 'package:cameras_viewer/services/camera_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 Future<void> main() async {
-  initializeServices();
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeServices();
 
   runApp(MyApp());
 }
 
-void initializeServices() {
+Future<String> _copyAssetFileToTmp(String assetPath) async {
+  final tmpDir = await getTemporaryDirectory();
+  final tmpPath = '${tmpDir.path}/${assetPath.split('/').last}';
+  final byteData = await rootBundle.load(assetPath);
+  final file = File(tmpPath);
+  await file.writeAsBytes(byteData.buffer.asUint8List());
+  return tmpPath;
+}
+
+Future<void> initializeServices() async {
   final faceExtractionService = FaceExtractionService();
   final faceFeaturesExtractionService = FaceFeaturesExtractionService();
   final faceComparisonService = FaceComparisonService();
 
-  final faceDetectionModelPath = 'assets/face_detection_yunet_2023mar.onnx';
-  final faceRecognitionModelPath = 'assets/face_recognition_sface_2021dec.onnx';
-
+  final faceDetectionModelPath =
+      await _copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
+  final faceFeaturesExtractionModelPath = await _copyAssetFileToTmp(
+      "assets/face_features_extraction_sface_2021dec.onnx");
   // Initialize services
   faceExtractionService.initialize(faceDetectionModelPath);
-  faceFeaturesExtractionService.initialize(faceRecognitionModelPath);
-  faceComparisonService.initialize(faceRecognitionModelPath);
+  faceFeaturesExtractionService.initialize(faceFeaturesExtractionModelPath);
+  faceComparisonService.initialize(faceFeaturesExtractionModelPath);
 }
 
 class MyApp extends StatelessWidget {

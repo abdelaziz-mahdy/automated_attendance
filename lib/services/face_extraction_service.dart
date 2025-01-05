@@ -3,7 +3,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class FaceExtractionService {
   static final FaceExtractionService _instance =
       FaceExtractionService._privateConstructor();
-  late cv.FaceDetectorYN? _faceDetector;
+   cv.FaceDetectorYN? _faceDetector;
 
   FaceExtractionService._privateConstructor();
 
@@ -19,7 +19,7 @@ class FaceExtractionService {
     );
   }
 
-  cv.Mat extractFaceBoundaries(cv.Mat image) {
+  cv.Mat extractFacesBoundaries(cv.Mat image) {
     _faceDetector!.setInputSize((image.width, image.height));
     final faces = _faceDetector!.detect(image);
     return faces;

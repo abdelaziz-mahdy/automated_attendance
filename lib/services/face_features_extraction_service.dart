@@ -4,7 +4,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class FaceFeaturesExtractionService {
   static final FaceFeaturesExtractionService _instance =
       FaceFeaturesExtractionService._privateConstructor();
-  late cv.FaceRecognizerSF? _recognizer;
+   cv.FaceRecognizerSF? _recognizer;
 
   FaceFeaturesExtractionService._privateConstructor();
 
@@ -62,5 +62,35 @@ class FaceFeaturesExtractionService {
       }
     }
     return faceFeatures;
+  }
+
+  cv.Mat visualizeFaceDetect(cv.Mat img, cv.Mat faces) {
+    for (int row = 0; row < faces.rows; row++) {
+      final rect = cv.Rect(
+        faces.at<double>(row, 0).toInt(),
+        faces.at<double>(row, 1).toInt(),
+        faces.at<double>(row, 2).toInt(),
+        faces.at<double>(row, 3).toInt(),
+      );
+
+      final points = [
+        cv.Point(
+            faces.at<double>(row, 4).toInt(), faces.at<double>(row, 5).toInt()),
+        cv.Point(
+            faces.at<double>(row, 6).toInt(), faces.at<double>(row, 7).toInt()),
+        cv.Point(
+            faces.at<double>(row, 8).toInt(), faces.at<double>(row, 9).toInt()),
+        cv.Point(faces.at<double>(row, 10).toInt(),
+            faces.at<double>(row, 11).toInt()),
+        cv.Point(faces.at<double>(row, 12).toInt(),
+            faces.at<double>(row, 13).toInt()),
+      ];
+
+      cv.rectangle(img, rect, cv.Scalar.green, thickness: 2);
+      for (final p in points) {
+        cv.circle(img, p, 2, cv.Scalar.blue, thickness: 2);
+      }
+    }
+    return img;
   }
 }

@@ -36,10 +36,14 @@ PODS:
     - DartCvMacOS/dnn (= 4.10.0.5)
     - DartCvMacOS/videoio (= 4.10.0.5)
     - FlutterMacOS
+  - path_provider_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
   - opencv_dart (from `Flutter/ephemeral/.symlinks/plugins/opencv_dart/macos`)
+  - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
 
 SPEC REPOS:
   trunk:
@@ -50,11 +54,14 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   opencv_dart:
     :path: Flutter/ephemeral/.symlinks/plugins/opencv_dart/macos
+  path_provider_foundation:
+    :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
 
 SPEC CHECKSUMS:
   DartCvMacOS: 309045657c896a5801813a38e465c15a314ccc46
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   opencv_dart: 4aa9fd51481bd7aab32c4ec37dd7c725f4161b9c
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
 
 PODFILE CHECKSUM: 9ebaf0ce3d369aaa26a9ea0e159195ed94724cf3
 

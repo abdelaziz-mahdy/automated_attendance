@@ -3,7 +3,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class FaceComparisonService {
   static final FaceComparisonService _instance =
       FaceComparisonService._privateConstructor();
-  late cv.FaceRecognizerSF? _recognizer;
+   cv.FaceRecognizerSF? _recognizer;
 
   FaceComparisonService._privateConstructor();
 

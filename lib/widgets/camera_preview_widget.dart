@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cameras_viewer/services/face_extraction_service.dart';
+import 'package:cameras_viewer/services/face_features_extraction_service.dart';
 import 'package:flutter/material.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
@@ -52,6 +54,9 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
       final (success, frame) = await _vc.readAsync();
       if (success) {
         _frame = frame;
+        final faces = FaceExtractionService().extractFacesBoundaries(_frame);
+        _frame =
+            FaceFeaturesExtractionService().visualizeFaceDetect(_frame, faces);
         // print(_frame.sum().toString());
         final (success, image) = (await cv.imencodeAsync('.jpg', _frame));
         if (success == false) {
