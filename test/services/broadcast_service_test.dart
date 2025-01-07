@@ -6,7 +6,8 @@ void main() {
     final broadcastService = BroadcastService();
 
     // Start broadcasting
-    await broadcastService.startBroadcast('Test Service', '_example._tcp', 4040);
+    await broadcastService.startBroadcast(
+        'Test Service', '_example._tcp', 4040);
     expect(broadcastService, isNotNull);
 
     // Stop broadcasting

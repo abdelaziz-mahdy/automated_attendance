@@ -1,11 +1,11 @@
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:bonsoir/bonsoir.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Discovery and Broadcast integration test', (WidgetTester tester) async {
+  testWidgets('Discovery and Broadcast integration test',
+      (WidgetTester tester) async {
     final broadcastService = BroadcastService();
     final discoveryService = DiscoveryService();
     const String testName = 'Test Service';
@@ -23,7 +23,7 @@ void main() {
 
     // Validate discovery by capturing events
     bool serviceFound = false;
-    discoveryService.eventStream!.listen((event) {
+    discoveryService.eventStream.listen((event) {
       if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
         serviceFound = true;
         expect(event.service!.name, equals(testName));

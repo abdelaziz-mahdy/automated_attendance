@@ -8,8 +8,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class CameraPreviewWidget extends StatefulWidget {
   final int cameraIndex;
 
-  const CameraPreviewWidget({Key? key, required this.cameraIndex})
-      : super(key: key);
+  const CameraPreviewWidget({super.key, required this.cameraIndex});
 
   @override
   _CameraPreviewWidgetState createState() => _CameraPreviewWidgetState();

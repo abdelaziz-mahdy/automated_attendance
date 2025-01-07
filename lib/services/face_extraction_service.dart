@@ -3,7 +3,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 class FaceExtractionService {
   static final FaceExtractionService _instance =
       FaceExtractionService._privateConstructor();
-   cv.FaceDetectorYN? _faceDetector;
+  cv.FaceDetectorYN? _faceDetector;
 
   FaceExtractionService._privateConstructor();
 

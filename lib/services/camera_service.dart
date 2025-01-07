@@ -10,7 +10,7 @@ class CameraService {
           availableCameras.add(index);
           vc.release();
           print("camera index $index is available");
-        }else{
+        } else {
           print("camera index $index is not available");
         }
       } catch (e) {
