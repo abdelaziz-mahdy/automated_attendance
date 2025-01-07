@@ -1,4 +1,7 @@
 PODS:
+  - bonsoir_darwin (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - DartCvMacOS (4.10.0.5):
     - DartCvMacOS/calib3d (= 4.10.0.5)
     - DartCvMacOS/contrib (= 4.10.0.5)
@@ -41,6 +44,7 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - bonsoir_darwin (from `Flutter/ephemeral/.symlinks/plugins/bonsoir_darwin/darwin`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - opencv_dart (from `Flutter/ephemeral/.symlinks/plugins/opencv_dart/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
@@ -50,6 +54,8 @@ SPEC REPOS:
     - DartCvMacOS
 
 EXTERNAL SOURCES:
+  bonsoir_darwin:
+    :path: Flutter/ephemeral/.symlinks/plugins/bonsoir_darwin/darwin
   FlutterMacOS:
     :path: Flutter/ephemeral
   opencv_dart:
@@ -58,6 +64,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin
 
 SPEC CHECKSUMS:
+  bonsoir_darwin: 29c7ccf356646118844721f36e1de4b61f6cbd0e
   DartCvMacOS: 309045657c896a5801813a38e465c15a314ccc46
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   opencv_dart: 4aa9fd51481bd7aab32c4ec37dd7c725f4161b9c
