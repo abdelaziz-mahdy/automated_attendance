@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:cameras_viewer/services/face_comparison_service.dart';
-import 'package:cameras_viewer/services/face_extraction_service.dart';
-import 'package:cameras_viewer/services/face_features_extraction_service.dart';
-import 'package:cameras_viewer/views/camera_grid_view.dart';
-import 'package:cameras_viewer/models/camera_model.dart';
-import 'package:cameras_viewer/services/camera_service.dart';
+import 'package:automated_attendance_app/services/face_comparison_service.dart';
+import 'package:automated_attendance_app/services/face_extraction_service.dart';
+import 'package:automated_attendance_app/services/face_features_extraction_service.dart';
+import 'package:automated_attendance_app/views/camera_grid_view.dart';
+import 'package:automated_attendance_app/models/camera_model.dart';
+import 'package:automated_attendance_app/services/camera_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,8 +34,8 @@ Future<void> initializeServices() async {
 
   final faceDetectionModelPath =
       await _copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
-  final faceFeaturesExtractionModelPath = await _copyAssetFileToTmp(
-      "assets/face_recognition_sface_2021dec.onnx");
+  final faceFeaturesExtractionModelPath =
+      await _copyAssetFileToTmp("assets/face_recognition_sface_2021dec.onnx");
   // Initialize services
   faceExtractionService.initialize(faceDetectionModelPath);
   faceFeaturesExtractionService.initialize(faceFeaturesExtractionModelPath);

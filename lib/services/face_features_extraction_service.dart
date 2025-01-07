@@ -1,10 +1,10 @@
-import 'package:cameras_viewer/models/sendable_rect.dart';
+import 'package:automated_attendance_app/models/sendable_rect.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 class FaceFeaturesExtractionService {
   static final FaceFeaturesExtractionService _instance =
       FaceFeaturesExtractionService._privateConstructor();
-   cv.FaceRecognizerSF? _recognizer;
+  cv.FaceRecognizerSF? _recognizer;
 
   FaceFeaturesExtractionService._privateConstructor();
 

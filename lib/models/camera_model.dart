@@ -1,4 +1,4 @@
-import 'package:cameras_viewer/services/camera_service.dart';
+import 'package:automated_attendance_app/services/camera_service.dart';
 import 'package:flutter/material.dart';
 
 class CameraModel extends ChangeNotifier {

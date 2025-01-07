@@ -1,4 +1,4 @@
-# cameras_viewer
+# automated_attendance_app
 
 A new Flutter project.
 
