@@ -1,30 +1,45 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:automated_attendance/discovery/broadcast_service.dart';
+import 'package:automated_attendance/discovery/discovery_service.dart';
+import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:automated_attendance/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp());
+  testWidgets('Discovery and Broadcast integration test', (WidgetTester tester) async {
+    final broadcastService = BroadcastService();
+    final discoveryService = DiscoveryService();
+    const String testName = 'Test Service';
+    const String testType = '_example._tcp';
+    const int testPort = 4040;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Start the broadcast service
+    await broadcastService.startBroadcast(testName, testType, testPort);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Start discovery service
+    await discoveryService.startDiscovery(testType);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Wait for a short duration to allow discovery to find the service
+    await Future.delayed(Duration(seconds: 2));
+
+    // Validate discovery by capturing events
+    bool serviceFound = false;
+    discoveryService.eventStream!.listen((event) {
+      if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
+        serviceFound = true;
+        expect(event.service!.name, equals(testName));
+        expect(event.service!.port, equals(testPort));
+        expect(event.service!.type, equals(testType));
+      }
+    });
+
+    // Allow time for discovery events to be processed
+    await Future.delayed(Duration(seconds: 3));
+
+    // Assert that the service was found
+    expect(serviceFound, isTrue);
+
+    // Stop the services
+    await broadcastService.stopBroadcast();
+    await discoveryService.stopDiscovery();
   });
 }
