@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:automated_attendance_app/services/face_comparison_service.dart';
-import 'package:automated_attendance_app/services/face_extraction_service.dart';
-import 'package:automated_attendance_app/services/face_features_extraction_service.dart';
-import 'package:automated_attendance_app/views/camera_grid_view.dart';
-import 'package:automated_attendance_app/models/camera_model.dart';
-import 'package:automated_attendance_app/services/camera_service.dart';
+import 'package:automated_attendance/services/face_comparison_service.dart';
+import 'package:automated_attendance/services/face_extraction_service.dart';
+import 'package:automated_attendance/services/face_features_extraction_service.dart';
+import 'package:automated_attendance/views/camera_grid_view.dart';
+import 'package:automated_attendance/models/camera_model.dart';
+import 'package:automated_attendance/services/camera_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';

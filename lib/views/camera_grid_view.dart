@@ -1,5 +1,5 @@
-import 'package:automated_attendance_app/models/camera_model.dart';
-import 'package:automated_attendance_app/widgets/camera_preview_widget.dart';
+import 'package:automated_attendance/models/camera_model.dart';
+import 'package:automated_attendance/widgets/camera_preview_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

@@ -1,4 +1,4 @@
-package com.example.automated_attendance_app
+package com.example.automated_attendance
 
 import io.flutter.embedding.android.FlutterActivity
 

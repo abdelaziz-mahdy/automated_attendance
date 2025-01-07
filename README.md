@@ -1,4 +1,4 @@
-# automated_attendance_app
+# automated_attendance
 
 A new Flutter project.
 

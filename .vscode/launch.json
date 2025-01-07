@@ -5,18 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "automated_attendance_app",
+      "name": "automated_attendance",
       "request": "launch",
       "type": "dart"
     },
     {
-      "name": "automated_attendance_app (profile mode)",
+      "name": "automated_attendance (profile mode)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
-      "name": "automated_attendance_app (release mode)",
+      "name": "automated_attendance (release mode)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"

@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:automated_attendance_app/services/face_extraction_service.dart';
-import 'package:automated_attendance_app/services/face_features_extraction_service.dart';
+import 'package:automated_attendance/services/face_extraction_service.dart';
+import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:flutter/material.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
