@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:automated_attendance/logs/request_logs.dart';
 
 class RequestLogsPage extends StatelessWidget {
-  const RequestLogsPage({Key? key}) : super(key: key);
+  const RequestLogsPage({super.key});
 
   @override
   Widget build(BuildContext context) {

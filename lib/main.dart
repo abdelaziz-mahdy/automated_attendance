@@ -52,10 +52,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => CameraSourceSelectionView(),
         '/dataCenter': (context) => DataCenterView(),
-                '/requestLogsPage': (context) => RequestLogsPage(),
-
+        '/requestLogsPage': (context) => RequestLogsPage(),
       },
     );
   }
 }
-

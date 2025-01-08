@@ -6,7 +6,8 @@ void main() {
     final discoveryService = DiscoveryService();
 
     // Start discovery
-    await discoveryService.startDiscovery(serviceType: '_example._tcp', port: 4040);
+    await discoveryService.startDiscovery(
+        serviceType: '_example._tcp', port: 4040);
     expect(discoveryService, isNotNull);
 
     // Stop discovery

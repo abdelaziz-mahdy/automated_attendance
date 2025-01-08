@@ -67,13 +67,13 @@ class DiscoveryService {
   void _handleDatagramEvent(RawSocketEvent event) {
     if (event == RawSocketEvent.read) {
       final datagram = _socket!.receive();
-      
+
       if (datagram != null) {
         try {
           final data = utf8.decode(datagram.data);
           final json = jsonDecode(data) as Map<String, dynamic>;
           final serviceInfo = ServiceInfo.fromJson(json);
-          
+
           // Update or add service to discovered services
 
           _discoveredServices[serviceInfo.id] = serviceInfo;

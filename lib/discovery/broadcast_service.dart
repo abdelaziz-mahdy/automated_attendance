@@ -61,7 +61,7 @@ class BroadcastService {
       final serviceInfo = ServiceInfo(
         name: serviceName,
         type: serviceType,
-        address: localIp, 
+        address: localIp,
         attributes: attributes,
       );
 

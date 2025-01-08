@@ -4,7 +4,7 @@ import 'i_camera_provider.dart';
 
 class RemoteCameraProvider implements ICameraProvider {
   final String serverAddress; // e.g. "192.168.1.10"
-  final int serverPort;       // e.g. 12345
+  final int serverPort; // e.g. 12345
   bool _isOpen = false;
 
   RemoteCameraProvider({required this.serverAddress, required this.serverPort});
@@ -18,7 +18,8 @@ class RemoteCameraProvider implements ICameraProvider {
     // to ensure we can connect. If successful, set _isOpen = true.
     final testUrl = Uri.parse('http://$serverAddress:$serverPort/get_image');
     try {
-      final response = await HttpClient().getUrl(testUrl).then((req) => req.close());
+      final response =
+          await HttpClient().getUrl(testUrl).then((req) => req.close());
       if (response.statusCode == 200) {
         _isOpen = true;
         return true;
@@ -42,10 +43,12 @@ class RemoteCameraProvider implements ICameraProvider {
     final url = Uri.parse('http://$serverAddress:$serverPort/get_image');
     try {
       final requestTime = DateTime.now();
-      final response = await HttpClient().getUrl(url).then((req) => req.close());
+      final response =
+          await HttpClient().getUrl(url).then((req) => req.close());
       final bytes = await consolidateHttpClientResponseBytes(response);
       final endTime = DateTime.now();
-      print("Remote frame request took: ${endTime.difference(requestTime).inMilliseconds} ms");
+      print(
+          "Remote frame request took: ${endTime.difference(requestTime).inMilliseconds} ms");
       return bytes;
     } catch (e) {
       print("Error retrieving remote frame: $e");
