@@ -1,4 +1,5 @@
 // broadcast_service.dart
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -17,9 +18,21 @@ class BroadcastService {
   bool _isBroadcasting = false;
   final Map<String, ServiceInfo> _activeServices = {};
 
-  // Expose a stream of errors
   final _errorController = StreamController<String>.broadcast();
   Stream<String> get errors => _errorController.stream;
+
+  // Helper to fetch local IP address
+  Future<String?> _getLocalIpAddress() async {
+    final interfaces = await NetworkInterface.list();
+    for (var interface in interfaces) {
+      for (var addr in interface.addresses) {
+        if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+          return addr.address;
+        }
+      }
+    }
+    return null;
+  }
 
   Future<void> startBroadcast({
     required String serviceName,
@@ -42,11 +55,16 @@ class BroadcastService {
       );
       _socket!.broadcastEnabled = true;
 
+      // Retrieve the local IP address
+      final localIp = await _getLocalIpAddress();
+
       final serviceInfo = ServiceInfo(
         name: serviceName,
         type: serviceType,
+        address: localIp, 
         attributes: attributes,
       );
+
       _activeServices[serviceInfo.id] = serviceInfo;
 
       _broadcastTimer = Timer.periodic(broadcastInterval, (timer) {
