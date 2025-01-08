@@ -7,7 +7,9 @@ void main() {
 
     // Start broadcasting
     await broadcastService.startBroadcast(
-        'Test Service', '_example._tcp', 4040);
+        serviceName: 'Test Service',
+        serviceType: '_attendance._tcp',
+        port: 5353);
     expect(broadcastService, isNotNull);
 
     // Stop broadcasting
