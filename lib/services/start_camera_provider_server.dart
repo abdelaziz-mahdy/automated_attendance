@@ -37,13 +37,12 @@ class CameraProviderServer {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 12345);
       RequestLogs.add(
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
+      LocalCameraProvider localCameraProvider = LocalCameraProvider(0);
+      bool success = await localCameraProvider.openCamera();
 
       _server!.listen((HttpRequest request) async {
         final start = DateTime.now();
         if (request.uri.path == '/get_image') {
-          LocalCameraProvider localCameraProvider = LocalCameraProvider(0);
-          bool success = await localCameraProvider.openCamera();
-
           if (success) {
             final image = await localCameraProvider.getFrame();
 

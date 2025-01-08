@@ -40,10 +40,12 @@ class _DataCenterViewState extends State<DataCenterView> {
         );
         final opened = await provider.openCamera();
         if (opened) {
-          setState(() {
-            _activeProviders[serviceInfo.id] = provider;
-            _discoveredProviders = _discoveryService.activeServices;
-          });
+          if (mounted) {
+            setState(() {
+              _activeProviders[serviceInfo.id] = provider;
+              _discoveredProviders = _discoveryService.activeServices;
+            });
+          }
         }
       }
     });

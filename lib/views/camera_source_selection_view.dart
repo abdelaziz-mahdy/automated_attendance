@@ -3,9 +3,15 @@ import 'package:flutter/material.dart';
 // Contains startCameraProviderServer()
 // or you can move it to a dedicated file
 
-class CameraSourceSelectionView extends StatelessWidget {
+class CameraSourceSelectionView extends StatefulWidget {
   const CameraSourceSelectionView({super.key});
 
+  @override
+  State<CameraSourceSelectionView> createState() =>
+      _CameraSourceSelectionViewState();
+}
+
+class _CameraSourceSelectionViewState extends State<CameraSourceSelectionView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -15,8 +21,6 @@ class CameraSourceSelectionView extends StatelessWidget {
         children: [
           ElevatedButton(
             onPressed: () {
-              // Start as camera provider (hosting frames):
-              CameraProviderServer().start();
               // 2. Navigate to logs page
               Navigator.pushNamed(context, '/requestLogsPage');
             },
