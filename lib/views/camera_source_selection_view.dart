@@ -1,4 +1,3 @@
-import 'package:automated_attendance/services/start_camera_provider_server.dart';
 import 'package:flutter/material.dart';
 // Contains startCameraProviderServer()
 // or you can move it to a dedicated file

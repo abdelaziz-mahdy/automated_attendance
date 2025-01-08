@@ -1,7 +1,6 @@
 // lib/services/camera_provider_server.dart
 import 'dart:io';
 import 'package:automated_attendance/camera_providers/local_camera_provider.dart';
-import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/logs/request_logs.dart';
 
