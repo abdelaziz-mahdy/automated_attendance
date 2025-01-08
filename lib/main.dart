@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
+import 'package:automated_attendance/t.dart';
 import 'package:automated_attendance/views/camera_grid_view.dart';
 import 'package:automated_attendance/models/camera_model.dart';
 import 'package:automated_attendance/services/camera_service.dart';
+import 'package:automated_attendance/views/camera_source_selection_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -43,20 +45,15 @@ Future<void> initializeServices() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => CameraModel(CameraService()),
-        ),
-      ],
-      child: MaterialApp(
-        title: 'Camera Grid',
-        home: CameraGridView(),
-      ),
+    return MaterialApp(
+      title: 'Camera Grid',
+      initialRoute: '/',
+      routes: {
+        '/': (context) => CameraSourceSelectionView(),
+        '/cameraGrid': (context) => CameraGridView(),
+      },
     );
   }
 }
