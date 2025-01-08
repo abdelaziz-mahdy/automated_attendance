@@ -1,16 +1,15 @@
-
 class ServiceInfo {
   final String? name;
   final String? type;
   final String id;
-  final String? address;          
+  final String? address;
   final Map<String, dynamic>? attributes;
 
   ServiceInfo({
     required this.name,
     required this.type,
     String? id,
-    this.address,                 
+    this.address,
     this.attributes,
   }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -18,7 +17,7 @@ class ServiceInfo {
         'name': name,
         'type': type,
         'id': id,
-        'address': address,        
+        'address': address,
         'attributes': attributes,
       };
 
@@ -26,7 +25,7 @@ class ServiceInfo {
         name: json['name'] as String?,
         type: json['type'] as String?,
         id: json['id'] as String?,
-        address: json['address'] as String?,  
+        address: json['address'] as String?,
         attributes: json['attributes'] as Map<String, dynamic>?,
       );
 }

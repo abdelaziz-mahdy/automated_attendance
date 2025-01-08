@@ -3,13 +3,12 @@ import 'dart:io';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
-import 'package:automated_attendance/views/camera_grid_view.dart';
-import 'package:automated_attendance/models/camera_model.dart';
-import 'package:automated_attendance/services/camera_service.dart';
+import 'package:automated_attendance/views/camera_source_selection_view.dart';
+import 'package:automated_attendance/views/data_center_view.dart';
+import 'package:automated_attendance/views/request_logs_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,16 +46,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => CameraModel(CameraService()),
-        ),
-      ],
-      child: MaterialApp(
-        title: 'Camera Grid',
-        home: CameraGridView(),
-      ),
+    return MaterialApp(
+      title: 'Camera Grid',
+      initialRoute: '/',
+      routes: {
+        '/': (context) => CameraSourceSelectionView(),
+        '/dataCenter': (context) => DataCenterView(),
+        '/requestLogsPage': (context) => RequestLogsPage(),
+      },
     );
   }
 }

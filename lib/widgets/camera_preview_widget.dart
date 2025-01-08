@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 class CameraPreviewWidget extends StatefulWidget {
-  final int cameraIndex;
+  final int? cameraIndex;
+  final ServiceInfo? serverInfo;
 
-  const CameraPreviewWidget({super.key, required this.cameraIndex});
+  const CameraPreviewWidget({super.key, this.cameraIndex, this.serverInfo});
 
   @override
   _CameraPreviewWidgetState createState() => _CameraPreviewWidgetState();
@@ -21,15 +25,37 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
   Image? _image;
   double fps = 30;
   Timer? timer;
+
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    if (widget.cameraIndex != null) {
+      _initCamera();
+    } else if (widget.serverInfo != null) {
+      _initRemoteCamera();
+    }
+  }
+
+  Future<void> _initRemoteCamera() async {
+    final url = 'http://${widget.serverInfo!.address}:12345/get_image';
+    timer = Timer.periodic(Duration(milliseconds: 100), (_) async {
+      try {
+        final response = await HttpClient()
+            .getUrl(Uri.parse(url))
+            .then((req) => req.close());
+        final bytes = await consolidateHttpClientResponseBytes(response);
+        setState(() {
+          _image = Image.memory(bytes, gaplessPlayback: true);
+        });
+      } catch (e) {
+        print('Failed to fetch image from server: $e');
+      }
+    });
   }
 
   Future<void> _initCamera() async {
     try {
-      _vc = cv.VideoCapture.fromDevice(widget.cameraIndex);
+      _vc = cv.VideoCapture.fromDevice(widget.cameraIndex!);
       if (_vc.isOpened) {
         _isCameraOpen = true;
         _frame = cv.Mat.empty();
