@@ -51,7 +51,7 @@ class BroadcastService {
         InternetAddress.anyIPv4,
         0,
         reuseAddress: true,
-        reusePort: true,
+        reusePort: false,
       );
       _socket!.broadcastEnabled = true;
 

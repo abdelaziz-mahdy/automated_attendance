@@ -39,7 +39,7 @@ class DiscoveryService {
         InternetAddress.anyIPv4,
         port, // Use the specified port instead of 0
         reuseAddress: true,
-        reusePort: true,
+        reusePort: false,
       );
 
       _socket!.listen(
