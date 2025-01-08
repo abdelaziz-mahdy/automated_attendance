@@ -12,8 +12,7 @@ class CameraPreviewWidget extends StatefulWidget {
   final int? cameraIndex;
   final ServiceInfo? serverInfo;
 
-  const CameraPreviewWidget({Key? key, this.cameraIndex, this.serverInfo})
-      : super(key: key);
+  const CameraPreviewWidget({super.key, this.cameraIndex, this.serverInfo});
 
   @override
   _CameraPreviewWidgetState createState() => _CameraPreviewWidgetState();

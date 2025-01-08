@@ -36,8 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
   path_provider: ^2.0.11
-  bonsoir: ^5.1.10
 
+  logging: any
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -53,6 +53,7 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
+  logging: any
 flutter:
 
   # The following line ensures that the Material Icons font is
