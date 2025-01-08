@@ -1,17 +1,27 @@
 // lib/logs/request_logs.dart
 
-class RequestLogs {
-  // Internal list that holds the log entries
-  static final List<String> _logs = [];
+import 'package:flutter/foundation.dart';
 
-  /// Adds a new log entry
+class ListNotifier extends ValueNotifier<List<String>> {
+  ListNotifier() : super([]);
+
+  void add(String listItem) {
+    value.add(listItem);
+    notifyListeners(); // here
+  }
+}
+
+class RequestLogs {
+  /// Holds the list of log strings in a [ValueNotifier].
+  /// Whenever you update [logsNotifier.value], any UI
+  /// that is listening will rebuild automatically.
+  static final ListNotifier logsNotifier = ListNotifier();
+
+  /// Adds a new log entry and notifies listeners.
   static void add(String log) {
-    _logs.add(log);
-    // If you want real-time updates in your UI, 
-    // you could do something like notifyListeners 
-    // or use a Stream.
+    logsNotifier.value.add(log);
   }
 
-  /// Provides read-only access to the logs
-  static List<String> get all => _logs;
+  /// A convenience getter to fetch the current logs list.
+  static List<String> get all => logsNotifier.value;
 }
