@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:automated_attendance/network_info_service.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('HttpTargetDiscovery');
@@ -20,19 +21,6 @@ class BroadcastService {
 
   final _errorController = StreamController<String>.broadcast();
   Stream<String> get errors => _errorController.stream;
-
-  // Helper to fetch local IP address
-  Future<String?> _getLocalIpAddress() async {
-    final interfaces = await NetworkInterface.list();
-    for (var interface in interfaces) {
-      for (var addr in interface.addresses) {
-        if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-          return addr.address;
-        }
-      }
-    }
-    return null;
-  }
 
   Future<void> startBroadcast({
     required String serviceName,
@@ -56,7 +44,7 @@ class BroadcastService {
       _socket!.broadcastEnabled = true;
 
       // Retrieve the local IP address
-      final localIp = await _getLocalIpAddress();
+      final localIp = await NetworkInfoService.getDeviceIpAddress();
 
       final serviceInfo = ServiceInfo(
         name: serviceName,

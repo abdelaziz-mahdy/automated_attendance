@@ -31,6 +31,8 @@ PODS:
   - DartCvMacOS/videoio (4.10.0.5):
     - DartCvMacOS/core
   - FlutterMacOS (1.0.0)
+  - network_info_plus (0.0.1):
+    - FlutterMacOS
   - opencv_dart (0.0.1):
     - DartCvMacOS (= 4.10.0.5)
     - DartCvMacOS/dnn (= 4.10.0.5)
@@ -42,6 +44,7 @@ PODS:
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - network_info_plus (from `Flutter/ephemeral/.symlinks/plugins/network_info_plus/macos`)
   - opencv_dart (from `Flutter/ephemeral/.symlinks/plugins/opencv_dart/macos`)
   - path_provider_foundation (from `Flutter/ephemeral/.symlinks/plugins/path_provider_foundation/darwin`)
 
@@ -52,6 +55,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   FlutterMacOS:
     :path: Flutter/ephemeral
+  network_info_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/network_info_plus/macos
   opencv_dart:
     :path: Flutter/ephemeral/.symlinks/plugins/opencv_dart/macos
   path_provider_foundation:
@@ -60,6 +65,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   DartCvMacOS: 309045657c896a5801813a38e465c15a314ccc46
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
+  network_info_plus: 21d1cd6a015ccb2fdff06a1fbfa88d54b4e92f61
   opencv_dart: 4aa9fd51481bd7aab32c4ec37dd7c725f4161b9c
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
 

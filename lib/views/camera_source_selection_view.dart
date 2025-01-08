@@ -16,7 +16,7 @@ class CameraSourceSelectionView extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               // Start as camera provider (hosting frames):
-              startCameraProviderServer();
+              CameraProviderServer().start();
               // 2. Navigate to logs page
               Navigator.pushNamed(context, '/requestLogsPage');
             },

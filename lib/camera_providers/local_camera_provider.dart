@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
+import 'package:permission_handler/permission_handler.dart';
 import 'i_camera_provider.dart';
 
 class LocalCameraProvider implements ICameraProvider {
@@ -11,9 +13,19 @@ class LocalCameraProvider implements ICameraProvider {
 
   @override
   bool get isOpen => _isOpen;
+  Future<bool> getPermission() async {
+    if (Platform.isAndroid) {
+      return (await Permission.camera.request()).isGranted;
+    } else {
+      return true;
+    }
+  }
 
   @override
   Future<bool> openCamera() async {
+    if (!await getPermission()) {
+      return false;
+    }
     try {
       _vc = cv.VideoCapture.fromDevice(cameraIndex);
       if (_vc.isOpened) {
