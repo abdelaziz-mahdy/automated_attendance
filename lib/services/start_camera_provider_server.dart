@@ -99,9 +99,9 @@ class CameraProviderServer {
     await _server!.close(force: true);
     _server = null;
     await _broadcastService.stopBroadcast();
-    RequestLogs.logsNotifier.clear();
-    localCameraProvider?.closeCamera();
+    await localCameraProvider?.closeCamera();
     RequestLogs.add("Server stopped");
+    RequestLogs.logsNotifier.clear();
   }
 }
 
