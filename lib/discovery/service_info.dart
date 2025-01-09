@@ -2,7 +2,7 @@ class ServiceInfo {
   final String? name;
   final String? type;
   final String id;
-  final String? address;
+  String? address;
   final Map<String, dynamic>? attributes;
 
   /// Tracks when this service was last seen on the network

@@ -24,13 +24,13 @@ class CameraProviderServer {
     }
 
     try {
-      // 1. Register (broadcast) the service on the network
+      // // 1. Register (broadcast) the service on the network
       await _broadcastService.startBroadcast(
         serviceName: "MyCameraProvider",
         serviceType: "_camera._tcp",
         port: 12345,
       );
-      RequestLogs.add("BroadcastService started on port 12345");
+      // RequestLogs.add("BroadcastService started on port 12345");
 
       // Start the HTTP server
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 12345);

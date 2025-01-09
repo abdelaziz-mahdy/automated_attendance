@@ -68,6 +68,7 @@ class DiscoveryService {
     if (event == RawSocketEvent.read) {
       final datagram = _socket!.receive();
       if (datagram != null) {
+        _logger.fine('Received datagram from ${datagram.address.address}');
         try {
           final data = utf8.decode(datagram.data);
           final json = jsonDecode(data) as Map<String, dynamic>;
@@ -75,7 +76,7 @@ class DiscoveryService {
 
           // Update lastSeen to "now" for each newly received broadcast
           serviceInfo.lastSeen = DateTime.now();
-
+          serviceInfo.address = datagram.address.address;
           _discoveredServices[serviceInfo.id] = serviceInfo;
           _discoveryStreamController.add(serviceInfo);
 

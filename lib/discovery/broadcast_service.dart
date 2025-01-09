@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/network_info_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('HttpTargetDiscovery');
@@ -43,13 +44,13 @@ class BroadcastService {
       );
       _socket!.broadcastEnabled = true;
 
-      // Retrieve the local IP address
-      final localIp = await NetworkInfoService.getDeviceIpAddress();
+      // Retrieve the local IP address inside an isolate
+      // final localIp = await compute(()=>NetworkInfoService.getDeviceIpAddress);
 
       final serviceInfo = ServiceInfo(
         name: serviceName,
         type: serviceType,
-        address: localIp,
+        address: null,
         attributes: attributes,
       );
 
