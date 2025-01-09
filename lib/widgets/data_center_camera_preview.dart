@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
+import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/material.dart';
 
 class DataCenterCameraPreview extends StatefulWidget {
@@ -33,14 +34,17 @@ class _DataCenterCameraPreviewState extends State<DataCenterCameraPreview> {
     _timer = Timer.periodic(
       Duration(milliseconds: (1000 / fps).round()),
       (timer) async {
-        final frameBytes = await widget.provider.getFrame();
+        var frameBytes = await widget.provider.getFrame();
         if (frameBytes != null) {
           // Optionally do some local CV preprocessing here:
           // e.g. decode -> face detect -> re-encode
           // For demonstration, we just show the raw frame:
-
+          frameBytes = await FaceProcessingService.processFrame(frameBytes);
+          if (frameBytes == null) {
+            return;
+          }
           setState(() {
-            _image = Image.memory(frameBytes, gaplessPlayback: true);
+            _image = Image.memory(frameBytes!, gaplessPlayback: true);
           });
         }
       },

@@ -35,7 +35,7 @@ class _DataCenterViewState extends State<DataCenterView> {
       serviceType: '_camera._tcp',
       port: 12345,
       timeout: const Duration(seconds: 8),
-      cleanupInterval: const Duration(seconds: 2),
+      cleanupInterval: const Duration(seconds: 1),
     );
 
     // Listen for newly discovered services
@@ -62,7 +62,7 @@ class _DataCenterViewState extends State<DataCenterView> {
     });
 
     // Periodically refresh the active service list and remove stale providers
-    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
 
       setState(() {
