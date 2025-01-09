@@ -32,17 +32,19 @@ class _DataCenterViewState extends State<DataCenterView> {
 
     // Listen to new discovered services
     _discoveryService.discoveryStream.listen((serviceInfo) async {
-      if (!_activeProviders.containsKey(serviceInfo.id)) {
+      if (serviceInfo.address == null) return;
+      if (!_activeProviders.containsKey(serviceInfo.address)) {
         // Create a remote camera provider for each discovered service
         final provider = RemoteCameraProvider(
           serverAddress: serviceInfo.address!,
           serverPort: 12345,
         );
         final opened = await provider.openCamera();
+        print("Opened remote camera: to ${serviceInfo.toJson()}: $opened");
         if (opened) {
           if (mounted) {
             setState(() {
-              _activeProviders[serviceInfo.id] = provider;
+              _activeProviders[serviceInfo.address!] = provider;
               _discoveredProviders = _discoveryService.activeServices;
             });
           }

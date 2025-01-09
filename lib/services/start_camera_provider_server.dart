@@ -1,5 +1,6 @@
 // lib/services/camera_provider_server.dart
 import 'dart:io';
+import 'package:automated_attendance/camera_providers/local_camera_picker.dart';
 import 'package:automated_attendance/camera_providers/local_camera_provider.dart';
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/logs/request_logs.dart';
@@ -36,15 +37,30 @@ class CameraProviderServer {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 12345);
       RequestLogs.add(
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
-      LocalCameraProvider localCameraProvider = LocalCameraProvider(0);
+      LocalCameraProvider localCameraProvider =
+          LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
       bool success = await localCameraProvider.openCamera();
 
       _server!.listen((HttpRequest request) async {
         final start = DateTime.now();
+        if (request.uri.path == '/test') {
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+          RequestLogs.add("Handled /test");
+          return;
+        }
         if (request.uri.path == '/get_image') {
           if (success) {
             final image = await localCameraProvider.getFrame();
+            if (image == null) {
+              request.response.statusCode = HttpStatus.internalServerError;
+              await request.response.close();
 
+              final elapsed = DateTime.now().difference(start).inMilliseconds;
+              RequestLogs.add(
+                  "Handled /get_image in $elapsed ms (Error capturing frame)");
+              return;
+            }
             request.response.headers.contentType = ContentType('image', 'jpeg');
             request.response.add(image!);
             await request.response.close();
