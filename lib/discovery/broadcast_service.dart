@@ -10,9 +10,9 @@ import 'package:logging/logging.dart';
 final _logger = Logger('HttpTargetDiscovery');
 
 class BroadcastService {
-  static final BroadcastService _instance = BroadcastService._internal();
-  factory BroadcastService() => _instance;
-  BroadcastService._internal();
+  // static final BroadcastService _instance = BroadcastService._internal();
+  // factory BroadcastService() => _instance;
+  // BroadcastService._internal();
 
   RawDatagramSocket? _socket;
   Timer? _broadcastTimer;
@@ -39,7 +39,7 @@ class BroadcastService {
         InternetAddress.anyIPv4,
         0,
         reuseAddress: true,
-        reusePort: false,
+        reusePort: Platform.isAndroid ? false : true,
       );
       _socket!.broadcastEnabled = true;
 

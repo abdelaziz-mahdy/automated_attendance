@@ -5,13 +5,18 @@ class ServiceInfo {
   final String? address;
   final Map<String, dynamic>? attributes;
 
+  /// Tracks when this service was last seen on the network
+  DateTime lastSeen;
+
   ServiceInfo({
     required this.name,
     required this.type,
     String? id,
     this.address,
     this.attributes,
-  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    DateTime? lastSeen,
+  })  : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        lastSeen = lastSeen ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -21,11 +26,16 @@ class ServiceInfo {
         'attributes': attributes,
       };
 
-  factory ServiceInfo.fromJson(Map<String, dynamic> json) => ServiceInfo(
-        name: json['name'] as String?,
-        type: json['type'] as String?,
-        id: json['id'] as String?,
-        address: json['address'] as String?,
-        attributes: json['attributes'] as Map<String, dynamic>?,
-      );
+  factory ServiceInfo.fromJson(Map<String, dynamic> json) {
+    final service = ServiceInfo(
+      name: json['name'] as String?,
+      type: json['type'] as String?,
+      id: json['id'] as String?,
+      address: json['address'] as String?,
+      attributes: json['attributes'] as Map<String, dynamic>?,
+    );
+    // Set lastSeen to "now" whenever we parse a discovered service
+    service.lastSeen = DateTime.now();
+    return service;
+  }
 }

@@ -1,12 +1,14 @@
 import 'dart:async';
-
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
+import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
 void main() {
-  late BroadcastService broadcastService;
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late BroadcastService broadcastService1;
+  late BroadcastService broadcastService2;
   late DiscoveryService discoveryService;
 
   setUpAll(() {
@@ -19,26 +21,27 @@ void main() {
   });
 
   setUp(() {
-    broadcastService = BroadcastService();
+    broadcastService1 = BroadcastService();
+    broadcastService2 = BroadcastService();
     discoveryService = DiscoveryService();
   });
 
   tearDown(() async {
-    await broadcastService.dispose();
+    await broadcastService1.dispose();
+    await broadcastService2.dispose();
     await discoveryService.dispose();
   });
 
-  test('Discovery and Broadcast integration test', () async {
+  test('Single service discovery test', () async {
     const String testName = 'Test Service';
     const String testType = '_example._tcp';
-    const int testPort = 4040; // We'll use this same port for both services
+    const int testPort = 4040;
 
     final serviceFoundCompleter = Completer<void>();
     bool serviceFound = false;
 
     // Listen for discovery events
     final subscription = discoveryService.discoveryStream.listen((service) {
-      print('Discovered service: ${service.name} (${service.type})');
       if (service.name == testName && service.type == testType) {
         serviceFound = true;
         if (!serviceFoundCompleter.isCompleted) {
@@ -47,75 +50,144 @@ void main() {
       }
     });
 
-    // Listen for errors with detailed logging
-    discoveryService.errors.listen((error) {
-      print('Discovery error: $error');
-    });
-    broadcastService.errors.listen((error) {
-      print('Broadcast error: $error');
-    });
+    // Start discovery
+    await discoveryService.startDiscovery(
+      serviceType: testType,
+      port: testPort,
+      timeout: const Duration(seconds: 5),
+      cleanupInterval: const Duration(seconds: 1),
+    );
 
-    try {
-      print('Starting discovery service on port $testPort...');
-      await discoveryService.startDiscovery(
-        serviceType: testType,
-        port: testPort, // Specify the port
-        timeout: const Duration(seconds: 30),
-        cleanupInterval: const Duration(seconds: 5),
-      );
-      print('Discovery service started');
+    // Give discovery a moment to bind
+    await Future.delayed(const Duration(milliseconds: 500));
 
-      // Add a small delay before starting broadcast
-      await Future.delayed(const Duration(seconds: 1));
+    // Start broadcasting
+    await broadcastService1.startBroadcast(
+      serviceName: testName,
+      serviceType: testType,
+      port: testPort,
+      broadcastInterval: const Duration(milliseconds: 300),
+    );
 
-      print('Starting broadcast service...');
-      await broadcastService.startBroadcast(
-        serviceName: testName,
-        serviceType: testType,
-        port: testPort,
-        broadcastInterval: const Duration(milliseconds: 200),
-      );
-      print('Broadcast service started');
+    // Wait up to 5 seconds for the service to be found
+    await serviceFoundCompleter.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () =>
+          throw TimeoutException('Service was not discovered in time.'),
+    );
 
-      // Periodically log status and active services
-      final statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        print('Status - Broadcasting: ${broadcastService.isBroadcasting}, '
-            'Discovering: ${discoveryService.isDiscovering}, '
-            'Service Found: $serviceFound');
-        print(
-            'Active services: ${discoveryService.activeServices.map((s) => s.name).toList()}');
-      });
+    expect(serviceFound, isTrue);
+    expect(
+        discoveryService.activeServices.any(
+          (s) => s.name == testName && s.type == testType,
+        ),
+        isTrue);
 
-      try {
-        await serviceFoundCompleter.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            throw TimeoutException(
-                'Service was not discovered within the expected timeframe.\n'
-                'Broadcasting: ${broadcastService.isBroadcasting}\n'
-                'Discovering: ${discoveryService.isDiscovering}\n'
-                'Active services: ${discoveryService.activeServices}');
-          },
-        );
-        print(
-            "active services: ${discoveryService.activeServices.map((s) => s.toJson()).toList()}");
+    // Cleanup
+    await subscription.cancel();
+    await broadcastService1.stopBroadcast();
+    await discoveryService.stopDiscovery();
+  });
 
-        expect(
-          discoveryService.activeServices.any(
-            (service) => service.name == testName && service.type == testType,
-          ),
-          isTrue,
-          reason: 'Service should be listed in active services',
-        );
-      } finally {
-        statusTimer.cancel();
+  test('Multiple services and removal test', () async {
+    const String serviceName1 = 'Test Service 1';
+    const String serviceName2 = 'Test Service 2';
+    const String testType = '_example._tcp';
+    const int testPort = 5050;
+
+    final service1FoundCompleter = Completer<void>();
+    final service2FoundCompleter = Completer<void>();
+
+    // Listen for discovery events
+    final subscription = discoveryService.discoveryStream.listen((service) {
+      if (service.name == serviceName1 && service.type == testType) {
+        if (!service1FoundCompleter.isCompleted) {
+          service1FoundCompleter.complete();
+        }
       }
-    } finally {
-      print('Cleaning up...');
-      await subscription.cancel();
-      await broadcastService.stopBroadcast();
-      await discoveryService.stopDiscovery();
-      print('Cleanup complete');
-    }
+      if (service.name == serviceName2 && service.type == testType) {
+        if (!service2FoundCompleter.isCompleted) {
+          service2FoundCompleter.complete();
+        }
+      }
+    });
+
+    // Start discovery
+    await discoveryService.startDiscovery(
+      serviceType: testType,
+      port: testPort,
+      // We'll give a short timeout for removal
+      timeout: const Duration(seconds: 3),
+      cleanupInterval: const Duration(seconds: 1),
+    );
+
+    // Start broadcasting two services
+    await broadcastService1.startBroadcast(
+      serviceName: serviceName1,
+      serviceType: testType,
+      port: testPort,
+      broadcastInterval: const Duration(milliseconds: 300),
+    );
+    await broadcastService2.startBroadcast(
+      serviceName: serviceName2,
+      serviceType: testType,
+      port: testPort,
+      broadcastInterval: const Duration(milliseconds: 300),
+    );
+
+    // Wait for both services to be found
+    await service1FoundCompleter.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () =>
+          throw TimeoutException('Service 1 not discovered in time'),
+    );
+    await service2FoundCompleter.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () =>
+          throw TimeoutException('Service 2 not discovered in time'),
+    );
+
+    // Check that both are active
+    expect(
+      discoveryService.activeServices
+          .where((s) => s.name == serviceName1)
+          .length,
+      1,
+      reason: 'Service 1 should be in active services',
+    );
+    expect(
+      discoveryService.activeServices
+          .where((s) => s.name == serviceName2)
+          .length,
+      1,
+      reason: 'Service 2 should be in active services',
+    );
+
+    // Now stop broadcasting Service 2
+    await broadcastService2.stopBroadcast();
+
+    // Wait enough time for service 2 to expire (3 seconds + some buffer)
+    await Future.delayed(const Duration(seconds: 5));
+
+    // Check that Service 2 is removed, but Service 1 remains
+    expect(
+      discoveryService.activeServices
+          .where((s) => s.name == serviceName1)
+          .length,
+      1,
+      reason: 'Service 1 should still be active',
+    );
+    expect(
+      discoveryService.activeServices
+          .where((s) => s.name == serviceName2)
+          .isEmpty,
+      true,
+      reason: 'Service 2 should have been removed due to inactivity',
+    );
+
+    // Cleanup
+    await subscription.cancel();
+    await broadcastService1.stopBroadcast();
+    await discoveryService.stopDiscovery();
   });
 }

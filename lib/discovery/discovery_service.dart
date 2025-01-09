@@ -8,9 +8,9 @@ import 'package:logging/logging.dart';
 final _logger = Logger('HttpScanDiscovery');
 
 class DiscoveryService {
-  static final DiscoveryService _instance = DiscoveryService._internal();
-  factory DiscoveryService() => _instance;
-  DiscoveryService._internal();
+  // static final DiscoveryService _instance = DiscoveryService._internal();
+  // factory DiscoveryService() => _instance;
+  // DiscoveryService._internal();
 
   final _discoveryStreamController = StreamController<ServiceInfo>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -39,7 +39,7 @@ class DiscoveryService {
         InternetAddress.anyIPv4,
         port, // Use the specified port instead of 0
         reuseAddress: true,
-        reusePort: false,
+        reusePort: Platform.isAndroid ? false : true,
       );
 
       _socket!.listen(
@@ -67,18 +67,18 @@ class DiscoveryService {
   void _handleDatagramEvent(RawSocketEvent event) {
     if (event == RawSocketEvent.read) {
       final datagram = _socket!.receive();
-
       if (datagram != null) {
         try {
           final data = utf8.decode(datagram.data);
           final json = jsonDecode(data) as Map<String, dynamic>;
           final serviceInfo = ServiceInfo.fromJson(json);
 
-          // Update or add service to discovered services
+          // Update lastSeen to "now" for each newly received broadcast
+          serviceInfo.lastSeen = DateTime.now();
 
           _discoveredServices[serviceInfo.id] = serviceInfo;
-
           _discoveryStreamController.add(serviceInfo);
+
           _logger
               .info('Discovered service: ${serviceInfo.name} with data $json');
         } catch (e) {
@@ -92,10 +92,8 @@ class DiscoveryService {
   void _cleanupStaleServices(Duration timeout) {
     final now = DateTime.now();
     _discoveredServices.removeWhere((id, serviceInfo) {
-      /// convert string to DateTime
-      DateTime lastSeen =
-          DateTime.fromMillisecondsSinceEpoch(int.parse(serviceInfo.id));
-      return now.difference(lastSeen) > timeout;
+      final diff = now.difference(serviceInfo.lastSeen);
+      return diff > timeout;
     });
   }
 
