@@ -55,6 +55,7 @@ class RemoteCameraProvider implements ICameraProvider {
       return null;
     }
   }
+
   @override
   get availableCameras => throw UnimplementedError();
 }

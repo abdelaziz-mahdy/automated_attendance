@@ -62,7 +62,7 @@ class CameraProviderServer {
               return;
             }
             request.response.headers.contentType = ContentType('image', 'jpeg');
-            request.response.add(image!);
+            request.response.add(image);
             await request.response.close();
 
             final elapsed = DateTime.now().difference(start).inMilliseconds;
