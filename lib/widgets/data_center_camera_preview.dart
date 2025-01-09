@@ -21,7 +21,7 @@ class DataCenterCameraPreview extends StatefulWidget {
 class _DataCenterCameraPreviewState extends State<DataCenterCameraPreview> {
   Timer? _timer;
   Image? _image;
-  double fps = 1; // poll every second, for example
+  double fps = 10; // poll every second, for example
 
   @override
   void initState() {
@@ -55,13 +55,8 @@ class _DataCenterCameraPreviewState extends State<DataCenterCameraPreview> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Data Center: ${widget.providerName}"),
-      ),
-      body: Center(
-        child: _image != null ? _image! : CircularProgressIndicator(),
-      ),
+    return Center(
+      child: _image != null ? _image! : CircularProgressIndicator(),
     );
   }
 }

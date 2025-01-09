@@ -37,12 +37,15 @@ class CameraProviderServer {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 12345);
       RequestLogs.add(
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
-      LocalCameraProvider localCameraProvider =
-          LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
+      // LocalCameraProvider localCameraProvider =
+      //     LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
+          LocalCameraProvider localCameraProvider =
+          LocalCameraProvider(0);
       bool success = await localCameraProvider.openCamera();
 
       _server!.listen((HttpRequest request) async {
         final start = DateTime.now();
+        RequestLogs.add("Received request for path: ${request.uri.path}");
         if (request.uri.path == '/test') {
           request.response.statusCode = HttpStatus.ok;
           await request.response.close();
@@ -96,6 +99,9 @@ class CameraProviderServer {
 
     await _server!.close(force: true);
     _server = null;
+    await _broadcastService.stopBroadcast();
+    RequestLogs.logsNotifier.clear();
+
     RequestLogs.add("Server stopped");
   }
 }
