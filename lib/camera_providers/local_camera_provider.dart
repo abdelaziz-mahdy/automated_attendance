@@ -27,7 +27,8 @@ class LocalCameraProvider implements ICameraProvider {
       return false;
     }
     try {
-      _vc = cv.VideoCapture.fromDevice(cameraIndex);
+      _vc = await cv.VideoCaptureAsync.fromDeviceAsync(cameraIndex);
+
       if (_vc.isOpened) {
         _isOpen = true;
         return true;

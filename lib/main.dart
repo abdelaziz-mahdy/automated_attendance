@@ -8,12 +8,18 @@ import 'package:automated_attendance/views/data_center_view.dart';
 import 'package:automated_attendance/views/request_logs_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeServices();
-
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    print('${record.level.name}: ${record.time}: ${record.message}');
+    if (record.error != null) print('Error: ${record.error}');
+    if (record.stackTrace != null) print('Stack: ${record.stackTrace}');
+  });
   runApp(MyApp());
 }
 

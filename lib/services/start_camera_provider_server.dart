@@ -10,7 +10,7 @@ class CameraProviderServer {
   static final CameraProviderServer _instance =
       CameraProviderServer._internal();
   HttpServer? _server;
-
+  LocalCameraProvider? localCameraProvider;
   factory CameraProviderServer() {
     return _instance;
   }
@@ -24,29 +24,47 @@ class CameraProviderServer {
     }
 
     try {
-      // 1. Register (broadcast) the service on the network
+      // // 1. Register (broadcast) the service on the network
       await _broadcastService.startBroadcast(
         serviceName: "MyCameraProvider",
         serviceType: "_camera._tcp",
         port: 12345,
       );
-      RequestLogs.add("BroadcastService started on port 12345");
+      // RequestLogs.add("BroadcastService started on port 12345");
 
       // Start the HTTP server
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 12345);
       RequestLogs.add(
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
-      LocalCameraProvider localCameraProvider = LocalCameraProvider(0);
-      bool success = await localCameraProvider.openCamera();
+      // LocalCameraProvider localCameraProvider =
+      //     LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
+      localCameraProvider = LocalCameraProvider(0);
+
+      bool success = await localCameraProvider!.openCamera();
 
       _server!.listen((HttpRequest request) async {
         final start = DateTime.now();
+        RequestLogs.add("Received request for path: ${request.uri.path}");
+        if (request.uri.path == '/test') {
+          request.response.statusCode = HttpStatus.ok;
+          await request.response.close();
+          RequestLogs.add("Handled /test");
+          return;
+        }
         if (request.uri.path == '/get_image') {
           if (success) {
-            final image = await localCameraProvider.getFrame();
+            final image = await localCameraProvider?.getFrame();
+            if (image == null) {
+              request.response.statusCode = HttpStatus.internalServerError;
+              await request.response.close();
 
+              final elapsed = DateTime.now().difference(start).inMilliseconds;
+              RequestLogs.add(
+                  "Handled /get_image in $elapsed ms (Error capturing frame)");
+              return;
+            }
             request.response.headers.contentType = ContentType('image', 'jpeg');
-            request.response.add(image!);
+            request.response.add(image);
             await request.response.close();
 
             final elapsed = DateTime.now().difference(start).inMilliseconds;
@@ -80,7 +98,10 @@ class CameraProviderServer {
 
     await _server!.close(force: true);
     _server = null;
+    await _broadcastService.stopBroadcast();
+    await localCameraProvider?.closeCamera();
     RequestLogs.add("Server stopped");
+    RequestLogs.logsNotifier.clear();
   }
 }
 

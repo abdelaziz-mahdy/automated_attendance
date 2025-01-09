@@ -16,7 +16,7 @@ class RemoteCameraProvider implements ICameraProvider {
   Future<bool> openCamera() async {
     // For a remote camera, "openCamera" might just mean a test request
     // to ensure we can connect. If successful, set _isOpen = true.
-    final testUrl = Uri.parse('http://$serverAddress:$serverPort/get_image');
+    final testUrl = Uri.parse('http://$serverAddress:$serverPort/test');
     try {
       final response =
           await HttpClient().getUrl(testUrl).then((req) => req.close());
@@ -55,4 +55,7 @@ class RemoteCameraProvider implements ICameraProvider {
       return null;
     }
   }
+
+  @override
+  get availableCameras => throw UnimplementedError();
 }
