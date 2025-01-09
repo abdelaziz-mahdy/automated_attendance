@@ -1,6 +1,5 @@
 // lib/services/camera_provider_server.dart
 import 'dart:io';
-import 'package:automated_attendance/camera_providers/local_camera_picker.dart';
 import 'package:automated_attendance/camera_providers/local_camera_provider.dart';
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/logs/request_logs.dart';
@@ -11,7 +10,7 @@ class CameraProviderServer {
   static final CameraProviderServer _instance =
       CameraProviderServer._internal();
   HttpServer? _server;
-
+  LocalCameraProvider? localCameraProvider;
   factory CameraProviderServer() {
     return _instance;
   }
@@ -39,9 +38,9 @@ class CameraProviderServer {
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
       // LocalCameraProvider localCameraProvider =
       //     LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
-          LocalCameraProvider localCameraProvider =
-          LocalCameraProvider(0);
-      bool success = await localCameraProvider.openCamera();
+      localCameraProvider = LocalCameraProvider(0);
+
+      bool success = await localCameraProvider!.openCamera();
 
       _server!.listen((HttpRequest request) async {
         final start = DateTime.now();
@@ -54,7 +53,7 @@ class CameraProviderServer {
         }
         if (request.uri.path == '/get_image') {
           if (success) {
-            final image = await localCameraProvider.getFrame();
+            final image = await localCameraProvider?.getFrame();
             if (image == null) {
               request.response.statusCode = HttpStatus.internalServerError;
               await request.response.close();
@@ -101,7 +100,7 @@ class CameraProviderServer {
     _server = null;
     await _broadcastService.stopBroadcast();
     RequestLogs.logsNotifier.clear();
-
+    localCameraProvider?.closeCamera();
     RequestLogs.add("Server stopped");
   }
 }

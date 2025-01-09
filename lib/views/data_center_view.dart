@@ -7,7 +7,7 @@ import 'package:automated_attendance/widgets/data_center_camera_preview.dart';
 import 'package:flutter/material.dart';
 
 class DataCenterView extends StatefulWidget {
-  const DataCenterView({Key? key}) : super(key: key);
+  const DataCenterView({super.key});
 
   @override
   State<DataCenterView> createState() => _DataCenterViewState();

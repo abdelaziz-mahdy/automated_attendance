@@ -43,7 +43,6 @@ class _RequestLogsPageState extends State<RequestLogsPage> {
 
   @override
   void dispose() {
-
     CameraProviderServer().stop();
 
     // TODO: implement dispose

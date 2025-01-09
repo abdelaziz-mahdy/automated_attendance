@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
-import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
