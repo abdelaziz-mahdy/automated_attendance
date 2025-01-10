@@ -1,32 +1,17 @@
-// broadcast_service.dart
-
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:bonsoir/bonsoir.dart';
 import 'package:logging/logging.dart';
 
-final _logger = Logger('HttpTargetDiscovery');
+final _logger = Logger('BroadcastService');
 
 class BroadcastService {
-  // static final BroadcastService _instance = BroadcastService._internal();
-  // factory BroadcastService() => _instance;
-  // BroadcastService._internal();
-
-  RawDatagramSocket? _socket;
-  Timer? _broadcastTimer;
+  BonsoirBroadcast? _broadcast;
   bool _isBroadcasting = false;
-  final Map<String, ServiceInfo> _activeServices = {};
-
-  final _errorController = StreamController<String>.broadcast();
-  Stream<String> get errors => _errorController.stream;
 
   Future<void> startBroadcast({
     required String serviceName,
     required String serviceType,
     required int port,
-    Map<String, dynamic>? attributes,
-    Duration broadcastInterval = const Duration(seconds: 1),
+    Map<String, String> attributes = const {},
   }) async {
     if (_isBroadcasting) {
       _logger.warning('Broadcasting already in progress');
@@ -34,68 +19,32 @@ class BroadcastService {
     }
 
     try {
-      _socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        0,
-        reuseAddress: true,
-        reusePort: Platform.isAndroid ? false : true,
-      );
-      _socket!.broadcastEnabled = true;
-
-      // Retrieve the local IP address inside an isolate
-      // final localIp = await compute(()=>NetworkInfoService.getDeviceIpAddress);
-
-      final serviceInfo = ServiceInfo(
+      final service = BonsoirService(
         name: serviceName,
         type: serviceType,
-        address: null,
+        port: port,
         attributes: attributes,
       );
 
-      _activeServices[serviceInfo.id] = serviceInfo;
-
-      _broadcastTimer = Timer.periodic(broadcastInterval, (timer) {
-        if (!_isBroadcasting) {
-          timer.cancel();
-          return;
-        }
-        _broadcastService(serviceInfo, port);
-      });
+      _broadcast = BonsoirBroadcast(service: service);
+      await _broadcast!.ready;
+      await _broadcast!.start();
 
       _isBroadcasting = true;
       _logger.info('Started broadcasting service: $serviceName');
     } catch (e) {
-      _errorController.add('Failed to start broadcast: $e');
       _logger.severe('Failed to start broadcast', e);
       await stopBroadcast();
     }
   }
 
-  void _broadcastService(ServiceInfo serviceInfo, int port) {
-    try {
-      final data = utf8.encode(jsonEncode(serviceInfo.toJson()));
-      _socket?.send(data, InternetAddress('255.255.255.255'), port);
-    } catch (e) {
-      _errorController.add('Failed to broadcast service: $e');
-      _logger.warning('Failed to broadcast service', e);
-    }
-  }
-
   Future<void> stopBroadcast() async {
     if (_isBroadcasting) {
-      _broadcastTimer?.cancel();
-      _broadcastTimer = null;
-      _socket?.close();
-      _socket = null;
+      await _broadcast?.stop();
+      _broadcast = null;
       _isBroadcasting = false;
-      _activeServices.clear();
       _logger.info('Stopped broadcasting');
     }
-  }
-
-  Future<void> dispose() async {
-    await stopBroadcast();
-    await _errorController.close();
   }
 
   bool get isBroadcasting => _isBroadcasting;

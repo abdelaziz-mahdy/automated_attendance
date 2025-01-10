@@ -51,7 +51,13 @@ class RemoteCameraProvider implements ICameraProvider {
           "Remote frame request took: ${endTime.difference(requestTime).inMilliseconds} ms");
       return bytes;
     } catch (e) {
-      print("Error retrieving remote frame: $e");
+      if (!isOpen) {
+        print("Remote camera is not open");
+        return null;
+      } else {
+        print("Error retrieving remote frame: $e");
+        return null;
+      }
       return null;
     }
   }
