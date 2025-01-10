@@ -4,6 +4,7 @@ class ServiceInfo {
   final String id;
   String? address;
   final Map<String, dynamic>? attributes;
+  final int? port;
 
   /// Tracks when this service was last seen on the network
   DateTime lastSeen;
@@ -14,6 +15,7 @@ class ServiceInfo {
     String? id,
     this.address,
     this.attributes,
+    this.port,
     DateTime? lastSeen,
   })  : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         lastSeen = lastSeen ?? DateTime.now();
@@ -23,6 +25,7 @@ class ServiceInfo {
         'type': type,
         'id': id,
         'address': address,
+        'port': port,
         'attributes': attributes,
       };
 
@@ -32,6 +35,7 @@ class ServiceInfo {
       type: json['type'] as String?,
       id: json['id'] as String?,
       address: json['address'] as String?,
+      port: json['port'] as int? ?? 0,
       attributes: json['attributes'] as Map<String, dynamic>?,
     );
     // Set lastSeen to "now" whenever we parse a discovered service
