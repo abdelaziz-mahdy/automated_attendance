@@ -62,6 +62,11 @@ class DiscoveryService {
         } else if (event.type ==
             BonsoirDiscoveryEventType.discoveryServiceLost) {
           _logger.warning('Service lost: ${event.service?.toJson()}');
+          if (event.service is ResolvedBonsoirService) {
+            ResolvedBonsoirService resolvedService =
+                event.service as ResolvedBonsoirService;
+            service.address = resolvedService.host;
+          }
           _removeStreamController.add(service);
         }
       });

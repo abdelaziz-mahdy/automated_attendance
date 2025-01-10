@@ -68,6 +68,7 @@ class _DataCenterViewState extends State<DataCenterView> {
         provider.closeCamera();
         _activeProviders.remove(address);
       }
+      print("Removed service: ${serviceInfo.toJson()}");
       setState(() {});
     });
   }
