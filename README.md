@@ -1,227 +1,211 @@
-# Camera Provider & Discovery Architecture
 
-This document describes the architecture of a system that enables:
 
-1. Local camera usage (through `LocalCameraProvider`).
-2. Remote camera usage (through `RemoteCameraProvider`).
-3. Network-based discovery of cameras (using broadcasting with `BroadcastService` and scanning with `DiscoveryService`).
-4. A Data Center to collect frames from discovered remote cameras.
+## 1. System Purpose
 
-Below is an overview of how these components work together, followed by diagrams and notes on potential improvements and additional features.
+The primary goal of this system is to capture camera feeds (either from a local camera or a remote provider), detect faces in real-time, extract embeddings (features) from those faces using OpenCV’s face-recognition models, and optionally use those embeddings to:
 
----
+- **Identify or verify** specific individuals.
+- **Log** when someone arrives or leaves a location.
+- **Track** a person’s presence in the building if multiple cameras are set up across entrances, hallways, and exits.
 
-## Table of Contents
+In practical terms, this means:
 
-1. [System Overview](#system-overview)
-2. [High-Level Architecture](#high-level-architecture)
-3. [Key Components](#key-components)
-   - [Camera Providers](#camera-providers)
-   - [Discovery Services](#discovery-services)
-   - [Data Center](#data-center)
-   - [Logging](#logging)
-4. [Sequence Diagrams](#sequence-diagrams)
-   - [Local Camera Workflow](#local-camera-workflow)
-   - [Remote Camera & Discovery Workflow](#remote-camera--discovery-workflow)
-5. [Points to Improve](#points-to-improve)
-6. [Potential Features to Add](#potential-features-to-add)
+1. **Entrances** can have one or more cameras to detect and timestamp arrivals.  
+2. **Exits** can have cameras to detect and timestamp departures.  
+3. **Hallways** or other strategic points can have cameras to keep track of movement if desired.
+
+The architecture has been designed in a modular way to make it easy to integrate new features (like a central database or a user-facing dashboard) without overhauling the entire system.
 
 ---
 
-## System Overview
-
-The system allows you to run a camera provider server on a device (e.g., a phone or Raspberry Pi) that captures frames locally and serves them via an HTTP endpoint (`/get_image`). At the same time, it advertises its existence on the network via broadcast (UDP-based). Another device acting as a "Data Center" can listen for these broadcasts using `DiscoveryService`, connect to each discovered camera, and receive frames from them remotely.
-
-**Key features**:
-
-- **Local camera capture** using OpenCV (via `opencv_dart`).
-- **Remote camera capture** over HTTP from another device running the camera provider.
-- **Broadcast and Discovery** to detect cameras in the local network without manual configuration.
-- **Logging** for debugging interactions in real-time.
-
----
-
-## High-Level Architecture
+## 2. High-Level Architecture
 
 ```mermaid
 flowchart LR
-    subgraph "Device A (Camera Provider)"
-        A1[LocalCameraProvider] -- frames --> A2[HTTP Server on :12345]
-        A2 -- broadcast presence --> A3[BroadcastService]
-    end
+    A[Local Camera Provider] --(frames)--> B[CameraProviderServer / HTTP Server]
+    B --(Advertise)--> C[BroadcastService]
 
-    subgraph "Device B (Data Center)"
-        B1[DiscoveryService] -- listens UDP --> A3
-        B2[RemoteCameraProvider] -- get_image request --> A2
-        B3[UI / Data Center View]
+    subgraph "Local Network"
+    C -.udp-broadcast.-> D[DiscoveryService (Data Center)]
     end
+    
+    D --(HTTP GET /get_image)--> B
+    B --(JPEG frames)--> D
+    D --> E[FaceProcessingService]
+    E --> D[DataCenter View/UI]
 ```
 
-1. **Device A** hosts the camera provider and captures frames from a local camera.
-2. It advertises itself to the network with a broadcast service (`BroadcastService`).
-3. **Device B** starts a discovery process (`DiscoveryService`) to receive broadcasted service info.
-4. Upon finding a camera provider, it creates a `RemoteCameraProvider` that fetches frames from Device A.
-5. The Data Center UI displays frames from all discovered camera providers.
+1. **Local Camera Provider** (Device A) captures frames using OpenCV.  
+2. **CameraProviderServer** hosts an HTTP endpoint (`/get_image`) to serve those frames.  
+3. **BroadcastService** announces the camera’s presence across the network.  
+4. **Data Center** (Device B) runs **DiscoveryService** to find broadcasted cameras automatically.  
+5. **RemoteCameraProvider** on the Data Center connects to each discovered camera via HTTP.  
+6. **FaceProcessingService** detects faces on the Data Center side, extracts features, and can record or display recognized faces.
 
 ---
 
-## Key Components
+## 3. Key Components
 
-### 1. Camera Providers
+### 3.1 Camera Providers
 
-**Interfaces & Providers:**
+1. **`ICameraProvider`**  
+   - An interface with common camera operations:  
+     - `openCamera()`, `closeCamera()`, `getFrame()`, and `isOpen` (a boolean).
+   - This abstraction allows the rest of the system to remain agnostic to whether the camera is local or remote.
 
-- **`ICameraProvider`**: The interface that both local and remote providers implement.
+2. **`LocalCameraProvider`**  
+   - Manages a physical camera (via OpenCV) on the current device.  
+   - Uses `VideoCapture.fromDevice(cameraIndex)` to open the camera.  
+   - Encodes frames in JPEG (`imencodeAsync`) before returning them as `Uint8List`.
 
-  - `openCamera()`, `closeCamera()`, `getFrame()`, `isOpen`.
-
-- **`LocalCameraProvider`**:
-
-  - Uses OpenCV to open a local camera device by index.
-  - Captures frames, encodes them as JPEG, and returns `Uint8List`.
-
-- **`RemoteCameraProvider`**:
-  - Connects to a remote HTTP server for frames.
-  - Sends HTTP requests to `/get_image` and returns the response as `Uint8List`.
-
-### 2. Discovery Services
-
-- **`BroadcastService`**:
-
-  - Runs on the camera provider side.
-  - Broadcasts service metadata (such as service name, type, port) to `255.255.255.255` at a set interval.
-  - Allows other devices to discover it without manual IP configuration.
-
-- **`DiscoveryService`**:
-  - Runs on the Data Center side.
-  - Listens on a known port for broadcasted service info.
-  - Parses the metadata, builds a list of discovered services, and notifies listeners.
-
-### 3. Data Center
-
-- **Acts as a manager** for multiple remote camera providers:
-  - Starts `DiscoveryService` to find cameras on the network.
-  - For each discovered camera, spawns a `RemoteCameraProvider`.
-  - Displays all camera feeds in a grid or list.
-
-### 4. Logging
-
-- **`RequestLogs`** and `ListNotifier`:
-  - Central location to store system logs (particularly used by the camera provider HTTP server).
-  - Real-time UI updates whenever logs change.
+3. **`RemoteCameraProvider`**  
+   - Connects over HTTP to retrieve frames from a remote device that’s running the server.  
+   - Uses `HttpClient` to send a GET request to `/get_image`.  
+   - The response is a JPEG-encoded `Uint8List`.
 
 ---
 
-## Sequence Diagrams
+### 3.2 CameraProviderServer & HTTP Endpoints
 
-### Local Camera Workflow
+- **`CameraProviderServer`**  
+  - Wraps `LocalCameraProvider` and binds an HTTP server on a specified port (e.g., `:12345`).  
+  - Serves frames from `localCameraProvider.getFrame()` via the `/get_image` route.  
+  - Also responds to `/test` for basic connectivity checks.  
+  - Logs incoming requests using `RequestLogs` for real-time debugging.
 
-```mermaid
-sequenceDiagram
-    participant App as Main App
-    participant LocalProvider as LocalCameraProvider
-    participant OpenCV as OpenCV
+When you start the camera provider, it:
 
-    App->>LocalProvider: openCamera()
-    LocalProvider->>OpenCV: VideoCapture.fromDevice(index)
-    OpenCV-->LocalProvider: isOpened = true/false
-    LocalProvider-->App: return true/false
-
-    Note over LocalProvider: If success, isOpen = true
-
-    App->>LocalProvider: getFrame()
-    LocalProvider->>OpenCV: readAsync()
-    OpenCV-->LocalProvider: returns Mat frame
-    LocalProvider->>OpenCV: imencodeAsync('.jpg', frame)
-    OpenCV-->LocalProvider: returns Uint8List
-    LocalProvider-->App: returns Uint8List?
-```
-
-1. **`openCamera()`** requests the camera device via OpenCV.
-2. On success, `isOpen` is set to `true`.
-3. **`getFrame()`** reads a frame, encodes it to JPEG, and returns a `Uint8List`.
+1. **Opens** the local camera (e.g., `LocalCameraProvider(0)` for camera index 0).
+2. **Starts** the HTTP server and begins listening for requests (e.g., on `0.0.0.0:12345`).
+3. **Broadcasts** that it’s a `_camera._tcp` service via `BroadcastService`.
 
 ---
 
-### Remote Camera & Discovery Workflow
+### 3.3 Network Discovery
 
-```mermaid
-sequenceDiagram
-    participant CameraProvider as CameraProviderServer
-    participant BroadcastService as BroadcastService
-    participant DataCenter as DiscoveryService
-    participant RemoteProvider as RemoteCameraProvider
+- **`BroadcastService`**  
+  - Advertises (broadcasts) the camera’s service name, type, and port (e.g. `_camera._tcp`) so other devices can find it automatically.  
+  - Built on `Bonsoir` (or a similar mDNS-based library) to simplify local discovery.  
 
-    CameraProvider->>BroadcastService: startBroadcast()
-    loop every 1s
-        BroadcastService->>All: UDP broadcast service info
-    end
-
-    DataCenter->>DataCenter: startDiscovery()
-    DataCenter->>DataCenter: bind socket on known port
-    loop on UDP datagram
-        DataCenter->>DataCenter: parse service info
-        DataCenter->>RemoteProvider: create instance
-        RemoteProvider->>CameraProvider: openCamera() (test request)
-        CameraProvider-->RemoteProvider: 200 OK
-    end
-
-    RemoteProvider->>CameraProvider: GET /get_image
-    CameraProvider->>LocalCameraProvider: getFrame()
-    LocalCameraProvider-->CameraProvider: JPEG bytes
-    CameraProvider-->RemoteProvider: returns JPEG bytes
-```
-
-1. **Camera Provider** starts broadcasting using `BroadcastService`.
-2. **Data Center** starts discovery listening on the same port.
-3. **DiscoveryService** receives broadcast packets, parses them, and identifies new services.
-4. For each new service, a **`RemoteCameraProvider`** is instantiated to open the remote camera.
-5. On a GET request to `/get_image`, the remote camera server fetches the local frame and responds with JPEG bytes.
+- **`DiscoveryService`**  
+  - Listens for broadcasted services on the Data Center side.  
+  - Whenever a new service is found (e.g., “MyCameraProvider” on IP `192.168.1.10`, port `12345`), it notifies the app.  
+  - The Data Center can then create a `RemoteCameraProvider` to fetch frames.
 
 ---
 
-## Points to Improve
+### 3.4 Data Center
 
-1. **Security & Authentication**
-   - Currently, there is no authentication or encryption in place for remote connections. Implementing HTTPS or token-based auth can secure the camera feed.
-2. **Robust Error Handling**
-   - In the event of repeated failures to open or read a camera, the system might loop infinitely or cause memory leaks. More robust error handling and resource cleanup can help.
-3. **Configuration Management**
-   - Some settings (like camera index, discovery interval, broadcast interval) are hardcoded. Externalizing these into config files or environment variables would make the system more flexible.
-4. **Scalability**
-   - The broadcasting approach works well for smaller networks, but large networks might face broadcast storm issues. Consider switching to a more structured discovery approach (like mDNS/Bonjour or a directory service) for larger deployments.
-5. **Better Session Control**
-   - Currently, the `RemoteCameraProvider` simply tests connectivity on `openCamera()`. Additional logic (like ping, keep-alive, timeouts) would ensure a more resilient connection.
+- **`DataCenterView`**  
+  - Displays a grid or list of discovered camera feeds.  
+  - For each discovered camera, a `RemoteCameraProvider` is used to retrieve frames.  
+  - Each camera feed is displayed in a widget (e.g., `DataCenterCameraPreview`) that polls frames at a configurable FPS.
 
----
-
-## Potential Features to Add
-
-1. **Face Recognition / Attendance**
-   - The code includes face detection and extraction services. A next step could be real-time face recognition for automated attendance or security checks.
-2. **Multi-Camera Sync**
-   - Provide time synchronization or near real-time clock alignment if multiple camera feeds need to be correlated.
-3. **Advanced Discovery**
-   - Integrate with standard service discovery protocols (mDNS, SSDP, or Bonjour) to reduce the need for manual port setting.
-4. **Mobile UI**
-   - Build dedicated mobile-friendly UI to manage the camera feeds, start/stop discovery, and handle logs in a user-friendly manner.
-5. **Recording & Playback**
-   - Optionally record streams and store them on the Data Center device. Provide a timeline to review recorded footage.
-6. **Camera Control**
-   - Implement PTZ (Pan-Tilt-Zoom) commands if the camera hardware supports it. This would require additional endpoints or extension of the existing API.
-7. **Cloud Upload**
-   - Provide an option to forward frames or recognized faces to a cloud service for further analytics or storage.
+- **`DataCenterCameraPreview`**  
+  - Periodically calls `getFrame()` on the given provider.  
+  - Optionally passes the frame to `FaceProcessingService` to detect and draw bounding boxes or landmarks.  
+  - Renders the final processed image as a `Widget`.
 
 ---
 
-## Conclusion
+### 3.5 Face Detection & Extraction
 
-This system demonstrates a modular, easily extendable approach to camera capture (both local and remote), real-time broadcast-based discovery, and a data center concept for aggregating feeds.
+1. **`FaceExtractionService`**  
+   - Uses a **face detection model** (e.g., `face_detection_yunet_2023mar.onnx`) to find faces in the frame.  
+   - Returns bounding boxes and landmarks as an OpenCV Mat.
 
-**Key Takeaways**:
+2. **`FaceFeaturesExtractionService`**  
+   - Takes the bounding box data from `FaceExtractionService`, aligns and crops the face, then uses a **face recognition model** (e.g., `face_recognition_sface_2021dec.onnx`) to generate a feature vector (embedding).  
+   - This embedding can be used to compare or identify faces.
 
-- Simple local/remote camera abstraction thanks to `ICameraProvider`.
-- Broadcast & discover architecture for seamless detection of camera servers.
-- Extendable face detection & comparison modules that can serve advanced analytics use-cases.
+3. **`FaceComparisonService`**  
+   - Compares two embeddings to see if they represent the same person.  
+   - Provides a “similarity score” or boolean result (similar vs. dissimilar).
 
-By addressing the points for improvement and adding the suggested features, this architecture can be scaled and enhanced to support more robust, secure, and feature-rich camera applications.
+4. **`FaceProcessingService`**  
+   - A convenience layer that decodes an image, runs detection, optionally draws bounding boxes, and re-encodes the processed image for display.
+
+With this pipeline, once you’ve extracted face embeddings, you could store them in a database (with timestamps) to track:
+
+- **Arrival**: When a face is first seen by an entrance camera.  
+- **Departure**: When a face is seen by an exit camera.  
+- **Location**: If intermediate hallway cameras detect the same face, you can infer the path the individual took inside the building.
+
+---
+
+## 4. Typical Workflows
+
+### 4.1 Local Camera Provider Workflow
+
+1. **Start the server**: `CameraProviderServer.start()`.  
+2. The server opens the local camera using `LocalCameraProvider`.  
+3. The server binds an HTTP endpoint (`/get_image`).  
+4. `BroadcastService` advertises `_camera._tcp` with the chosen port.
+
+**On the same device (or remote)**, you can confirm the feed by visiting `http://<IP>:12345/get_image`.
+
+---
+
+### 4.2 Remote Camera Discovery & Usage
+
+1. **Data Center** calls `startDiscovery("_camera._tcp")`.  
+2. **`DiscoveryService`** listens for broadcasted services. When one is found:  
+   - The Data Center automatically instantiates a `RemoteCameraProvider` with `<address>` and `<port>`.  
+   - Calls `openCamera()` on it to confirm availability.  
+3. The Data Center periodically calls `getFrame()` to retrieve the JPEG frames.  
+4. The frames can then be passed to `FaceProcessingService` to detect faces, draw bounding boxes, or extract features.  
+5. Display processed frames in `DataCenterCameraPreview`.
+
+---
+
+## 5. Tracking People In and Out
+
+With the face detection and feature extraction pipeline in place, you can log each detected face along with:
+
+- **Time** (current date/time).
+- **Camera location** (entrance camera vs. exit camera).
+- **Unique identifier** (if you match the face embedding to a known user from your database).
+
+By correlating these logs, you can:
+
+- **Identify** who arrived (and when).  
+- **Track** if the same face was detected at another location (e.g., hallway camera or exit).  
+- **Determine** how long they stayed before leaving.
+
+You can store these events in a backend database or simply log them. Over time, you build an attendance record or a path history within the building.
+
+---
+
+## 6. Potential Expansions
+
+1. **Authentication & Authorization**  
+   - Secure endpoints with basic auth, token-based auth, or HTTPS to prevent unauthorized camera access.
+
+2. **Database Integration**  
+   - Store face embeddings and timestamps to build a persistent attendance or movement log.
+
+3. **Notifications or Alerts**  
+   - Send push notifications or emails if a recognized face enters or leaves (e.g., for employees or restricted areas).
+
+4. **PTZ (Pan-Tilt-Zoom) Control**  
+   - If cameras support PTZ, extend the HTTP interface to accept movement commands.
+
+5. **Scalability**  
+   - For large environments, consider a more scalable discovery mechanism and a robust message bus (e.g., MQTT or Kafka).
+
+6. **Analytics & Dashboards**  
+   - Create interactive dashboards to visualize who entered, how long they stayed, and their movement paths.
+
+---
+
+## 7. Conclusion
+
+This updated architecture leverages:
+
+- **OpenCV-based face detection** (via `FaceExtractionService`) to find faces in frames.
+- **Face embedding extraction** (via `FaceFeaturesExtractionService`) to identify or track people across multiple cameras.
+- **Local and Remote camera providers** that unify capturing logic under the `ICameraProvider` interface.
+- **Broadcast and Discovery** services to automatically find cameras on the local network without manual IP configuration.
+- **Data Center** that aggregates camera feeds, processes frames, and displays them.  
+
+By combining these pieces, you can place cameras at entrances/exits to see when people come or go, and optionally track them inside the building through additional camera placements. This makes it a flexible foundation for attendance, security monitoring, or advanced analytics.
