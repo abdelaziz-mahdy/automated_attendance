@@ -1,33 +1,24 @@
-// discovery_service.dart
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
+
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:bonsoir/bonsoir.dart';
 import 'package:logging/logging.dart';
 
-final _logger = Logger('HttpScanDiscovery');
+final _logger = Logger('DiscoveryService');
 
 class DiscoveryService {
-  // static final DiscoveryService _instance = DiscoveryService._internal();
-  // factory DiscoveryService() => _instance;
-  // DiscoveryService._internal();
-
-  final _discoveryStreamController = StreamController<ServiceInfo>.broadcast();
-  final _errorController = StreamController<String>.broadcast();
-
-  RawDatagramSocket? _socket;
+  BonsoirDiscovery? _discovery;
   bool _isDiscovering = false;
   final Map<String, ServiceInfo> _discoveredServices = {};
-  Timer? _cleanupTimer;
+
+  final _discoveryStreamController = StreamController<ServiceInfo>.broadcast();
 
   Stream<ServiceInfo> get discoveryStream => _discoveryStreamController.stream;
-  Stream<String> get errors => _errorController.stream;
+
+  // Stream<BonsoirDiscoveryEvent> get discoveryStream => _discovery?.eventStream ?? Stream.empty();
 
   Future<void> startDiscovery({
     required String serviceType,
-    required int port, // Add port parameter
-    Duration timeout = const Duration(seconds: 30),
-    Duration cleanupInterval = const Duration(seconds: 10),
   }) async {
     if (_isDiscovering) {
       _logger.warning('Discovery already in progress');
@@ -35,85 +26,62 @@ class DiscoveryService {
     }
 
     try {
-      _socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        port, // Use the specified port instead of 0
-        reuseAddress: true,
-        reusePort: Platform.isAndroid ? false : true,
-      );
+      _discovery = BonsoirDiscovery(type: serviceType);
+      await _discovery!.ready;
 
-      _socket!.listen(
-        _handleDatagramEvent,
-        onError: (error) {
-          _errorController.add('Socket error: $error');
-          _logger.severe('Socket error', error);
-        },
-        cancelOnError: false,
-      );
+      _discovery!.eventStream!.listen((event) async {
+        String serviceId =
+            "${event.service?.name}${event.service?.type}${event.service?.port}";
 
-      _cleanupTimer = Timer.periodic(cleanupInterval, (timer) {
-        _cleanupStaleServices(timeout);
+        if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
+          _logger.info('Service found: ${event.service?.toJson()}');
+          if (_discoveredServices.containsKey(serviceId)) {
+            return;
+          }
+          await event.service?.resolve(_discovery!.serviceResolver);
+        } else if (event.type ==
+            BonsoirDiscoveryEventType.discoveryServiceResolved) {
+          _logger.info('Service resolved: ${event.service?.toJson()}');
+          if (event.service == null) {
+            return;
+          }
+          if (event.service is ResolvedBonsoirService) {
+            ResolvedBonsoirService resolvedService = event.service as ResolvedBonsoirService;
+            final service = ServiceInfo(
+              name: resolvedService.name,
+              type: resolvedService.type,
+              address: resolvedService.host,
+              port: resolvedService.port,
+              attributes: resolvedService.attributes,
+            );
+            _logger.info('Resolved service: ${event.service?.toJson()}');
+            _discoveredServices[serviceId] = service;
+            _discoveryStreamController.add(service);
+          }
+        } else if (event.type ==
+            BonsoirDiscoveryEventType.discoveryServiceLost) {
+          _logger.warning('Service lost: ${event.service?.toJson()}');
+
+          _discoveredServices.remove(serviceId);
+        }
       });
 
+      await _discovery!.start();
       _isDiscovering = true;
-      _logger.info('Started discovery for service: $serviceType on port $port');
+      _logger.info('Started discovery for service type: $serviceType');
     } catch (e) {
-      _errorController.add('Failed to start discovery: $e');
       _logger.severe('Failed to start discovery', e);
       await stopDiscovery();
     }
   }
 
-  void _handleDatagramEvent(RawSocketEvent event) {
-    if (event == RawSocketEvent.read) {
-      final datagram = _socket!.receive();
-      if (datagram != null) {
-        _logger.fine('Received datagram from ${datagram.address.address}');
-        try {
-          final data = utf8.decode(datagram.data);
-          final json = jsonDecode(data) as Map<String, dynamic>;
-          final serviceInfo = ServiceInfo.fromJson(json);
-
-          // Update lastSeen to "now" for each newly received broadcast
-          serviceInfo.lastSeen = DateTime.now();
-          serviceInfo.address = datagram.address.address;
-          _discoveredServices[serviceInfo.id] = serviceInfo;
-          _discoveryStreamController.add(serviceInfo);
-
-          _logger
-              .info('Discovered service: ${serviceInfo.name} with data $json');
-        } catch (e) {
-          _errorController.add('Failed to decode discovery message: $e');
-          _logger.warning('Failed to decode discovery message', e);
-        }
-      }
-    }
-  }
-
-  void _cleanupStaleServices(Duration timeout) {
-    final now = DateTime.now();
-    _discoveredServices.removeWhere((id, serviceInfo) {
-      final diff = now.difference(serviceInfo.lastSeen);
-      return diff > timeout;
-    });
-  }
-
   Future<void> stopDiscovery() async {
     if (_isDiscovering) {
-      _cleanupTimer?.cancel();
-      _cleanupTimer = null;
-      _socket?.close();
-      _socket = null;
+      await _discovery?.stop();
+      _discovery = null;
       _isDiscovering = false;
-      _discoveredServices.clear();
       _logger.info('Stopped discovery');
     }
-  }
-
-  Future<void> dispose() async {
-    await stopDiscovery();
-    await _discoveryStreamController.close();
-    await _errorController.close();
   }
 
   bool get isDiscovering => _isDiscovering;

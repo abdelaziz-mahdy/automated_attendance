@@ -33,13 +33,11 @@ class _DataCenterViewState extends State<DataCenterView> {
     // Start discovering services
     await _discoveryService.startDiscovery(
       serviceType: '_camera._tcp',
-      port: 12345,
-      timeout: const Duration(seconds: 8),
-      cleanupInterval: const Duration(seconds: 1),
     );
 
     // Listen for newly discovered services
     _discoveryService.discoveryStream.listen((serviceInfo) async {
+    
       final address = serviceInfo.address;
       if (address == null) return;
 
