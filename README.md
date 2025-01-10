@@ -22,17 +22,17 @@ The architecture has been designed in a modular way to make it easy to integrate
 
 ```mermaid
 flowchart LR
-    A["Local Camera Provider"] --(frames)--> B["CameraProviderServer / HTTP Server]"
-    B --(Advertise)--> C[BroadcastService]
+    A["Local Camera Provider"] -- frames --> B["CameraProviderServer / HTTP Server"]
+    B -- Advertise --> C["BroadcastService"]
 
     subgraph "Local Network"
-    C -.udp-broadcast.-> D["DiscoveryService (Data Center)"]
+        C -. udp-broadcast .-> D["DiscoveryService (Data Center)"]
     end
-    
-    D --(HTTP GET /get_image)--> B
-    B --(JPEG frames)--> D
-    D --> E[FaceProcessingService]
-    E --> D[DataCenter View/UI]
+
+    D -- "HTTP GET /get_image" --> B
+    B -- "JPEG frames" --> D
+    D --> E["FaceProcessingService"]
+    E --> D["DataCenter View/UI"]
 ```
 
 1. **Local Camera Provider** (Device A) captures frames using OpenCV.  
