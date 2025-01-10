@@ -58,10 +58,6 @@ class RemoteCameraProvider implements ICameraProvider {
         print("Error retrieving remote frame: $e");
         return null;
       }
-      return null;
     }
   }
-
-  @override
-  get availableCameras => throw UnimplementedError();
 }
