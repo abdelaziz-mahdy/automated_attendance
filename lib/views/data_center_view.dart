@@ -37,6 +37,8 @@ class _DataCenterViewState extends State<DataCenterView> {
 
     // Listen for newly discovered services
     _discoveryService.discoveryStream.listen((serviceInfo) async {
+      _discoveredProviders = _discoveryService.activeServices;
+
       final address = serviceInfo.address;
       final port = serviceInfo.port;
       if (address == null) return;
@@ -60,6 +62,8 @@ class _DataCenterViewState extends State<DataCenterView> {
       }
     });
     _discoveryService.removeStream.listen((serviceInfo) {
+      _discoveredProviders = _discoveryService.activeServices;
+
       final address = serviceInfo.address;
       if (address == null) return;
 

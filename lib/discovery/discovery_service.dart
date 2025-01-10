@@ -55,8 +55,11 @@ class DiscoveryService {
             ResolvedBonsoirService resolvedService =
                 event.service as ResolvedBonsoirService;
             service.address = resolvedService.host;
+            if (service.address == null) {
+              return;
+            }
             _logger.info('Resolved service: ${event.service?.toJson()}');
-            _discoveredServices[serviceId] = service;
+            _discoveredServices[service.address!] = service;
             _discoveryStreamController.add(service);
           }
         } else if (event.type ==
@@ -67,6 +70,7 @@ class DiscoveryService {
                 event.service as ResolvedBonsoirService;
             service.address = resolvedService.host;
           }
+          _discoveredServices.remove(service.address);
           _removeStreamController.add(service);
         }
       });
