@@ -12,9 +12,9 @@ class DiscoveryService {
   final Map<String, ServiceInfo> _discoveredServices = {};
 
   final _discoveryStreamController = StreamController<ServiceInfo>.broadcast();
-
+  final _removeStreamController = StreamController<ServiceInfo>.broadcast();
   Stream<ServiceInfo> get discoveryStream => _discoveryStreamController.stream;
-
+  Stream<ServiceInfo> get removeStream => _removeStreamController.stream;
   // Stream<BonsoirDiscoveryEvent> get discoveryStream => _discovery?.eventStream ?? Stream.empty();
 
   Future<void> startDiscovery({
@@ -32,12 +32,18 @@ class DiscoveryService {
       _discovery!.eventStream!.listen((event) async {
         String serviceId =
             "${event.service?.name}${event.service?.type}${event.service?.port}";
-
+        final service = ServiceInfo(
+          name: event.service?.name,
+          type: event.service?.type,
+          port: event.service?.port,
+          id: serviceId,
+        );
         if (event.type == BonsoirDiscoveryEventType.discoveryServiceFound) {
           _logger.info('Service found: ${event.service?.toJson()}');
           if (_discoveredServices.containsKey(serviceId)) {
             return;
           }
+
           await event.service?.resolve(_discovery!.serviceResolver);
         } else if (event.type ==
             BonsoirDiscoveryEventType.discoveryServiceResolved) {
@@ -46,14 +52,9 @@ class DiscoveryService {
             return;
           }
           if (event.service is ResolvedBonsoirService) {
-            ResolvedBonsoirService resolvedService = event.service as ResolvedBonsoirService;
-            final service = ServiceInfo(
-              name: resolvedService.name,
-              type: resolvedService.type,
-              address: resolvedService.host,
-              port: resolvedService.port,
-              attributes: resolvedService.attributes,
-            );
+            ResolvedBonsoirService resolvedService =
+                event.service as ResolvedBonsoirService;
+            service.address = resolvedService.host;
             _logger.info('Resolved service: ${event.service?.toJson()}');
             _discoveredServices[serviceId] = service;
             _discoveryStreamController.add(service);
@@ -61,8 +62,7 @@ class DiscoveryService {
         } else if (event.type ==
             BonsoirDiscoveryEventType.discoveryServiceLost) {
           _logger.warning('Service lost: ${event.service?.toJson()}');
-
-          _discoveredServices.remove(serviceId);
+          _removeStreamController.add(service);
         }
       });
 

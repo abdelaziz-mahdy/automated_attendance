@@ -37,15 +37,16 @@ class _DataCenterViewState extends State<DataCenterView> {
 
     // Listen for newly discovered services
     _discoveryService.discoveryStream.listen((serviceInfo) async {
-    
       final address = serviceInfo.address;
+      final port = serviceInfo.port;
       if (address == null) return;
+      if (port == null) return;
 
       // If not already active, open a new RemoteCameraProvider
       if (!_activeProviders.containsKey(address)) {
         final provider = RemoteCameraProvider(
           serverAddress: address,
-          serverPort: 12345,
+          serverPort: port,
         );
 
         final opened = await provider.openCamera();
@@ -58,31 +59,16 @@ class _DataCenterViewState extends State<DataCenterView> {
         }
       }
     });
+    _discoveryService.removeStream.listen((serviceInfo) {
+      final address = serviceInfo.address;
+      if (address == null) return;
 
-    // Periodically refresh the active service list and remove stale providers
-    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-
-      setState(() {
-        // Update the list of discovered (active) services
-        _discoveredProviders = _discoveryService.activeServices;
-
-        // Identify any providers whose service is no longer active
-        final activeAddresses = _discoveredProviders
-            .map((s) => s.address)
-            .whereType<String>()
-            .toSet();
-
-        // Remove providers that disappeared from the network
-        final inactiveEntries = _activeProviders.entries
-            .where((entry) => !activeAddresses.contains(entry.key))
-            .toList();
-
-        for (final entry in inactiveEntries) {
-          entry.value.closeCamera();
-          _activeProviders.remove(entry.key);
-        }
-      });
+      final provider = _activeProviders[address];
+      if (provider != null) {
+        provider.closeCamera();
+        _activeProviders.remove(address);
+      }
+      setState(() {});
     });
   }
 
