@@ -43,6 +43,9 @@ class _DataCenterCameraPreviewState extends State<DataCenterCameraPreview> {
           if (frameBytes == null) {
             return;
           }
+          if (!mounted) {
+            return;
+          }
           setState(() {
             _image = Image.memory(frameBytes!, gaplessPlayback: true);
           });
