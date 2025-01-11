@@ -1,5 +1,6 @@
 // lib/services/camera_provider_server.dart
 import 'dart:io';
+import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/local_camera_provider.dart';
 import 'package:automated_attendance/discovery/broadcast_service.dart';
 import 'package:automated_attendance/logs/request_logs.dart';
@@ -10,7 +11,7 @@ class CameraProviderServer {
   static final CameraProviderServer _instance =
       CameraProviderServer._internal();
   HttpServer? _server;
-  LocalCameraProvider? localCameraProvider;
+  ICameraProvider? localCameraProvider;
   factory CameraProviderServer() {
     return _instance;
   }
@@ -38,6 +39,11 @@ class CameraProviderServer {
           "HTTP server running at http://${_server!.address.address}:${_server!.port}");
       // LocalCameraProvider localCameraProvider =
       //     LocalCameraProvider(LocalCameraPicker.highestCameraIndex);
+      // if (Platform.isAndroid) {
+      //   localCameraProvider = AndroidCameraProvider(0);
+      // } else {
+      //   localCameraProvider = LocalCameraProvider(0);
+      // }
       localCameraProvider = LocalCameraProvider(0);
 
       bool success = await localCameraProvider!.openCamera();

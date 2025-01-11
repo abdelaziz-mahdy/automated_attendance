@@ -73,7 +73,7 @@ class _DataCenterViewState extends State<DataCenterView> {
         _activeProviders.remove(address);
       }
       print("Removed service: ${serviceInfo.toJson()}");
-      if (mounted){
+      if (mounted) {
         setState(() {});
       }
     });
