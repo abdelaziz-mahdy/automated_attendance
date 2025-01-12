@@ -39,7 +39,8 @@ class _DataCenterCameraPreviewState extends State<DataCenterCameraPreview> {
           // Optionally do some local CV preprocessing here:
           // e.g. decode -> face detect -> re-encode
           // For demonstration, we just show the raw frame:
-          frameBytes = await FaceProcessingService.processFrame(frameBytes);
+          frameBytes = (await FaceProcessingService.processFrame(frameBytes))
+              ?.processedFrame;
           if (frameBytes == null) {
             return;
           }
