@@ -1,3 +1,5 @@
+// camera_manager.dart
+
 import 'dart:async';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
@@ -17,11 +19,14 @@ class CameraManager extends ChangeNotifier {
   // Keep a timer for each provider
   final Map<String, Timer> _pollTimers = {};
 
+  // Stream controller for face embeddings
   final StreamController<List<double>> _faceFeaturesStreamController =
       StreamController.broadcast();
-
   Stream<List<double>> get faceFeaturesStream =>
       _faceFeaturesStreamController.stream;
+
+  /// NEW: A list to store all cropped face thumbnails.
+  final List<Uint8List> capturedFaces = [];
 
   bool _isListening = false;
 
@@ -30,15 +35,13 @@ class CameraManager extends ChangeNotifier {
     _isListening = true;
 
     await _discoveryService.startDiscovery(serviceType: '_camera._tcp');
-
-    // Handle discovered services
     _discoveryService.discoveryStream.listen(_onServiceDiscovered);
     _discoveryService.removeStream.listen(_onServiceRemoved);
   }
 
   Future<void> stopListening() async {
     _isListening = false;
-    // Stop discovery
+
     await _discoveryService.stopDiscovery();
 
     // Cancel all provider timers
@@ -111,21 +114,27 @@ class CameraManager extends ChangeNotifier {
     try {
       final frame = await provider.getFrame();
       if (frame != null) {
-        // Process frame for face features
+        // 1) Process frame for face detection + bounding boxes
         final processedFrame = await FaceProcessingService.processFrame(frame);
 
         if (processedFrame != null) {
+          // Keep the annotated frame for UI display
           _lastFrames[address] = processedFrame.processedFrame;
 
-          // Extract face features if any faces are detected
+          // 2) Extract face embeddings if needed
           final features = await _extractFaceFeatures(
-              processedFrame.processedFrameMat, processedFrame.faces);
-
+            processedFrame.processedFrameMat,
+            processedFrame.faces,
+          );
           if (features.isNotEmpty) {
             for (var feature in features) {
               _faceFeaturesStreamController.add(feature);
             }
           }
+
+          // 3) Crop out each detected face as a thumbnail
+          _cropFacesAndStore(
+              processedFrame.processedFrameMat, processedFrame.faces);
         }
       }
       notifyListeners();
@@ -138,6 +147,39 @@ class CameraManager extends ChangeNotifier {
       Mat frameBytes, Mat faces) async {
     return await FaceFeaturesExtractionService()
         .extractFaceFeatures(frameBytes, faces);
+  }
+
+  /// NEW: Takes the processed frame and the faces Mat, then crops each face
+  /// and encodes it as a JPEG. Stores in [capturedFaces].
+  Future<void> _cropFacesAndStore(Mat annotatedFrame, Mat faces) async {
+    for (int i = 0; i < faces.rows; i++) {
+      final x = faces.at<double>(i, 0).toInt();
+      final y = faces.at<double>(i, 1).toInt();
+      final w = faces.at<double>(i, 2).toInt();
+      final h = faces.at<double>(i, 3).toInt();
+
+      // Make sure bounding box is within image boundaries
+      final safeW =
+          (x + w) > annotatedFrame.width ? annotatedFrame.width - x : w;
+      final safeH =
+          (y + h) > annotatedFrame.height ? annotatedFrame.height - y : h;
+
+      if (safeW <= 0 || safeH <= 0) {
+        continue;
+      }
+
+      final faceRect = Rect(x, y, safeW, safeH);
+      final faceMat = await annotatedFrame.regionAsync(faceRect);
+
+      // Encode the cropped face to JPEG
+      final (encSuccess, faceBytes) = imencode(".jpg", faceMat);
+      faceMat.dispose();
+
+      if (encSuccess) {
+        capturedFaces.insert(0, faceBytes);
+      }
+    }
+    notifyListeners();
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
