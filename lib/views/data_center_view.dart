@@ -21,23 +21,45 @@ class DataCenterView extends StatelessWidget {
             return const Center(child: Text("No active services found."));
           }
 
-          return ListView.builder(
+          // Use GridView instead of ListView
+          return GridView.builder(
+            // This delegate will ensure items have a max width of 200
+            // and a height of 300 (via childAspectRatio).
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 300,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              // Aspect ratio = width / height
+              // Here it's 200 / 300 = 0.666...
+              childAspectRatio: 1,
+            ),
             itemCount: providers.length,
             itemBuilder: (context, index) {
               final address = providers[index];
               final frame = manager.getLastFrame(address);
-              print("Frame: $frame");
+
               return Card(
-                child: Column(
-                  children: [
-                    Text("Provider: $address"),
-                    frame != null
-                        ? Image.memory(
-                            frame,
-                            gaplessPlayback: true,
-                          )
-                        : const CircularProgressIndicator(),
-                  ],
+                child: SizedBox(
+                  width: 200,
+                  height: 300,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("Provider: $address"),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: frame != null
+                            ? Image.memory(
+                                frame,
+                                gaplessPlayback: true,
+                                fit: BoxFit.cover,
+                              )
+                            : const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

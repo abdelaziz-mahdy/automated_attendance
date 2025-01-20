@@ -14,6 +14,9 @@ class CameraManager extends ChangeNotifier {
   final Map<String, ICameraProvider> activeProviders = {};
   final Map<String, Uint8List> _lastFrames = {};
 
+  // Keep a timer for each provider
+  final Map<String, Timer> _pollTimers = {};
+
   final StreamController<List<double>> _faceFeaturesStreamController =
       StreamController.broadcast();
 
@@ -35,8 +38,16 @@ class CameraManager extends ChangeNotifier {
 
   Future<void> stopListening() async {
     _isListening = false;
-
+    // Stop discovery
     await _discoveryService.stopDiscovery();
+
+    // Cancel all provider timers
+    for (var timer in _pollTimers.values) {
+      timer.cancel();
+    }
+    _pollTimers.clear();
+
+    // Close all active providers
     for (var provider in activeProviders.values) {
       await provider.closeCamera();
     }
@@ -61,16 +72,30 @@ class CameraManager extends ChangeNotifier {
 
     activeProviders[address] = provider;
 
-    // Start polling frames in the background
-    _pollFrames(provider, address);
+    // Start a periodic timer for polling frames
+    const int fps = 10;
+    final pollInterval = Duration(milliseconds: (1000 / fps).round());
+
+    _pollTimers[address] = Timer.periodic(pollInterval, (timer) {
+      // If the provider is removed or manager is not listening, cancel the timer.
+      if (!_isListening || !activeProviders.containsKey(address)) {
+        timer.cancel();
+        _pollTimers.remove(address);
+        return;
+      }
+      _pollFramesOnce(provider, address);
+    });
 
     notifyListeners();
   }
 
   Future<void> _onServiceRemoved(ServiceInfo serviceInfo) async {
     final address = serviceInfo.address;
-
     if (address == null) return;
+
+    // Cancel the timer for this provider
+    _pollTimers[address]?.cancel();
+    _pollTimers.remove(address);
 
     final provider = activeProviders.remove(address);
     if (provider != null) {
@@ -81,34 +106,31 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _pollFrames(ICameraProvider provider, String address) async {
-    while (activeProviders.containsKey(address)) {
-      try {
-        final frame = await provider.getFrame();
-        if (frame != null) {
-          // Process frame for face features
-          final processedFrame =
-              await FaceProcessingService.processFrame(frame);
-          _lastFrames[address] = processedFrame!.processedFrame;
+  /// Fetch and process exactly one frame from the given provider
+  Future<void> _pollFramesOnce(ICameraProvider provider, String address) async {
+    try {
+      final frame = await provider.getFrame();
+      if (frame != null) {
+        // Process frame for face features
+        final processedFrame = await FaceProcessingService.processFrame(frame);
 
-          if (processedFrame != null) {
-            final features = await _extractFaceFeatures(
-                processedFrame.processedFrameMat, processedFrame.faces);
-            if (features.isNotEmpty) {
-              for (var feature in features) {
-                _faceFeaturesStreamController.add(feature);
-              }
+        if (processedFrame != null) {
+          _lastFrames[address] = processedFrame.processedFrame;
+
+          // Extract face features if any faces are detected
+          final features = await _extractFaceFeatures(
+              processedFrame.processedFrameMat, processedFrame.faces);
+
+          if (features.isNotEmpty) {
+            for (var feature in features) {
+              _faceFeaturesStreamController.add(feature);
             }
           }
         }
-      } catch (e) {
-        debugPrint("Error polling frames for $address: $e");
       }
-
-      /// fps = 10
-      int fps = 10;
       notifyListeners();
-      await Future.delayed(Duration(milliseconds: (1000 / fps).round()));
+    } catch (e) {
+      debugPrint("Error polling frames for $address: $e");
     }
   }
 
