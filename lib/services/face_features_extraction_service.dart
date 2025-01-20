@@ -16,10 +16,10 @@ class FaceFeaturesExtractionService {
     _recognizer ??= cv.FaceRecognizerSF.fromFile(modelPath, "");
   }
 
-  List<List<double>> extractFaceFeatures(
+  Future<List<List<double>>> extractFaceFeatures(
     cv.Mat image,
     cv.Mat faces,
-  ) {
+  ) async {
     List<List<double>> faceFeatures = [];
     final faceBoundaries = List.generate(faces.rows, (i) {
       final x = faces.at<double>(i, 0).toInt();
@@ -47,8 +47,8 @@ class FaceFeaturesExtractionService {
         final faceBox = cv.Mat.fromList(1, rect.rawDetection.length,
             cv.MatType.CV_32FC1, rect.rawDetection);
 
-        final alignedFace = _recognizer!.alignCrop(image, faceBox);
-        final featureMat = _recognizer!.feature(alignedFace);
+        final alignedFace = await _recognizer!.alignCropAsync(image, faceBox);
+        final featureMat = await _recognizer!.featureAsync(alignedFace);
         final feature = List<double>.generate(
           featureMat.width,
           (index) => featureMat.at<double>(0, index),
