@@ -78,7 +78,7 @@ class CameraManager extends ChangeNotifier {
     // Start a periodic timer for polling frames
     const int fps = 10;
     final pollInterval = Duration(milliseconds: (1000 / fps).round());
-
+    // print("Starting polling for $address at $fps FPS");
     _pollTimers[address] = Timer.periodic(pollInterval, (timer) {
       // If the provider is removed or manager is not listening, cancel the timer.
       if (!_isListening || !activeProviders.containsKey(address)) {

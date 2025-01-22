@@ -58,6 +58,9 @@ class DiscoveryService {
             if (service.address == null) {
               return;
             }
+            if (_discoveredServices.containsKey(service.address)) {
+              return;
+            }
             _logger.info('Resolved service: ${event.service?.toJson()}');
             _discoveredServices[service.address!] = service;
             _discoveryStreamController.add(service);
