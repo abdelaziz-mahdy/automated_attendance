@@ -9,8 +9,6 @@ class DataCenterView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cameraManager = context.watch<CameraManager>();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Data Center: Discovered Providers"),
