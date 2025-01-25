@@ -155,25 +155,28 @@ class CameraManager extends ChangeNotifier {
           if (features.isNotEmpty) {
             for (int i = 0; i < features.length; i++) {
               _faceFeaturesStreamController.add(features[i]);
+              Uint8List? faceThumbnail = await _cropSingleFace(
+                processedFrame.processedFrameMat,
+                processedFrame.faces,
+                i,
+              );
 
-              // NEW: Compare extracted features with tracked faces
+              // Compare extracted features with tracked faces
               _compareWithTrackedFaces(
                 features[i],
                 address,
-                await _cropSingleFace(
-                  processedFrame.processedFrameMat,
-                  processedFrame.faces,
-                  i,
-                ),
+                faceThumbnail,
               );
+
+              /// Store the face thumbnail in the list.
+              if (faceThumbnail != null) {
+                capturedFaces.insert(0, faceThumbnail);
+                if (capturedFaces.length > 10) {
+                  capturedFaces.removeLast();
+                }
+              }
             }
           }
-
-          // 3) Crop out each detected face as a thumbnail
-          _cropAndStoreAllFaces(
-            processedFrame.processedFrameMat,
-            processedFrame.faces,
-          );
         }
       }
       notifyListeners();
@@ -264,22 +267,6 @@ class CameraManager extends ChangeNotifier {
     } else {
       return null;
     }
-  }
-
-  /// Takes the processed frame and the faces Mat, then crops each face
-  /// and encodes it as a JPEG. Stores in [capturedFaces].
-  Future<void> _cropAndStoreAllFaces(Mat annotatedFrame, Mat faces) async {
-    for (int i = 0; i < faces.rows; i++) {
-      final faceBytes = await _cropSingleFace(annotatedFrame, faces, i);
-
-      if (faceBytes != null) {
-        capturedFaces.insert(0, faceBytes);
-        if (capturedFaces.length > 10) {
-          capturedFaces.removeLast();
-        }
-      }
-    }
-    notifyListeners(); // Notify after processing all faces
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
