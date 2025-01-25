@@ -1,5 +1,8 @@
 // lib/views/data_center_view.dart
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/widgets/person_details_panel.dart';
+import 'package:automated_attendance/widgets/provider_card.dart';
+import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -114,15 +117,15 @@ class _DataCenterViewState extends State<DataCenterView> {
                       ],
                     ),
                   ),
-                  // DETAILS PANEL (Conditionally shown for Recognized People)
-                  if (_selectedIndex == 2 &&
-                      _selectedPersonDetails !=
-                          null) // Show details only for People tab
-                    Expanded(
-                      flex: 1, // Details panel takes less space
-                      child:
-                          PersonDetailsPanel(person: _selectedPersonDetails!),
-                    ),
+                  // // DETAILS PANEL (Conditionally shown for Recognized People)
+                  // if (_selectedIndex == 2 &&
+                  //     _selectedPersonDetails !=
+                  //         null) // Show details only for People tab
+                  //   Expanded(
+                  //     flex: 1, // Details panel takes less space
+                  //     child:
+                  //         PersonDetailsPanel(person: _selectedPersonDetails!),
+                  //   ),
                 ],
               ),
             ),
@@ -256,249 +259,6 @@ class RecognizedPeopleList extends StatelessWidget {
           },
         );
       },
-    );
-  }
-}
-
-// --- Person Details Panel (Side Panel) ---
-class PersonDetailsPanel extends StatefulWidget {
-  // Changed to StatefulWidget for editable name
-  final TrackedFace person;
-
-  const PersonDetailsPanel({Key? key, required this.person}) : super(key: key);
-
-  @override
-  State<PersonDetailsPanel> createState() => _PersonDetailsPanelState();
-}
-
-class _PersonDetailsPanelState extends State<PersonDetailsPanel> {
-  late TextEditingController _nameController;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.person.name);
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Person Details",
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 10),
-            if (widget.person.thumbnail != null)
-              ClipOval(
-                child: Image.memory(widget.person.thumbnail!,
-                    width: 80, height: 80, fit: BoxFit.cover),
-              ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (newValue) {
-                Provider.of<CameraManager>(context, listen: false)
-                    .updateTrackedFaceName(widget.person.id, newValue);
-              },
-            ),
-            const SizedBox(height: 8),
-            const SizedBox(height: 8),
-            if (widget.person.firstSeen != null)
-              Text("First Seen: ${widget.person.firstSeen!.toLocal()}"),
-            if (widget.person.lastSeen != null)
-              Text("Last Seen: ${widget.person.lastSeen!.toLocal()}"),
-            if (widget.person.lastSeenProvider != null)
-              Text("Provider: ${widget.person.lastSeenProvider!}"),
-            const SizedBox(height: 20),
-            Text("Captured Thumbnails:",
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            // Display captured thumbnails here if needed
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- Provider Card (used in Active Providers) ---
-class ProviderCard extends StatelessWidget {
-  final String address;
-  final dynamic frame;
-  final String status; // Added status
-
-  const ProviderCard(
-      {required this.address,
-      required this.frame,
-      required this.status,
-      Key? key})
-      : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        onTap: () {
-          // Handle card tap (show more details, etc.)
-        },
-        onHover: (isHovering) {},
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text("Provider: $address",
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  _buildStatusIndicator(status),
-                ],
-              ),
-            ),
-            Expanded(
-              child: frame != null
-                  ? Image.memory(
-                      frame,
-                      gaplessPlayback: true,
-                      fit: BoxFit.cover,
-                    )
-                  : Shimmer.fromColors(
-                      baseColor: Colors.grey[300]!,
-                      highlightColor: Colors.grey[100]!,
-                      child: Container(
-                        color: Colors.white,
-                      ),
-                    ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Status: $status"),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusIndicator(String status) {
-    Color indicatorColor;
-    IconData indicatorIcon;
-
-    switch (status.toLowerCase()) {
-      case "online":
-        indicatorColor = Colors.green;
-        indicatorIcon = Icons.check_circle;
-        break;
-      case "offline":
-        indicatorColor = Colors.red;
-        indicatorIcon = Icons.error;
-        break;
-      default:
-        indicatorColor = Colors.grey;
-        indicatorIcon = Icons.help;
-    }
-
-    return Icon(indicatorIcon, color: indicatorColor);
-  }
-}
-
-// --- Recognized Person List Tile (used in Recognized People) ---
-class RecognizedPersonListTile extends StatefulWidget {
-  // Changed to StatefulWidget for editable name in ListTile
-  final TrackedFace trackedFace;
-  final VoidCallback onTap;
-
-  const RecognizedPersonListTile(
-      {Key? key, required this.trackedFace, required this.onTap})
-      : super(key: key);
-
-  @override
-  State<RecognizedPersonListTile> createState() =>
-      _RecognizedPersonListTileState();
-}
-
-class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
-  late TextEditingController _nameController;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.trackedFace.name);
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: ListTile(
-        leading: widget.trackedFace.thumbnail != null
-            ? ClipOval(
-                child: Image.memory(widget.trackedFace.thumbnail!,
-                    width: 50, height: 50, fit: BoxFit.cover))
-            : const Icon(Icons.person),
-        title: TextField(
-          // Replaced Text with TextField for inline edit
-          controller: _nameController,
-          decoration: const InputDecoration(
-            border: InputBorder.none, // Remove TextField border
-            isDense: true, // Reduce padding
-          ),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-          onChanged: (newValue) {
-            Provider.of<CameraManager>(context, listen: false)
-                .updateTrackedFaceName(widget.trackedFace.id, newValue);
-          },
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.trackedFace.firstSeen != null)
-              Text("First Seen: ${widget.trackedFace.firstSeen!.toLocal()}",
-                  style: const TextStyle(fontSize: 12)),
-            if (widget.trackedFace.lastSeen != null)
-              Text("Last Seen: ${widget.trackedFace.lastSeen!.toLocal()}",
-                  style: const TextStyle(fontSize: 12)),
-            if (widget.trackedFace.lastSeenProvider != null)
-              Text("Provider: ${widget.trackedFace.lastSeenProvider!}",
-                  style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        onTap: widget.onTap,
-        trailing: const Icon(Icons.chevron_right),
-      ),
     );
   }
 }
