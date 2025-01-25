@@ -4,6 +4,7 @@ import 'package:automated_attendance/widgets/provider_card.dart';
 import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DataCenterView extends StatefulWidget {
   const DataCenterView({super.key});
@@ -15,7 +16,114 @@ class DataCenterView extends StatefulWidget {
 class _DataCenterViewState extends State<DataCenterView> {
   // Removed SingleTickerProviderStateMixin
   int _selectedIndex = 0; // Track selected index for NavigationRail
-  TrackedFace? _selectedPersonDetails; // For details panel
+
+  // Settings variables
+  int? _currentFps;
+  int? _currentMaxFaces;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  // Load settings from SharedPreferences
+  Future<void> _loadSettings() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _currentFps = prefs.getInt('fps') ?? 10;
+      _currentMaxFaces = prefs.getInt('maxFaces') ?? 10;
+    });
+  }
+
+  // Function to show the settings dialog
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: const Text("Settings"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // FPS Slider
+                  Row(
+                    children: [
+                      const Text("FPS:"),
+                      Expanded(
+                        child: Slider(
+                          min: 1,
+                          max: 100,
+                          divisions: 99,
+                          value: _currentFps?.toDouble() ?? 10,
+                          label: _currentFps?.toString() ?? "10",
+                          onChanged: (value) {
+                            setState(() {
+                              _currentFps = value.round();
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    "Frames Per Second: $_currentFps",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Max Faces Slider
+                  Row(
+                    children: [
+                      const Text("Max Faces:"),
+                      Expanded(
+                        child: Slider(
+                          min: 1,
+                          max: 100,
+                          divisions: 99,
+                          value: _currentMaxFaces?.toDouble() ?? 10,
+                          label: _currentMaxFaces?.toString() ?? "10",
+                          onChanged: (value) {
+                            setState(() {
+                              _currentMaxFaces = value.round();
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    "Max Faces in Memory: $_currentMaxFaces",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close the dialog
+                  },
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    // Apply and save settings
+                    await Provider.of<CameraManager>(context, listen: false)
+                        .updateSettings(_currentFps!, _currentMaxFaces!);
+                    if (!mounted) return;
+                    Navigator.of(context).pop(); // Close the dialog
+                  },
+                  child: const Text("Apply"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +142,6 @@ class _DataCenterViewState extends State<DataCenterView> {
               onDestinationSelected: (index) {
                 setState(() {
                   _selectedIndex = index;
-                  _selectedPersonDetails =
-                      null; // Clear details panel on tab switch
                 });
               },
               labelType: NavigationRailLabelType.all, // Show all labels
@@ -69,7 +175,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                         icon: const Icon(Icons.settings_outlined),
                         tooltip: 'Settings',
                         onPressed: () {
-                          // Handle settings action
+                          _showSettingsDialog(context); // Show settings dialog
                         },
                       ),
                     ),
@@ -88,7 +194,6 @@ class _DataCenterViewState extends State<DataCenterView> {
               ),
             ),
             const SizedBox(width: 20),
-
             // RIGHT SIDE: MAIN CONTENT AREA - Now directly using IndexedStack
             Expanded(
               child: Row(
@@ -101,17 +206,10 @@ class _DataCenterViewState extends State<DataCenterView> {
                       children: [
                         // Tab 1: Active Providers
                         ActiveProvidersGrid(),
-
                         // Tab 2: Captured Faces
                         CapturedFacesGrid(),
-
                         // Tab 3: Recognized People
-                        RecognizedPeopleList(onPersonSelected: (person) {
-                          setState(() {
-                            _selectedPersonDetails =
-                                person; // Update details panel
-                          });
-                        }),
+                        RecognizedPeopleList(onPersonSelected: null),
                       ],
                     ),
                   ),
@@ -225,7 +323,7 @@ class CapturedFacesGrid extends StatelessWidget {
 
 // --- Recognized People Tab ---
 class RecognizedPeopleList extends StatelessWidget {
-  final Function(TrackedFace) onPersonSelected; // Callback for selection
+  final Function(TrackedFace)? onPersonSelected; // Callback for selection
 
   const RecognizedPeopleList({super.key, required this.onPersonSelected});
 
@@ -255,7 +353,9 @@ class RecognizedPeopleList extends StatelessWidget {
 
             return RecognizedPersonListTile(
               trackedFace: trackedFace,
-              onTap: () => onPersonSelected(trackedFace),
+              onTap: onPersonSelected == null
+                  ? null
+                  : () => onPersonSelected!(trackedFace),
             );
           },
         );

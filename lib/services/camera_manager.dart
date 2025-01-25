@@ -9,8 +9,9 @@ import 'package:automated_attendance/services/face_features_extraction_service.d
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart';
-// lib/models/tracked_face.dart
+import 'package:shared_preferences/shared_preferences.dart';
 
+// lib/models/tracked_face.dart
 class TrackedFace {
   final String id;
   final List<double> features;
@@ -60,6 +61,33 @@ class CameraManager extends ChangeNotifier {
 
   bool _isListening = false;
 
+  // Settings variables
+  late SharedPreferences _prefs;
+  late int _fps;
+  late int _maxFaces;
+
+  CameraManager() {
+    _loadSettings();
+  }
+
+  // Load settings from SharedPreferences
+  Future<void> _loadSettings() async {
+    _prefs = await SharedPreferences.getInstance();
+    _fps = _prefs.getInt('fps') ?? 10; // Default FPS
+    _maxFaces = _prefs.getInt('maxFaces') ?? 10; // Default max faces
+    notifyListeners();
+  }
+
+  // Update settings and restart frame polling
+  Future<void> updateSettings(int fps, int maxFaces) async {
+    await _prefs.setInt('fps', fps);
+    await _prefs.setInt('maxFaces', maxFaces);
+    _fps = fps;
+    _maxFaces = maxFaces;
+    _restartFramePolling();
+    notifyListeners();
+  }
+
   Future<void> startListening() async {
     if (_isListening) return;
     _isListening = true;
@@ -73,13 +101,11 @@ class CameraManager extends ChangeNotifier {
     _isListening = false;
 
     await _discoveryService.stopDiscovery();
-
     // Cancel all provider timers
     for (var timer in _pollTimers.values) {
       timer.cancel();
     }
     _pollTimers.clear();
-
     // Close all active providers
     for (var provider in activeProviders.values) {
       await provider.closeCamera();
@@ -104,11 +130,15 @@ class CameraManager extends ChangeNotifier {
     if (!opened) return;
 
     activeProviders[address] = provider;
+    _startPollingForProvider(provider, address);
+    notifyListeners();
+  }
 
-    // Start a periodic timer for polling frames
-    const int fps = 10;
-    final pollInterval = Duration(milliseconds: (1000 / fps).round());
-    // print("Starting polling for $address at $fps FPS");
+  void _startPollingForProvider(ICameraProvider provider, String address) {
+    // Cancel any existing timer for this provider
+    _pollTimers[address]?.cancel();
+
+    final pollInterval = Duration(milliseconds: (1000 / _fps).round());
     _pollTimers[address] = Timer.periodic(pollInterval, (timer) {
       // If the provider is removed or manager is not listening, cancel the timer.
       if (!_isListening || !activeProviders.containsKey(address)) {
@@ -118,14 +148,21 @@ class CameraManager extends ChangeNotifier {
       }
       _pollFramesOnce(provider, address);
     });
+  }
 
-    notifyListeners();
+  // Restarts the frame polling with updated FPS value
+  void _restartFramePolling() {
+    for (final address in activeProviders.keys) {
+      final provider = activeProviders[address];
+      if (provider != null) {
+        _startPollingForProvider(provider, address);
+      }
+    }
   }
 
   Future<void> _onServiceRemoved(ServiceInfo serviceInfo) async {
     final address = serviceInfo.address;
     if (address == null) return;
-
     // Cancel the timer for this provider
     _pollTimers[address]?.cancel();
     _pollTimers.remove(address);
@@ -164,7 +201,6 @@ class CameraManager extends ChangeNotifier {
                 processedFrame.faces,
                 i,
               );
-
               // Compare extracted features with tracked faces
               _compareWithTrackedFaces(
                 features[i],
@@ -175,7 +211,7 @@ class CameraManager extends ChangeNotifier {
               /// Store the face thumbnail in the list.
               if (faceThumbnail != null) {
                 capturedFaces.insert(0, faceThumbnail);
-                if (capturedFaces.length > 10) {
+                if (capturedFaces.length > _maxFaces) {
                   capturedFaces.removeLast();
                 }
               }
@@ -250,7 +286,6 @@ class CameraManager extends ChangeNotifier {
     final y = faces.at<double>(faceIndex, 1).toInt();
     final w = faces.at<double>(faceIndex, 2).toInt();
     final h = faces.at<double>(faceIndex, 3).toInt();
-
     // Make sure bounding box is within image boundaries
     final safeW = (x + w) > image.width ? image.width - x : w;
     final safeH = (y + h) > image.height ? image.height - y : h;
@@ -261,7 +296,6 @@ class CameraManager extends ChangeNotifier {
 
     final faceRect = Rect(x, y, safeW, safeH);
     final faceMat = await image.regionAsync(faceRect);
-
     // Encode the cropped face to JPEG
     final (encSuccess, faceBytes) = await imencodeAsync(".jpg", faceMat);
     faceMat.dispose();
@@ -274,6 +308,7 @@ class CameraManager extends ChangeNotifier {
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
+
   void updateTrackedFaceName(String faceId, String newName) {
     if (trackedFaces.containsKey(faceId)) {
       trackedFaces[faceId]!.setName(newName);

@@ -8,7 +8,7 @@ class RecognizedPersonListTile extends StatefulWidget {
   // Changed to StatefulWidget for editable name in ListTile
   final TrackedFace trackedFace;
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const RecognizedPersonListTile(
       {super.key, required this.trackedFace, required this.onTap});
