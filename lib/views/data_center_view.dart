@@ -1,5 +1,4 @@
 // data_center_view.dart
-
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -72,26 +71,76 @@ class DataCenterView extends StatelessWidget {
 
           // 2) A list of all captured faces
           Expanded(
+              flex: 1,
+              child: Consumer<CameraManager>(
+                builder: (context, manager, child) {
+                  final faces = manager.capturedFaces;
+                  if (faces.isEmpty) {
+                    return const Center(child: Text("No faces captured yet."));
+                  }
+
+                  return ListView.builder(
+                    scrollDirection: Axis.horizontal, // or vertical
+                    itemCount: faces.length,
+                    itemBuilder: (context, index) {
+                      final faceBytes = faces[index];
+                      return Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Image.memory(
+                          faceBytes,
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      );
+                    },
+                  );
+                },
+              )),
+
+          const Divider(height: 1),
+
+          // 3) NEW: List of recognized people
+          Expanded(
             flex: 1,
             child: Consumer<CameraManager>(
               builder: (context, manager, child) {
-                final faces = manager.capturedFaces;
-                if (faces.isEmpty) {
-                  return const Center(child: Text("No faces captured yet."));
+                final trackedFaces = manager.trackedFaces;
+
+                if (trackedFaces.isEmpty) {
+                  return const Center(child: Text("No tracked faces added."));
+                }
+
+                final recognizedPeople = trackedFaces.entries
+                    .where((entry) => entry.value['firstSeen'] != null)
+                    .toList();
+
+                if (recognizedPeople.isEmpty) {
+                  return const Center(child: Text("No people recognized yet."));
                 }
 
                 return ListView.builder(
-                  scrollDirection: Axis.horizontal, // or vertical
-                  itemCount: faces.length,
+                  itemCount: recognizedPeople.length,
                   itemBuilder: (context, index) {
-                    final faceBytes = faces[index];
-                    return Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Image.memory(
-                        faceBytes,
-                        width: 100,
-                        height: 100,
-                        fit: BoxFit.cover,
+                    final person = recognizedPeople[index];
+                    final personId = person.key;
+                    final personInfo = person.value;
+                    final name = personInfo['name'] as String;
+                    final firstSeen = personInfo['firstSeen'] as DateTime?;
+                    final lastSeen = personInfo['lastSeen'] as DateTime?;
+                    final provider = personInfo['lastSeenProvider'] as String?;
+
+                    return ListTile(
+                      title: Text(name),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (firstSeen != null)
+                            Text("First Seen: ${firstSeen.toLocal()}"),
+                          if (lastSeen != null)
+                            Text("Last Seen: ${lastSeen.toLocal()}"),
+                          if (provider != null) Text("Provider: $provider"),
+                        ],
                       ),
                     );
                   },

@@ -1,10 +1,11 @@
 // camera_manager.dart
-
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,7 @@ import 'package:opencv_dart/opencv_dart.dart';
 
 class CameraManager extends ChangeNotifier {
   final DiscoveryService _discoveryService = DiscoveryService();
+  final FaceComparisonService _faceComparisonService = FaceComparisonService();
 
   final Map<String, ICameraProvider> activeProviders = {};
   final Map<String, Uint8List> _lastFrames = {};
@@ -22,11 +24,15 @@ class CameraManager extends ChangeNotifier {
   // Stream controller for face embeddings
   final StreamController<List<double>> _faceFeaturesStreamController =
       StreamController.broadcast();
+
   Stream<List<double>> get faceFeaturesStream =>
       _faceFeaturesStreamController.stream;
 
   /// NEW: A list to store all cropped face thumbnails.
   final List<Uint8List> capturedFaces = [];
+
+  /// Map to store features of tracked faces and their information.
+  final Map<String, Map<String, dynamic>> trackedFaces = {};
 
   bool _isListening = false;
 
@@ -129,17 +135,60 @@ class CameraManager extends ChangeNotifier {
           if (features.isNotEmpty) {
             for (var feature in features) {
               _faceFeaturesStreamController.add(feature);
+
+              // NEW: Compare extracted features with tracked faces
+              _compareWithTrackedFaces(feature, address);
             }
           }
 
           // 3) Crop out each detected face as a thumbnail
           _cropFacesAndStore(
-              processedFrame.processedFrameMat, processedFrame.faces);
+            processedFrame.processedFrameMat,
+            processedFrame.faces,
+          );
         }
       }
       notifyListeners();
     } catch (e) {
       debugPrint("Error polling frames for $address: $e");
+    }
+  }
+
+  void _compareWithTrackedFaces(List<double> features, String providerAddress) {
+    bool isKnownFace = false;
+
+    for (final entry in trackedFaces.entries) {
+      final trackedId = entry.key;
+      final trackedInfo = entry.value;
+      final trackedFeatures = trackedInfo['features'] as List<double>;
+
+      final isSimilar = _faceComparisonService.areFeaturesSimilar(
+        features,
+        trackedFeatures,
+      );
+
+      if (isSimilar) {
+        trackedFaces[trackedId]!['firstSeen'] ??= DateTime.now();
+        trackedFaces[trackedId]!['lastSeen'] = DateTime.now();
+        trackedFaces[trackedId]!['lastSeenProvider'] = providerAddress;
+        isKnownFace = true;
+        notifyListeners(); // Notify after updating
+        break; // Face found, no need to check further
+      }
+    }
+
+    // If the face is not similar to any tracked face, add it as a new tracked face
+    if (!isKnownFace) {
+      final newFaceId =
+          "face_${trackedFaces.length + 1}"; // Generate a unique ID
+      trackedFaces[newFaceId] = {
+        'features': features,
+        'name': newFaceId, // You can use the ID as the name initially
+        'firstSeen': DateTime.now(),
+        'lastSeen': DateTime.now(),
+        'lastSeenProvider': providerAddress,
+      };
+      notifyListeners(); // Notify after adding a new face
     }
   }
 
