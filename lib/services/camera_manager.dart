@@ -14,11 +14,11 @@ import 'package:opencv_dart/opencv_dart.dart';
 class TrackedFace {
   final String id;
   final List<double> features;
-  final String name;
+  String name; // Name is now mutable
   DateTime? firstSeen;
   DateTime? lastSeen;
   String? lastSeenProvider;
-  Uint8List? thumbnail; // Now directly in the class
+  Uint8List? thumbnail;
 
   TrackedFace({
     required this.id,
@@ -29,6 +29,10 @@ class TrackedFace {
     this.lastSeenProvider,
     this.thumbnail,
   });
+
+  void setName(String newName) {
+    name = newName;
+  }
 }
 
 class CameraManager extends ChangeNotifier {
@@ -270,6 +274,12 @@ class CameraManager extends ChangeNotifier {
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
+  void updateTrackedFaceName(String faceId, String newName) {
+    if (trackedFaces.containsKey(faceId)) {
+      trackedFaces[faceId]!.setName(newName);
+      notifyListeners();
+    }
+  }
 
   @override
   void dispose() {

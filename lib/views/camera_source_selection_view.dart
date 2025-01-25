@@ -16,77 +16,118 @@ class _CameraSourceSelectionViewState extends State<CameraSourceSelectionView> {
         title: const Text("Select Mode"),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            // Intro / instructions
-            Text(
-              "Choose how you'd like to run the application.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
+      body: Center(
+        // Center the content on the screen
+        child: Container(
+          // Limit width for larger screens
+          constraints:
+              const BoxConstraints(maxWidth: 600), // Adjust max width as needed
+          padding:
+              const EdgeInsets.all(40.0), // Increased padding around content
+          child: Column(
+            mainAxisAlignment:
+                MainAxisAlignment.center, // Center content vertically
+            crossAxisAlignment:
+                CrossAxisAlignment.stretch, // Stretch buttons horizontally
+            children: [
+              // Intro / instructions - More prominent title
+              Text(
+                "Welcome!",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 24), // Increased spacing
+              Text(
+                "Choose how you'd like to run the application.",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+              const SizedBox(height: 12), // Increased spacing
+              Text(
+                "You can either broadcast your camera as a Provider, making it discoverable on the network, or start as a Data Center to discover and view cameras from other Providers.",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      // bodyLarge for better readability
+                      color: Colors.grey[700],
+                    ),
+              ),
+              const SizedBox(height: 48), // Even more spacing before buttons
+
+              // Button: Camera Provider - No more Card
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/requestLogsPage');
+                },
+                icon: const Icon(Icons.videocam,
+                    size: 28, color: Colors.white), // Larger icon
+                label: const Text("Start as Camera Provider",
+                    style: TextStyle(fontSize: 18)), // Larger text
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  backgroundColor:
+                      Theme.of(context).primaryColor, // Use primary color
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24, // Increased horizontal padding
+                    vertical: 16, // Increased vertical padding
                   ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "You can either broadcast your camera (Provider) or discover and view other cameras (Data Center).",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[700],
+                  textStyle: const TextStyle(fontSize: 18),
+                  elevation: 4, // Still keep a bit of elevation for visual lift
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(12), // Keep rounded corners
                   ),
-            ),
-            const Spacer(),
-
-            // Button: Camera Provider
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, '/requestLogsPage');
-              },
-              icon: const Icon(Icons.camera_alt_outlined),
-              label: const Text("Start as Camera Provider"),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                textStyle: const TextStyle(fontSize: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 24), // Spacing between buttons
 
-            // Button: Data Center
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, '/dataCenter');
-              },
-              icon: const Icon(Icons.cloud_outlined),
-              label: const Text("Start as Data Center"),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                textStyle: const TextStyle(fontSize: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+              // Button: Data Center - No more Card
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/dataCenter');
+                },
+                icon: const Icon(
+                  Icons.cloud,
+                  size: 28,
+                  color: Colors.white,
+                ), // Larger icon
+                label: const Text("Start as Data Center",
+                    style: TextStyle(fontSize: 18)), // Larger text
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  backgroundColor:
+                      Theme.of(context).primaryColor, // Use primary color
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24, // Increased horizontal padding
+                    vertical: 16, // Increased vertical padding
+                  ),
+                  textStyle: const TextStyle(fontSize: 18),
+                  elevation: 4, // Still keep a bit of elevation for visual lift
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(12), // Keep rounded corners
+                  ),
                 ),
               ),
-            ),
 
-            const Spacer(),
-            // Optional branding or version info at bottom
-            Text(
-              "v1.0.0",
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 12,
+              const Spacer(),
+              // Optional branding or version info at bottom - Slightly larger and more visible
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  "Version 1.0.0",
+                  style: TextStyle(
+                    color:
+                        Colors.grey[600], // Darker grey for better visibility
+                    fontSize: 14, // Slightly larger font size
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
