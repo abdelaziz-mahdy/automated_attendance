@@ -72,6 +72,9 @@ class _RequestLogsPageState extends State<RequestLogsPage> {
             _frameResponseTimes.add(responseTime);
             _averageResponseTime = _frameResponseTimes.reduce((a, b) => a + b) /
                 _frameResponseTimes.length;
+            _maxFramesPossible =
+                ((1000 / (_averageResponseTime > 0 ? _averageResponseTime : 1)))
+                    .toInt(); // Avoid division by zero
           });
         }
       }
