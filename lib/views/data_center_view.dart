@@ -1,4 +1,5 @@
-// data_center_view.dart
+// lib/views/data_center_view.dart
+
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -71,36 +72,37 @@ class DataCenterView extends StatelessWidget {
 
           // 2) A list of all captured faces
           Expanded(
-              flex: 1,
-              child: Consumer<CameraManager>(
-                builder: (context, manager, child) {
-                  final faces = manager.capturedFaces;
-                  if (faces.isEmpty) {
-                    return const Center(child: Text("No faces captured yet."));
-                  }
+            flex: 1,
+            child: Consumer<CameraManager>(
+              builder: (context, manager, child) {
+                final faces = manager.capturedFaces;
+                if (faces.isEmpty) {
+                  return const Center(child: Text("No faces captured yet."));
+                }
 
-                  return ListView.builder(
-                    scrollDirection: Axis.horizontal, // or vertical
-                    itemCount: faces.length,
-                    itemBuilder: (context, index) {
-                      final faceBytes = faces[index];
-                      return Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Image.memory(
-                          faceBytes,
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                        ),
-                      );
-                    },
-                  );
-                },
-              )),
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal, // or vertical
+                  itemCount: faces.length,
+                  itemBuilder: (context, index) {
+                    final faceBytes = faces[index];
+                    return Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Image.memory(
+                        faceBytes,
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
 
           const Divider(height: 1),
 
-          // 3) NEW: List of recognized people
+          // 3) List of recognized people
           Expanded(
             flex: 1,
             child: Consumer<CameraManager>(
@@ -112,7 +114,7 @@ class DataCenterView extends StatelessWidget {
                 }
 
                 final recognizedPeople = trackedFaces.entries
-                    .where((entry) => entry.value['firstSeen'] != null)
+                    .where((entry) => entry.value.firstSeen != null)
                     .toList();
 
                 if (recognizedPeople.isEmpty) {
@@ -122,24 +124,27 @@ class DataCenterView extends StatelessWidget {
                 return ListView.builder(
                   itemCount: recognizedPeople.length,
                   itemBuilder: (context, index) {
-                    final person = recognizedPeople[index];
-                    final personId = person.key;
-                    final personInfo = person.value;
-                    final name = personInfo['name'] as String;
-                    final firstSeen = personInfo['firstSeen'] as DateTime?;
-                    final lastSeen = personInfo['lastSeen'] as DateTime?;
-                    final provider = personInfo['lastSeenProvider'] as String?;
+                    final personEntry = recognizedPeople[index];
+                    final personId = personEntry.key;
+                    final trackedFace =
+                        personEntry.value; // Now a TrackedFace object
 
                     return ListTile(
-                      title: Text(name),
+                      leading: trackedFace.thumbnail != null
+                          ? Image.memory(trackedFace.thumbnail!)
+                          : const Icon(Icons.person),
+                      title: Text(trackedFace.name),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (firstSeen != null)
-                            Text("First Seen: ${firstSeen.toLocal()}"),
-                          if (lastSeen != null)
-                            Text("Last Seen: ${lastSeen.toLocal()}"),
-                          if (provider != null) Text("Provider: $provider"),
+                          if (trackedFace.firstSeen != null)
+                            Text(
+                                "First Seen: ${trackedFace.firstSeen!.toLocal()}"),
+                          if (trackedFace.lastSeen != null)
+                            Text(
+                                "Last Seen: ${trackedFace.lastSeen!.toLocal()}"),
+                          if (trackedFace.lastSeenProvider != null)
+                            Text("Provider: ${trackedFace.lastSeenProvider!}"),
                         ],
                       ),
                     );

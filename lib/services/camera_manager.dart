@@ -1,6 +1,5 @@
 // camera_manager.dart
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
@@ -10,6 +9,27 @@ import 'package:automated_attendance/services/face_features_extraction_service.d
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart';
+// lib/models/tracked_face.dart
+
+class TrackedFace {
+  final String id;
+  final List<double> features;
+  final String name;
+  DateTime? firstSeen;
+  DateTime? lastSeen;
+  String? lastSeenProvider;
+  Uint8List? thumbnail; // Now directly in the class
+
+  TrackedFace({
+    required this.id,
+    required this.features,
+    required this.name,
+    this.firstSeen,
+    this.lastSeen,
+    this.lastSeenProvider,
+    this.thumbnail,
+  });
+}
 
 class CameraManager extends ChangeNotifier {
   final DiscoveryService _discoveryService = DiscoveryService();
@@ -32,7 +52,7 @@ class CameraManager extends ChangeNotifier {
   final List<Uint8List> capturedFaces = [];
 
   /// Map to store features of tracked faces and their information.
-  final Map<String, Map<String, dynamic>> trackedFaces = {};
+  final Map<String, TrackedFace> trackedFaces = {};
 
   bool _isListening = false;
 
@@ -133,16 +153,24 @@ class CameraManager extends ChangeNotifier {
             processedFrame.faces,
           );
           if (features.isNotEmpty) {
-            for (var feature in features) {
-              _faceFeaturesStreamController.add(feature);
+            for (int i = 0; i < features.length; i++) {
+              _faceFeaturesStreamController.add(features[i]);
 
               // NEW: Compare extracted features with tracked faces
-              _compareWithTrackedFaces(feature, address);
+              _compareWithTrackedFaces(
+                features[i],
+                address,
+                await _cropSingleFace(
+                  processedFrame.processedFrameMat,
+                  processedFrame.faces,
+                  i,
+                ),
+              );
             }
           }
 
           // 3) Crop out each detected face as a thumbnail
-          _cropFacesAndStore(
+          _cropAndStoreAllFaces(
             processedFrame.processedFrameMat,
             processedFrame.faces,
           );
@@ -154,13 +182,15 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
-  void _compareWithTrackedFaces(List<double> features, String providerAddress) {
+  /// Compares extracted face features with tracked faces.
+  void _compareWithTrackedFaces(
+      List<double> features, String providerAddress, Uint8List? faceThumbnail) {
     bool isKnownFace = false;
 
     for (final entry in trackedFaces.entries) {
       final trackedId = entry.key;
-      final trackedInfo = entry.value;
-      final trackedFeatures = trackedInfo['features'] as List<double>;
+      final trackedFace = entry.value; // Now a TrackedFace object
+      final trackedFeatures = trackedFace.features;
 
       final isSimilar = _faceComparisonService.areFeaturesSimilar(
         features,
@@ -168,27 +198,29 @@ class CameraManager extends ChangeNotifier {
       );
 
       if (isSimilar) {
-        trackedFaces[trackedId]!['firstSeen'] ??= DateTime.now();
-        trackedFaces[trackedId]!['lastSeen'] = DateTime.now();
-        trackedFaces[trackedId]!['lastSeenProvider'] = providerAddress;
+        trackedFace.firstSeen ??= DateTime.now();
+        trackedFace.lastSeen = DateTime.now();
+        trackedFace.lastSeenProvider = providerAddress;
         isKnownFace = true;
-        notifyListeners(); // Notify after updating
-        break; // Face found, no need to check further
+        notifyListeners();
+        break;
       }
     }
 
-    // If the face is not similar to any tracked face, add it as a new tracked face
     if (!isKnownFace) {
-      final newFaceId =
-          "face_${trackedFaces.length + 1}"; // Generate a unique ID
-      trackedFaces[newFaceId] = {
-        'features': features,
-        'name': newFaceId, // You can use the ID as the name initially
-        'firstSeen': DateTime.now(),
-        'lastSeen': DateTime.now(),
-        'lastSeenProvider': providerAddress,
-      };
-      notifyListeners(); // Notify after adding a new face
+      final newFaceId = "face_${trackedFaces.length + 1}";
+      final newTrackedFace = TrackedFace(
+        id: newFaceId,
+        features: features,
+        name: newFaceId, // Default name is the ID
+        firstSeen: DateTime.now(),
+        lastSeen: DateTime.now(),
+        lastSeenProvider: providerAddress,
+        thumbnail: faceThumbnail, // Store thumbnail directly
+      );
+
+      trackedFaces[newFaceId] = newTrackedFace;
+      notifyListeners();
     }
   }
 
@@ -198,37 +230,56 @@ class CameraManager extends ChangeNotifier {
         .extractFaceFeatures(frameBytes, faces);
   }
 
-  /// NEW: Takes the processed frame and the faces Mat, then crops each face
+  /// Takes an image (Mat) and a list of detected faces (Mat), then crops
+  /// a single face and encodes it as a JPEG.
+  /// Returns the JPEG bytes (Uint8List) of the cropped face or null if cropping fails.
+  Future<Uint8List?> _cropSingleFace(
+      Mat image, Mat faces, int faceIndex) async {
+    if (faceIndex < 0 || faceIndex >= faces.rows) {
+      return null; // Invalid face index
+    }
+
+    final x = faces.at<double>(faceIndex, 0).toInt();
+    final y = faces.at<double>(faceIndex, 1).toInt();
+    final w = faces.at<double>(faceIndex, 2).toInt();
+    final h = faces.at<double>(faceIndex, 3).toInt();
+
+    // Make sure bounding box is within image boundaries
+    final safeW = (x + w) > image.width ? image.width - x : w;
+    final safeH = (y + h) > image.height ? image.height - y : h;
+
+    if (safeW <= 0 || safeH <= 0) {
+      return null; // Invalid dimensions
+    }
+
+    final faceRect = Rect(x, y, safeW, safeH);
+    final faceMat = await image.regionAsync(faceRect);
+
+    // Encode the cropped face to JPEG
+    final (encSuccess, faceBytes) = await imencodeAsync(".jpg", faceMat);
+    faceMat.dispose();
+
+    if (encSuccess) {
+      return faceBytes;
+    } else {
+      return null;
+    }
+  }
+
+  /// Takes the processed frame and the faces Mat, then crops each face
   /// and encodes it as a JPEG. Stores in [capturedFaces].
-  Future<void> _cropFacesAndStore(Mat annotatedFrame, Mat faces) async {
+  Future<void> _cropAndStoreAllFaces(Mat annotatedFrame, Mat faces) async {
     for (int i = 0; i < faces.rows; i++) {
-      final x = faces.at<double>(i, 0).toInt();
-      final y = faces.at<double>(i, 1).toInt();
-      final w = faces.at<double>(i, 2).toInt();
-      final h = faces.at<double>(i, 3).toInt();
+      final faceBytes = await _cropSingleFace(annotatedFrame, faces, i);
 
-      // Make sure bounding box is within image boundaries
-      final safeW =
-          (x + w) > annotatedFrame.width ? annotatedFrame.width - x : w;
-      final safeH =
-          (y + h) > annotatedFrame.height ? annotatedFrame.height - y : h;
-
-      if (safeW <= 0 || safeH <= 0) {
-        continue;
-      }
-
-      final faceRect = Rect(x, y, safeW, safeH);
-      final faceMat = await annotatedFrame.regionAsync(faceRect);
-
-      // Encode the cropped face to JPEG
-      final (encSuccess, faceBytes) = imencode(".jpg", faceMat);
-      faceMat.dispose();
-
-      if (encSuccess) {
+      if (faceBytes != null) {
         capturedFaces.insert(0, faceBytes);
+        if (capturedFaces.length > 10) {
+          capturedFaces.removeLast();
+        }
       }
     }
-    notifyListeners();
+    notifyListeners(); // Notify after processing all faces
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
