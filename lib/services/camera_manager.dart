@@ -1,17 +1,44 @@
 // camera_manager.dart
-
 import 'dart:async';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+// lib/models/tracked_face.dart
+class TrackedFace {
+  final String id;
+  final List<double> features;
+  String name; // Name is now mutable
+  DateTime? firstSeen;
+  DateTime? lastSeen;
+  String? lastSeenProvider;
+  Uint8List? thumbnail;
+
+  TrackedFace({
+    required this.id,
+    required this.features,
+    required this.name,
+    this.firstSeen,
+    this.lastSeen,
+    this.lastSeenProvider,
+    this.thumbnail,
+  });
+
+  void setName(String newName) {
+    name = newName;
+  }
+}
 
 class CameraManager extends ChangeNotifier {
   final DiscoveryService _discoveryService = DiscoveryService();
+  final FaceComparisonService _faceComparisonService = FaceComparisonService();
 
   final Map<String, ICameraProvider> activeProviders = {};
   final Map<String, Uint8List> _lastFrames = {};
@@ -22,13 +49,44 @@ class CameraManager extends ChangeNotifier {
   // Stream controller for face embeddings
   final StreamController<List<double>> _faceFeaturesStreamController =
       StreamController.broadcast();
+
   Stream<List<double>> get faceFeaturesStream =>
       _faceFeaturesStreamController.stream;
 
   /// NEW: A list to store all cropped face thumbnails.
   final List<Uint8List> capturedFaces = [];
 
+  /// Map to store features of tracked faces and their information.
+  final Map<String, TrackedFace> trackedFaces = {};
+
   bool _isListening = false;
+
+  // Settings variables
+  late SharedPreferences _prefs;
+  late int _fps;
+  late int _maxFaces;
+
+  CameraManager() {
+    _loadSettings();
+  }
+
+  // Load settings from SharedPreferences
+  Future<void> _loadSettings() async {
+    _prefs = await SharedPreferences.getInstance();
+    _fps = _prefs.getInt('fps') ?? 10; // Default FPS
+    _maxFaces = _prefs.getInt('maxFaces') ?? 10; // Default max faces
+    notifyListeners();
+  }
+
+  // Update settings and restart frame polling
+  Future<void> updateSettings(int fps, int maxFaces) async {
+    await _prefs.setInt('fps', fps);
+    await _prefs.setInt('maxFaces', maxFaces);
+    _fps = fps;
+    _maxFaces = maxFaces;
+    _restartFramePolling();
+    notifyListeners();
+  }
 
   Future<void> startListening() async {
     if (_isListening) return;
@@ -43,13 +101,11 @@ class CameraManager extends ChangeNotifier {
     _isListening = false;
 
     await _discoveryService.stopDiscovery();
-
     // Cancel all provider timers
     for (var timer in _pollTimers.values) {
       timer.cancel();
     }
     _pollTimers.clear();
-
     // Close all active providers
     for (var provider in activeProviders.values) {
       await provider.closeCamera();
@@ -74,11 +130,15 @@ class CameraManager extends ChangeNotifier {
     if (!opened) return;
 
     activeProviders[address] = provider;
+    _startPollingForProvider(provider, address);
+    notifyListeners();
+  }
 
-    // Start a periodic timer for polling frames
-    const int fps = 10;
-    final pollInterval = Duration(milliseconds: (1000 / fps).round());
-    // print("Starting polling for $address at $fps FPS");
+  void _startPollingForProvider(ICameraProvider provider, String address) {
+    // Cancel any existing timer for this provider
+    _pollTimers[address]?.cancel();
+
+    final pollInterval = Duration(milliseconds: (1000 / _fps).round());
     _pollTimers[address] = Timer.periodic(pollInterval, (timer) {
       // If the provider is removed or manager is not listening, cancel the timer.
       if (!_isListening || !activeProviders.containsKey(address)) {
@@ -88,14 +148,21 @@ class CameraManager extends ChangeNotifier {
       }
       _pollFramesOnce(provider, address);
     });
+  }
 
-    notifyListeners();
+  // Restarts the frame polling with updated FPS value
+  void _restartFramePolling() {
+    for (final address in activeProviders.keys) {
+      final provider = activeProviders[address];
+      if (provider != null) {
+        _startPollingForProvider(provider, address);
+      }
+    }
   }
 
   Future<void> _onServiceRemoved(ServiceInfo serviceInfo) async {
     final address = serviceInfo.address;
     if (address == null) return;
-
     // Cancel the timer for this provider
     _pollTimers[address]?.cancel();
     _pollTimers.remove(address);
@@ -127,19 +194,76 @@ class CameraManager extends ChangeNotifier {
             processedFrame.faces,
           );
           if (features.isNotEmpty) {
-            for (var feature in features) {
-              _faceFeaturesStreamController.add(feature);
+            for (int i = 0; i < features.length; i++) {
+              _faceFeaturesStreamController.add(features[i]);
+              Uint8List? faceThumbnail = await _cropSingleFace(
+                processedFrame.processedFrameMat,
+                processedFrame.faces,
+                i,
+              );
+              // Compare extracted features with tracked faces
+              _compareWithTrackedFaces(
+                features[i],
+                address,
+                faceThumbnail,
+              );
+
+              /// Store the face thumbnail in the list.
+              if (faceThumbnail != null) {
+                capturedFaces.insert(0, faceThumbnail);
+                if (capturedFaces.length > _maxFaces) {
+                  capturedFaces.removeLast();
+                }
+              }
             }
           }
-
-          // 3) Crop out each detected face as a thumbnail
-          _cropFacesAndStore(
-              processedFrame.processedFrameMat, processedFrame.faces);
         }
       }
       notifyListeners();
     } catch (e) {
       debugPrint("Error polling frames for $address: $e");
+    }
+  }
+
+  /// Compares extracted face features with tracked faces.
+  void _compareWithTrackedFaces(
+      List<double> features, String providerAddress, Uint8List? faceThumbnail) {
+    bool isKnownFace = false;
+
+    for (final entry in trackedFaces.entries) {
+      final trackedId = entry.key;
+      final trackedFace = entry.value; // Now a TrackedFace object
+      final trackedFeatures = trackedFace.features;
+
+      final isSimilar = _faceComparisonService.areFeaturesSimilar(
+        features,
+        trackedFeatures,
+      );
+
+      if (isSimilar) {
+        trackedFace.firstSeen ??= DateTime.now();
+        trackedFace.lastSeen = DateTime.now();
+        trackedFace.lastSeenProvider = providerAddress;
+        isKnownFace = true;
+        notifyListeners();
+        break;
+      }
+    }
+
+    if (!isKnownFace) {
+      final newFaceId = "face_${trackedFaces.length + 1}";
+      final newTrackedFace = TrackedFace(
+        id: newFaceId,
+        features: features,
+        name: newFaceId, // Default name is the ID
+        firstSeen: DateTime.now(),
+        lastSeen: DateTime.now(),
+        lastSeenProvider: providerAddress,
+        thumbnail: faceThumbnail, // Store thumbnail directly
+      );
+
+      trackedFaces[newFaceId] = newTrackedFace;
+      notifyListeners();
     }
   }
 
@@ -149,40 +273,48 @@ class CameraManager extends ChangeNotifier {
         .extractFaceFeatures(frameBytes, faces);
   }
 
-  /// NEW: Takes the processed frame and the faces Mat, then crops each face
-  /// and encodes it as a JPEG. Stores in [capturedFaces].
-  Future<void> _cropFacesAndStore(Mat annotatedFrame, Mat faces) async {
-    for (int i = 0; i < faces.rows; i++) {
-      final x = faces.at<double>(i, 0).toInt();
-      final y = faces.at<double>(i, 1).toInt();
-      final w = faces.at<double>(i, 2).toInt();
-      final h = faces.at<double>(i, 3).toInt();
-
-      // Make sure bounding box is within image boundaries
-      final safeW =
-          (x + w) > annotatedFrame.width ? annotatedFrame.width - x : w;
-      final safeH =
-          (y + h) > annotatedFrame.height ? annotatedFrame.height - y : h;
-
-      if (safeW <= 0 || safeH <= 0) {
-        continue;
-      }
-
-      final faceRect = Rect(x, y, safeW, safeH);
-      final faceMat = await annotatedFrame.regionAsync(faceRect);
-
-      // Encode the cropped face to JPEG
-      final (encSuccess, faceBytes) = imencode(".jpg", faceMat);
-      faceMat.dispose();
-
-      if (encSuccess) {
-        capturedFaces.insert(0, faceBytes);
-      }
+  /// Takes an image (Mat) and a list of detected faces (Mat), then crops
+  /// a single face and encodes it as a JPEG.
+  /// Returns the JPEG bytes (Uint8List) of the cropped face or null if cropping fails.
+  Future<Uint8List?> _cropSingleFace(
+      Mat image, Mat faces, int faceIndex) async {
+    if (faceIndex < 0 || faceIndex >= faces.rows) {
+      return null; // Invalid face index
     }
-    notifyListeners();
+
+    final x = faces.at<double>(faceIndex, 0).toInt();
+    final y = faces.at<double>(faceIndex, 1).toInt();
+    final w = faces.at<double>(faceIndex, 2).toInt();
+    final h = faces.at<double>(faceIndex, 3).toInt();
+    // Make sure bounding box is within image boundaries
+    final safeW = (x + w) > image.width ? image.width - x : w;
+    final safeH = (y + h) > image.height ? image.height - y : h;
+
+    if (safeW <= 0 || safeH <= 0) {
+      return null; // Invalid dimensions
+    }
+
+    final faceRect = Rect(x, y, safeW, safeH);
+    final faceMat = await image.regionAsync(faceRect);
+    // Encode the cropped face to JPEG
+    final (encSuccess, faceBytes) = await imencodeAsync(".jpg", faceMat);
+    faceMat.dispose();
+
+    if (encSuccess) {
+      return faceBytes;
+    } else {
+      return null;
+    }
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
+
+  void updateTrackedFaceName(String faceId, String newName) {
+    if (trackedFaces.containsKey(faceId)) {
+      trackedFaces[faceId]!.setName(newName);
+      notifyListeners();
+    }
+  }
 
   @override
   void dispose() {

@@ -19,7 +19,7 @@ class AndroidCameraProvider implements ICameraProvider {
   AndroidCameraProvider(this.cameraIndex);
 
   /// Request camera permission on Android; on iOS the camera plugin handles it for you,
-  /// but we’ll do this for completeness.
+  /// but well do this for completeness.
   Future<bool> _getPermission() async {
     if (Platform.isAndroid) {
       final status = await Permission.camera.request();
@@ -175,7 +175,7 @@ Future<Uint8List> convertCameraImageToMat({
   // You can now pass this Mat into your native functions if you want to do color
   // conversion or run inference in C++.
   final result = imencode(".jpg", mat);
-  final success = result.$1;
+  // final success = result.$1;
   final bytes = result.$2;
   return bytes;
 }
