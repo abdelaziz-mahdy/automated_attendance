@@ -1,7 +1,6 @@
 // lib/views/data_center_view.dart
 
 import 'package:automated_attendance/services/camera_manager.dart';
-import 'package:automated_attendance/views/data_center_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

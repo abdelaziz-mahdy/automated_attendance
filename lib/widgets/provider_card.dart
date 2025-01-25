@@ -12,8 +12,7 @@ class ProviderCard extends StatelessWidget {
       {required this.address,
       required this.frame,
       required this.status,
-      Key? key})
-      : super(key: key);
+      super.key});
 
   @override
   Widget build(BuildContext context) {

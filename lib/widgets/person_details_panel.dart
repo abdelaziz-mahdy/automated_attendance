@@ -1,7 +1,6 @@
 // lib/views/data_center_view.dart
 
 import 'package:automated_attendance/services/camera_manager.dart';
-import 'package:automated_attendance/views/data_center_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,7 +8,7 @@ class PersonDetailsPanel extends StatefulWidget {
   // Changed to StatefulWidget for editable name
   final TrackedFace person;
 
-  const PersonDetailsPanel({Key? key, required this.person}) : super(key: key);
+  const PersonDetailsPanel({super.key, required this.person});
 
   @override
   State<PersonDetailsPanel> createState() => _PersonDetailsPanelState();

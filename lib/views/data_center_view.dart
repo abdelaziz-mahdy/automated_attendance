@@ -1,11 +1,9 @@
 // lib/views/data_center_view.dart
 import 'package:automated_attendance/services/camera_manager.dart';
-import 'package:automated_attendance/widgets/person_details_panel.dart';
 import 'package:automated_attendance/widgets/provider_card.dart';
 import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 class DataCenterView extends StatefulWidget {
   const DataCenterView({super.key});
@@ -138,6 +136,8 @@ class _DataCenterViewState extends State<DataCenterView> {
 
 // --- Active Providers Tab ---
 class ActiveProvidersGrid extends StatelessWidget {
+  const ActiveProvidersGrid({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Consumer<CameraManager>(
@@ -174,6 +174,8 @@ class ActiveProvidersGrid extends StatelessWidget {
 
 // --- Captured Faces Tab ---
 class CapturedFacesGrid extends StatelessWidget {
+  const CapturedFacesGrid({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Consumer<CameraManager>(
@@ -225,8 +227,7 @@ class CapturedFacesGrid extends StatelessWidget {
 class RecognizedPeopleList extends StatelessWidget {
   final Function(TrackedFace) onPersonSelected; // Callback for selection
 
-  const RecognizedPeopleList({Key? key, required this.onPersonSelected})
-      : super(key: key);
+  const RecognizedPeopleList({super.key, required this.onPersonSelected});
 
   @override
   Widget build(BuildContext context) {
