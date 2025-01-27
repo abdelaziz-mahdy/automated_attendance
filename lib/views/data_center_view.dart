@@ -38,6 +38,9 @@ class _DataCenterViewState extends State<DataCenterView> {
 
   // Function to show the settings dialog
   void _showSettingsDialog(BuildContext context) {
+    final cameraManager =
+        Provider.of<CameraManager>(context, listen: false); // Get it here
+
     showDialog(
       context: context,
       builder: (context) {
@@ -110,8 +113,8 @@ class _DataCenterViewState extends State<DataCenterView> {
                 TextButton(
                   onPressed: () async {
                     // Apply and save settings
-                    await Provider.of<CameraManager>(context, listen: false)
-                        .updateSettings(_currentFps!, _currentMaxFaces!);
+                    await cameraManager.updateSettings(
+                        _currentFps!, _currentMaxFaces!);
                     if (!mounted) return;
                     Navigator.of(context).pop(); // Close the dialog
                   },
