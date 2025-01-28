@@ -111,9 +111,9 @@ class _DataCenterViewState extends State<DataCenterView> {
                   child: const Text("Cancel"),
                 ),
                 TextButton(
-                  onPressed: () async {
+                  onPressed: () {
                     // Apply and save settings
-                    await cameraManager.updateSettings(
+                    cameraManager.updateSettings(
                         _currentFps!, _currentMaxFaces!);
                     if (!mounted) return;
                     Navigator.of(context).pop(); // Close the dialog
