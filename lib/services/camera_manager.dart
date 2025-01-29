@@ -231,7 +231,7 @@ class CameraManager extends ChangeNotifier {
     bool isKnownFace = false;
 
     for (final entry in trackedFaces.entries) {
-      final trackedId = entry.key;
+      // final trackedId = entry.key;
       final trackedFace = entry.value; // Now a TrackedFace object
       final trackedFeatures = trackedFace.features;
 

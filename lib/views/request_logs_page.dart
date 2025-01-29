@@ -15,7 +15,7 @@ class _RequestLogsPageState extends State<RequestLogsPage> {
   int _totalFramesSent = 0;
   DateTime? _serverStartTime;
   DateTime? _serverEndTime;
-  List<int> _frameResponseTimes =
+  final List<int> _frameResponseTimes =
       []; // List to store response times for each frame
   double _averageResponseTime = 0.0;
   int _maxFramesPossible = 0;
