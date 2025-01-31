@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 class FaceProcessingResult {
@@ -42,7 +42,9 @@ class FaceProcessingService {
         await cv.imencodeAsync('.jpg', processedFrame);
 
     if (!encodeSuccess) {
-      print('Failed to encode image!');
+      if (kDebugMode) {
+        print('Failed to encode image!');
+      }
       return null;
     }
 
