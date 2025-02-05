@@ -47,7 +47,7 @@ class _DataCenterViewState extends State<DataCenterView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
-            bool _useIsolates = cameraManager.useIsolates;
+            bool useIsolates = cameraManager.useIsolates;
 
             return AlertDialog(
               title: const Text("Settings"),
@@ -107,16 +107,16 @@ class _DataCenterViewState extends State<DataCenterView> {
 
                   SwitchListTile(
                     title: const Text('Use Isolates'),
-                    value: _useIsolates,
+                    value: useIsolates,
                     onChanged: (bool value) {
                       setState(() {
-                        _useIsolates = value;
+                        useIsolates = value;
                       });
                       cameraManager.updateUseIsolates(value);
                     },
                   ),
                   Text(
-                    "Use Isolates: $_useIsolates",
+                    "Use Isolates: $useIsolates",
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],

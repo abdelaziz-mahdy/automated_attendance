@@ -6,7 +6,8 @@ import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/foundation.dart';
 
 class FrameProcessorManager {
-  static final FrameProcessorManager _instance = FrameProcessorManager._internal();
+  static final FrameProcessorManager _instance =
+      FrameProcessorManager._internal();
   factory FrameProcessorManager() => _instance;
   FrameProcessorManager._internal();
 
@@ -27,7 +28,8 @@ class FrameProcessorManager {
   Future<void> _spawnIsolate() async {
     final receivePort = ReceivePort();
     // Spawn the long-running isolate using frameProcessorIsolateEntry as the entry.
-    await Isolate.spawn(frameProcessorIsolateLongRunningEntry, receivePort.sendPort);
+    await Isolate.spawn(
+        frameProcessorIsolateLongRunningEntry, receivePort.sendPort);
     _sendPort = await receivePort.first as SendPort;
     _sendPortCompleter.complete(_sendPort);
     receivePort.close();

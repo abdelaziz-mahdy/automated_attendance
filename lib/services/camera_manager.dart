@@ -6,7 +6,6 @@ import 'package:automated_attendance/camera_providers/remote_camera_provider.dar
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/isolate/frame_processor_manager.dart';
-import 'package:automated_attendance/isolate/provider_isolate_handler.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
@@ -15,20 +14,9 @@ import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // lib/isolate/frame_processor_isolate.dart
-import 'dart:isolate';
-import 'dart:typed_data';
-import 'package:automated_attendance/services/face_processing_service.dart';
-import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart'; // For compute()
-import 'package:opencv_dart/opencv_dart.dart' as cv;
-import 'package:automated_attendance/services/face_processing_service.dart';
-import 'package:automated_attendance/services/face_features_extraction_service.dart';
+// For compute()
 // lib/isolate/frame_processor_manager.dart
-import 'dart:isolate';
-import 'dart:async';
-import 'dart:typed_data';
 
 /// This is the long-running isolate’s entry point.
 /// It first sends back its SendPort so that the main isolate can communicate with it,
@@ -47,6 +35,9 @@ void frameProcessorIsolateLongRunningEntry(SendPort initialReplyTo) {
         final result = await frameProcessorIsolateEntry(frameBytes);
         replyPort.send(result);
       } catch (e) {
+        if (kDebugMode) {
+          print('Isolate Error processing frame: $e');
+        }
         replyPort.send(null);
       }
     }
@@ -278,6 +269,7 @@ class CameraManager extends ChangeNotifier {
     _lastFrames.remove(address);
     notifyListeners();
   }
+
   /// Modify _pollFramesOnce to send the frame to the isolate.
   Future<void> _pollFramesOnce(ICameraProvider provider, String address) async {
     try {
@@ -285,7 +277,7 @@ class CameraManager extends ChangeNotifier {
       if (frame != null) {
         // Use the same processing function regardless of mode.
         final result = await processFrameGeneric(frame, _useIsolates);
-        
+
         if (result != null) {
           _lastFrames[address] = result['processedFrame'] as Uint8List;
 
