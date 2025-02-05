@@ -1,5 +1,6 @@
 // lib/views/data_center_view.dart
 
+import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

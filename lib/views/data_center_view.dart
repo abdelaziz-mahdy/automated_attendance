@@ -1,4 +1,5 @@
 // lib/views/data_center_view.dart
+import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/widgets/provider_card.dart';
 import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
@@ -46,6 +47,8 @@ class _DataCenterViewState extends State<DataCenterView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
+            bool _useIsolates = cameraManager.useIsolates;
+
             return AlertDialog(
               title: const Text("Settings"),
               content: Column(
@@ -99,6 +102,21 @@ class _DataCenterViewState extends State<DataCenterView> {
                   ),
                   Text(
                     "Max Faces in Memory: $_currentMaxFaces",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+
+                  SwitchListTile(
+                    title: const Text('Use Isolates'),
+                    value: _useIsolates,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _useIsolates = value;
+                      });
+                      cameraManager.updateUseIsolates(value);
+                    },
+                  ),
+                  Text(
+                    "Use Isolates: $_useIsolates",
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
