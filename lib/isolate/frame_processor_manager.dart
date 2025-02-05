@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class FrameProcessorManager {
   static final FrameProcessorManager _instance =
@@ -26,10 +28,11 @@ class FrameProcessorManager {
   }
 
   Future<void> _spawnIsolate() async {
+    WidgetsFlutterBinding.ensureInitialized();
     final receivePort = ReceivePort();
     // Spawn the long-running isolate using frameProcessorIsolateEntry as the entry.
-    await Isolate.spawn(
-        frameProcessorIsolateLongRunningEntry, receivePort.sendPort);
+    await Isolate.spawn(frameProcessorIsolateLongRunningEntry,
+        [receivePort.sendPort, ServicesBinding.rootIsolateToken]);
     _sendPort = await receivePort.first as SendPort;
     _sendPortCompleter.complete(_sendPort);
     receivePort.close();

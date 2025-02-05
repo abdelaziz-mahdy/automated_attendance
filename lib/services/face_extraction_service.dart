@@ -20,6 +20,9 @@ class FaceExtractionService {
   }
 
   cv.Mat extractFacesBoundaries(cv.Mat image) {
+    if (_faceDetector == null) {
+      throw Exception("Face detector not initialized!");
+    }
     _faceDetector!.setInputSize((image.width, image.height));
     final faces = _faceDetector!.detect(image);
     return faces;

@@ -1,16 +1,19 @@
 // camera_manager.dart
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:ui';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/isolate/frame_processor_manager.dart';
+import 'package:automated_attendance/main.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:opencv_dart/opencv_dart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // lib/isolate/frame_processor_isolate.dart
@@ -21,7 +24,15 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 /// This is the long-running isolate’s entry point.
 /// It first sends back its SendPort so that the main isolate can communicate with it,
 /// then listens for incoming messages.
-void frameProcessorIsolateLongRunningEntry(SendPort initialReplyTo) {
+// RootIsolateToken rootIsolateToken = RootIsolateToken.instance!;
+final isolateToken = ServicesBinding.rootIsolateToken!;
+
+void frameProcessorIsolateLongRunningEntry(List<dynamic> params) {
+  SendPort initialReplyTo = params[0];
+  RootIsolateToken isolateToken = params [1];
+  // BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
+  BackgroundIsolateBinaryMessenger.ensureInitialized(isolateToken);
+  initializeServices();
   final port = ReceivePort();
   // Send the SendPort of this isolate back to the main isolate.
   initialReplyTo.send(port.sendPort);
@@ -32,11 +43,17 @@ void frameProcessorIsolateLongRunningEntry(SendPort initialReplyTo) {
       final Uint8List frameBytes = message[0];
       final SendPort replyPort = message[1];
       try {
+        Stopwatch stopwatch = Stopwatch()..start();
         final result = await frameProcessorIsolateEntry(frameBytes);
+        print('Isolate processing time: ${stopwatch.elapsedMilliseconds} ms');
         replyPort.send(result);
-      } catch (e) {
+      } catch (e, s) {
         if (kDebugMode) {
-          print('Isolate Error processing frame: $e');
+          print('''
+Isolate Error processing frame: $e 
+StackTrace: $s
+###########################################
+''');
         }
         replyPort.send(null);
       }
