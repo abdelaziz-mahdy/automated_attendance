@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:isolate';
+import 'package:automated_attendance/main.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,16 +28,34 @@ class FrameProcessorManager {
     return _sendPortCompleter.future;
   }
 
-  Future<void> _spawnIsolate() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    final receivePort = ReceivePort();
-    // Spawn the long-running isolate using frameProcessorIsolateEntry as the entry.
-    await Isolate.spawn(frameProcessorIsolateLongRunningEntry,
-        [receivePort.sendPort, ServicesBinding.rootIsolateToken]);
-    _sendPort = await receivePort.first as SendPort;
-    _sendPortCompleter.complete(_sendPort);
-    receivePort.close();
-  }
+// In frame_processor_manager.dart
+Future<void> _spawnIsolate() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final receivePort = ReceivePort();
+
+  // Copy assets from the main isolate (using rootBundle) to a temporary directory.
+  final faceDetectionModelPath =
+      await copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
+  final faceFeaturesExtractionModelPath =
+      await copyAssetFileToTmp("assets/face_recognition_sface_2021dec.onnx");
+
+  // Bundle the model paths into a Map.
+  final modelPaths = {
+    'faceDetectionModelPath': faceDetectionModelPath,
+    'faceFeaturesExtractionModelPath': faceFeaturesExtractionModelPath,
+  };
+
+  // Pass the modelPaths along with the SendPort and RootIsolateToken.
+  await Isolate.spawn(
+    frameProcessorIsolateLongRunningEntry,
+    [receivePort.sendPort, ServicesBinding.rootIsolateToken, modelPaths],
+  );
+
+  _sendPort = await receivePort.first as SendPort;
+  _sendPortCompleter.complete(_sendPort);
+  receivePort.close();
+}
+
 
   /// Process a frame via the long-running isolate.
   Future<Map<String, dynamic>?> processFrame(Uint8List frameBytes) async {

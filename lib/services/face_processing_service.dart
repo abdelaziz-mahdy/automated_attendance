@@ -23,6 +23,7 @@ class FaceProcessingService {
   /// and detected face boundaries.
   static Future<FaceProcessingResult?> processFrame(
       Uint8List inputBytes) async {
+    
     // Decode the input bytes into an OpenCV Mat
     final (frame) = await cv.imdecodeAsync(inputBytes, cv.IMREAD_COLOR);
     if (frame.isEmpty) {

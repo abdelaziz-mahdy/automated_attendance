@@ -10,6 +10,7 @@ import 'package:automated_attendance/isolate/frame_processor_manager.dart';
 import 'package:automated_attendance/main.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
+import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
@@ -29,10 +30,18 @@ final isolateToken = ServicesBinding.rootIsolateToken!;
 
 void frameProcessorIsolateLongRunningEntry(List<dynamic> params) {
   SendPort initialReplyTo = params[0];
-  RootIsolateToken isolateToken = params [1];
-  // BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
+  RootIsolateToken isolateToken = params[1];
+  // Retrieve the model paths map.
+  Map<String, String> modelPaths = params[2] as Map<String, String>;
+
+  // Initialize the binary messenger for isolates.
   BackgroundIsolateBinaryMessenger.ensureInitialized(isolateToken);
-  initializeServices();
+
+  // Initialize your models using the file paths.
+  FaceExtractionService().initialize(modelPaths['faceDetectionModelPath']!);
+  FaceFeaturesExtractionService().initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+  FaceComparisonService().initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+
   final port = ReceivePort();
   // Send the SendPort of this isolate back to the main isolate.
   initialReplyTo.send(port.sendPort);
@@ -291,7 +300,7 @@ class CameraManager extends ChangeNotifier {
   Future<void> _pollFramesOnce(ICameraProvider provider, String address) async {
     try {
       final frame = await provider.getFrame();
-      if (frame != null) {
+      if (frame != null && frame.isNotEmpty) {
         // Use the same processing function regardless of mode.
         final result = await processFrameGeneric(frame, _useIsolates);
 
