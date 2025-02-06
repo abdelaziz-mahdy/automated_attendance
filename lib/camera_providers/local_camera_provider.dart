@@ -31,7 +31,7 @@ class LocalCameraProvider implements ICameraProvider {
       _vc = await cv.VideoCaptureAsync.fromDeviceAsync(cameraIndex);
       if (Platform.isAndroid) {
         cameraRotation =
-            (await AndroidCameraProvider.getAvailableCameras())[cameraIndex]
+            (await MobileCameraProvider.getAvailableCameras())[cameraIndex]
                 .sensorOrientation;
       }
       if (_vc.isOpened) {

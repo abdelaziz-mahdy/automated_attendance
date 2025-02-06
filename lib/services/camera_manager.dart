@@ -1,13 +1,11 @@
 // camera_manager.dart
 import 'dart:async';
 import 'dart:isolate';
-import 'dart:ui';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/isolate/frame_processor_manager.dart';
-import 'package:automated_attendance/main.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
@@ -39,8 +37,10 @@ void frameProcessorIsolateLongRunningEntry(List<dynamic> params) {
 
   // Initialize your models using the file paths.
   FaceExtractionService().initialize(modelPaths['faceDetectionModelPath']!);
-  FaceFeaturesExtractionService().initialize(modelPaths['faceFeaturesExtractionModelPath']!);
-  FaceComparisonService().initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+  FaceFeaturesExtractionService()
+      .initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+  FaceComparisonService()
+      .initialize(modelPaths['faceFeaturesExtractionModelPath']!);
 
   final port = ReceivePort();
   // Send the SendPort of this isolate back to the main isolate.
