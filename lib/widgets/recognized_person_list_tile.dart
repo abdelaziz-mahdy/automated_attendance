@@ -37,46 +37,64 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: ListTile(
-        leading: widget.trackedFace.thumbnail != null
-            ? SizedBox(
-                // width: 100,
-                height: 300,
-                child: Image.memory(widget.trackedFace.thumbnail!,
-                    fit: BoxFit.cover))
-            : const Icon(Icons.person),
-        title: TextField(
-          // Replaced Text with TextField for inline edit
-          controller: _nameController,
-          decoration: const InputDecoration(
-            border: InputBorder.none, // Remove TextField border
-            isDense: true, // Reduce padding
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Tracked face thumbnail with increased width
+              widget.trackedFace.thumbnail != null
+                  ? SizedBox(
+                      width: 300, // Increased width
+                      height: 300,
+                      child: Image.memory(
+                        widget.trackedFace.thumbnail!,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(Icons.person, size: 300),
+              const SizedBox(width: 16),
+              // Text content: editable name and details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none, // Remove TextField border
+                        isDense: true, // Reduce padding
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      onChanged: (newValue) {
+                        Provider.of<CameraManager>(context, listen: false)
+                            .updateTrackedFaceName(
+                                widget.trackedFace.id, newValue);
+                      },
+                    ),
+                    if (widget.trackedFace.firstSeen != null)
+                      Text(
+                        "First Seen: ${widget.trackedFace.firstSeen!.toLocal()}",
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    if (widget.trackedFace.lastSeen != null)
+                      Text(
+                        "Last Seen: ${widget.trackedFace.lastSeen!.toLocal()}",
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    if (widget.trackedFace.lastSeenProvider != null)
+                      Text(
+                        "Provider: ${widget.trackedFace.lastSeenProvider!}",
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
           ),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-          onChanged: (newValue) {
-            Provider.of<CameraManager>(context, listen: false)
-                .updateTrackedFaceName(widget.trackedFace.id, newValue);
-          },
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.trackedFace.firstSeen != null)
-              Text("First Seen: ${widget.trackedFace.firstSeen!.toLocal()}",
-                  style: const TextStyle(fontSize: 12)),
-            if (widget.trackedFace.lastSeen != null)
-              Text("Last Seen: ${widget.trackedFace.lastSeen!.toLocal()}",
-                  style: const TextStyle(fontSize: 12)),
-            if (widget.trackedFace.lastSeenProvider != null)
-              Text("Provider: ${widget.trackedFace.lastSeenProvider!}",
-                  style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        onTap: widget.onTap,
-        trailing: const Icon(Icons.chevron_right),
-      ),
-    );
+        ));
   }
 }
