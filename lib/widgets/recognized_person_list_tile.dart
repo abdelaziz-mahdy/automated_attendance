@@ -41,9 +41,11 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: ListTile(
         leading: widget.trackedFace.thumbnail != null
-            ? ClipOval(
+            ? SizedBox(
+                // width: 100,
+                height: 300,
                 child: Image.memory(widget.trackedFace.thumbnail!,
-                    width: 50, height: 50, fit: BoxFit.cover))
+                    fit: BoxFit.cover))
             : const Icon(Icons.person),
         title: TextField(
           // Replaced Text with TextField for inline edit
