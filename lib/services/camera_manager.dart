@@ -1,38 +1,147 @@
 // camera_manager.dart
 import 'dart:async';
+import 'dart:isolate';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:automated_attendance/isolate/frame_processor_manager.dart';
+import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
+import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/services/face_processing_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:opencv_dart/opencv_dart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// lib/isolate/frame_processor_isolate.dart
+import 'package:opencv_dart/opencv_dart.dart' as cv;
+// For compute()
+// lib/isolate/frame_processor_manager.dart
 
-// lib/models/tracked_face.dart
-class TrackedFace {
-  final String id;
-  final List<double> features;
-  String name; // Name is now mutable
-  DateTime? firstSeen;
-  DateTime? lastSeen;
-  String? lastSeenProvider;
-  Uint8List? thumbnail;
+/// This is the long-running isolate’s entry point.
+/// It first sends back its SendPort so that the main isolate can communicate with it,
+/// then listens for incoming messages.
+// RootIsolateToken rootIsolateToken = RootIsolateToken.instance!;
+final isolateToken = ServicesBinding.rootIsolateToken!;
 
-  TrackedFace({
-    required this.id,
-    required this.features,
-    required this.name,
-    this.firstSeen,
-    this.lastSeen,
-    this.lastSeenProvider,
-    this.thumbnail,
+void frameProcessorIsolateLongRunningEntry(List<dynamic> params) {
+  SendPort initialReplyTo = params[0];
+  RootIsolateToken isolateToken = params[1];
+  // Retrieve the model paths map.
+  Map<String, String> modelPaths = params[2] as Map<String, String>;
+
+  // Initialize the binary messenger for isolates.
+  BackgroundIsolateBinaryMessenger.ensureInitialized(isolateToken);
+
+  // Initialize your models using the file paths.
+  FaceExtractionService().initialize(modelPaths['faceDetectionModelPath']!);
+  FaceFeaturesExtractionService()
+      .initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+  FaceComparisonService()
+      .initialize(modelPaths['faceFeaturesExtractionModelPath']!);
+
+  final port = ReceivePort();
+  // Send the SendPort of this isolate back to the main isolate.
+  initialReplyTo.send(port.sendPort);
+
+  port.listen((message) async {
+    // Expect message as [frameBytes, replyPort].
+    if (message is List && message.length == 2) {
+      final Uint8List frameBytes = message[0];
+      final SendPort replyPort = message[1];
+      try {
+        Stopwatch stopwatch = Stopwatch()..start();
+        final result = await frameProcessorIsolateEntry(frameBytes);
+        print('Isolate processing time: ${stopwatch.elapsedMilliseconds} ms');
+        replyPort.send(result);
+      } catch (e, s) {
+        if (kDebugMode) {
+          print('''
+Isolate Error processing frame: $e 
+StackTrace: $s
+###########################################
+''');
+        }
+        replyPort.send(null);
+      }
+    }
   });
+}
 
-  void setName(String newName) {
-    name = newName;
+/// Common processing logic: decode the frame, detect faces, annotate,
+/// extract features, and crop thumbnails.
+Future<Map<String, dynamic>?> _processFrameCommon(Uint8List frameBytes) async {
+  // 1. Process the frame (decode, detect faces, annotate, etc.)
+  final processingResult = await FaceProcessingService.processFrame(frameBytes);
+  if (processingResult == null) return null;
+
+  // 2. Extract face features.
+  final features = await FaceFeaturesExtractionService().extractFaceFeatures(
+    processingResult.processedFrameMat,
+    processingResult.faces,
+  );
+
+  // 3. Crop a thumbnail for each detected face.
+  List<Uint8List?> thumbnails = [];
+  for (int i = 0; i < processingResult.faces.rows; i++) {
+    final thumb = await _cropFaceThumbnail(
+        processingResult.processedFrameMat, processingResult.faces, i);
+    thumbnails.add(thumb);
+  }
+
+  // Return only transferable data.
+  return {
+    'processedFrame': processingResult.processedFrame, // JPEG bytes.
+    'faceFeatures': features, // List<List<double>>.
+    'faceThumbnails': thumbnails, // List<Uint8List?>.
+  };
+}
+
+/// Helper: Crop a face thumbnail from the detected faces.
+Future<Uint8List?> _cropFaceThumbnail(
+    cv.Mat image, cv.Mat faces, int faceIndex) async {
+  if (faceIndex < 0 || faceIndex >= faces.rows) return null;
+  final x = faces.at<double>(faceIndex, 0).toInt();
+  final y = faces.at<double>(faceIndex, 1).toInt();
+  final w = faces.at<double>(faceIndex, 2).toInt();
+  final h = faces.at<double>(faceIndex, 3).toInt();
+
+  final safeW = (x + w) > image.width ? image.width - x : w;
+  final safeH = (y + h) > image.height ? image.height - y : h;
+  if (safeW <= 0 || safeH <= 0) return null;
+
+  final faceRect = cv.Rect(x, y, safeW, safeH);
+  final faceMat = await image.regionAsync(faceRect);
+  final result = await cv.imencodeAsync('.jpg', faceMat);
+  faceMat.dispose();
+
+  if (result.$1) {
+    return result.$2;
+  }
+  return null;
+}
+
+/// This is the isolate’s entry point. It must be a top-level or static function.
+/// It calls the common processing logic.
+Future<Map<String, dynamic>?> frameProcessorIsolateEntry(
+    Uint8List frameBytes) async {
+  return await _processFrameCommon(frameBytes);
+}
+
+/// Processes the given frame using either the long-running isolate or directly,
+/// based on the [useIsolate] flag.
+Future<Map<String, dynamic>?> processFrameGeneric(
+  Uint8List frameBytes,
+  bool useIsolate,
+) async {
+  if (useIsolate) {
+    // Use the long-running isolate.
+    return await FrameProcessorManager().processFrame(frameBytes);
+  } else {
+    // Process directly on the main thread.
+    return await frameProcessorIsolateEntry(frameBytes);
   }
 }
 
@@ -65,7 +174,9 @@ class CameraManager extends ChangeNotifier {
   late SharedPreferences _prefs;
   late int _fps;
   late int _maxFaces;
-
+  // Flag to toggle processing mode. Default true (using isolates).
+  bool _useIsolates = true;
+  bool get useIsolates => _useIsolates;
   CameraManager() {
     _loadSettings();
   }
@@ -85,6 +196,14 @@ class CameraManager extends ChangeNotifier {
     _fps = fps;
     _maxFaces = maxFaces;
     _restartFramePolling();
+    notifyListeners();
+  }
+
+// Update the flag (e.g., from a settings dialog)
+  Future<void> updateUseIsolates(bool value) async {
+    if (_useIsolates == value) return;
+    _useIsolates = value;
+
     notifyListeners();
   }
 
@@ -130,6 +249,7 @@ class CameraManager extends ChangeNotifier {
     if (!opened) return;
 
     activeProviders[address] = provider;
+
     _startPollingForProvider(provider, address);
     notifyListeners();
   }
@@ -176,44 +296,31 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Fetch and process exactly one frame from the given provider
+  /// Modify _pollFramesOnce to send the frame to the isolate.
   Future<void> _pollFramesOnce(ICameraProvider provider, String address) async {
     try {
       final frame = await provider.getFrame();
-      if (frame != null) {
-        // 1) Process frame for face detection + bounding boxes
-        final processedFrame = await FaceProcessingService.processFrame(frame);
+      if (frame != null && frame.isNotEmpty) {
+        // Use the same processing function regardless of mode.
+        final result = await processFrameGeneric(frame, _useIsolates);
 
-        if (processedFrame != null) {
-          // Keep the annotated frame for UI display
-          _lastFrames[address] = processedFrame.processedFrame;
+        if (result != null) {
+          _lastFrames[address] = result['processedFrame'] as Uint8List;
 
-          // 2) Extract face embeddings if needed
-          final features = await _extractFaceFeatures(
-            processedFrame.processedFrameMat,
-            processedFrame.faces,
-          );
-          if (features.isNotEmpty) {
-            for (int i = 0; i < features.length; i++) {
-              _faceFeaturesStreamController.add(features[i]);
-              Uint8List? faceThumbnail = await _cropSingleFace(
-                processedFrame.processedFrameMat,
-                processedFrame.faces,
-                i,
-              );
-              // Compare extracted features with tracked faces
-              _compareWithTrackedFaces(
-                features[i],
-                address,
-                faceThumbnail,
-              );
+          final List<dynamic> features = result['faceFeatures'];
+          final List<dynamic> thumbnails = result['faceThumbnails'];
 
-              /// Store the face thumbnail in the list.
-              if (faceThumbnail != null) {
-                capturedFaces.insert(0, faceThumbnail);
-                if (capturedFaces.length > _maxFaces) {
-                  capturedFaces.removeLast();
-                }
+          for (int i = 0; i < features.length; i++) {
+            _faceFeaturesStreamController.add(features[i] as List<double>);
+            _compareWithTrackedFaces(
+              features[i] as List<double>,
+              address,
+              thumbnails[i] as Uint8List?,
+            );
+            if (thumbnails[i] != null) {
+              capturedFaces.insert(0, thumbnails[i] as Uint8List);
+              if (capturedFaces.length > _maxFaces) {
+                capturedFaces.removeLast();
               }
             }
           }

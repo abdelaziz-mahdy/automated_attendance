@@ -27,7 +27,7 @@ Future<void> main() async {
   runApp(MyApp());
 }
 
-Future<String> _copyAssetFileToTmp(String assetPath) async {
+Future<String> copyAssetFileToTmp(String assetPath) async {
   final tmpDir = await getTemporaryDirectory();
   final tmpPath = '${tmpDir.path}/${assetPath.split('/').last}';
   final byteData = await rootBundle.load(assetPath);
@@ -42,9 +42,9 @@ Future<void> initializeServices() async {
   final faceComparisonService = FaceComparisonService();
 
   final faceDetectionModelPath =
-      await _copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
+      await copyAssetFileToTmp("assets/face_detection_yunet_2023mar.onnx");
   final faceFeaturesExtractionModelPath =
-      await _copyAssetFileToTmp("assets/face_recognition_sface_2021dec.onnx");
+      await copyAssetFileToTmp("assets/face_recognition_sface_2021dec.onnx");
 
   // Initialize services
   faceExtractionService.initialize(faceDetectionModelPath);

@@ -5,7 +5,7 @@ import 'package:opencv_dart/opencv_dart.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:camera/camera.dart';
 
-class AndroidCameraProvider implements ICameraProvider {
+class MobileCameraProvider implements ICameraProvider {
   late CameraController _controller;
   bool _isOpen = false;
 
@@ -16,7 +16,7 @@ class AndroidCameraProvider implements ICameraProvider {
   bool get isOpen => _isOpen;
 
   Uint8List? _latestFrame;
-  AndroidCameraProvider(this.cameraIndex);
+  MobileCameraProvider(this.cameraIndex);
 
   /// Request camera permission on Android; on iOS the camera plugin handles it for you,
   /// but well do this for completeness.
