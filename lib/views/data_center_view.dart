@@ -61,8 +61,8 @@ class _DataCenterViewState extends State<DataCenterView> {
                       Expanded(
                         child: Slider(
                           min: 1,
-                          max: 100,
-                          divisions: 99,
+                          max: 10,
+                          divisions: 9,
                           value: _currentFps?.toDouble() ?? 10,
                           label: _currentFps?.toString() ?? "10",
                           onChanged: (value) {

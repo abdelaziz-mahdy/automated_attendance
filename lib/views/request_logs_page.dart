@@ -45,12 +45,13 @@ class _RequestLogsPageState extends State<RequestLogsPage> {
 
   void _stopServer() {
     _cameraProviderServer.stop().then((_) {
-      setState(() {
-        _serverEndTime = DateTime.now();
-      });
-
       // Stop listening
       RequestLogs.logsNotifier.removeListener(_updateFrameCount);
+      if (mounted) {
+        setState(() {
+          _serverEndTime = DateTime.now();
+        });
+      }
     });
   }
 
