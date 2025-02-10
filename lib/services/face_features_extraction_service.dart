@@ -114,6 +114,7 @@ class FaceFeaturesExtractionService {
   }
 
   cv.Mat visualizeFaceDetect(cv.Mat img, cv.Mat faces) {
+    cv.Mat clonedImg = img.clone();
     for (int row = 0; row < faces.rows; row++) {
       final rect = cv.Rect(
         faces.at<double>(row, 0).toInt(),
@@ -135,11 +136,11 @@ class FaceFeaturesExtractionService {
             faces.at<double>(row, 13).toInt()),
       ];
 
-      cv.rectangle(img, rect, cv.Scalar.green, thickness: 2);
+      cv.rectangle(clonedImg, rect, cv.Scalar.green, thickness: 2);
       for (final p in points) {
-        cv.circle(img, p, 2, cv.Scalar.blue, thickness: 2);
+        cv.circle(clonedImg, p, 2, cv.Scalar.blue, thickness: 2);
       }
     }
-    return img;
+    return clonedImg;
   }
 }

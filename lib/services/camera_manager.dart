@@ -74,7 +74,7 @@ StackTrace: $s
 /// extract features, and crop thumbnails.
 Future<Map<String, dynamic>?> _processFrameAsync(Uint8List frameBytes) async {
   // 1. Process the frame (decode, detect faces, annotate, etc.)
-  final processingResult = await FaceProcessingService.processFrame(frameBytes);
+  final processingResult = await FaceProcessingService.processFrameAsync(frameBytes);
   if (processingResult == null) return null;
 
   // 2. Extract face features.
@@ -88,7 +88,7 @@ Future<Map<String, dynamic>?> _processFrameAsync(Uint8List frameBytes) async {
   List<Uint8List?> thumbnails = [];
   for (int i = 0; i < processingResult.faces.rows; i++) {
     final thumb = await _cropFaceThumbnailAsync(
-        processingResult.processedFrameMat, processingResult.faces, i);
+        processingResult.decodedFrame, processingResult.faces, i);
     thumbnails.add(thumb);
   }
 
@@ -117,7 +117,7 @@ Map<String, dynamic>? _processFrame(Uint8List frameBytes) {
   List<Uint8List?> thumbnails = [];
   for (int i = 0; i < processingResult.faces.rows; i++) {
     final thumb = _cropFaceThumbnail(
-        processingResult.processedFrameMat, processingResult.faces, i);
+        processingResult.decodedFrame, processingResult.faces, i);
     thumbnails.add(thumb);
   }
 
