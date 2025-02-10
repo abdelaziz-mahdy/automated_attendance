@@ -21,7 +21,7 @@ class FaceProcessingService {
   /// Processes the input image by detecting faces, drawing boundaries,
   /// and returning a `FaceProcessingResult` containing the processed frame
   /// and detected face boundaries.
-  static Future<FaceProcessingResult?> processFrame(
+  static Future<FaceProcessingResult?> processFrameAsync(
       Uint8List inputBytes) async {
     // Decode the input bytes into an OpenCV Mat
     final (frame) = await cv.imdecodeAsync(inputBytes, cv.IMREAD_COLOR);
@@ -40,6 +40,42 @@ class FaceProcessingService {
     // Encode the processed frame back into JPEG format
     final (encodeSuccess, encodedBytes) =
         await cv.imencodeAsync('.jpg', processedFrame);
+
+    if (!encodeSuccess) {
+      if (kDebugMode) {
+        print('Failed to encode image!');
+      }
+      return null;
+    }
+
+    // Return the result as a class instance
+    return FaceProcessingResult(
+      processedFrame: encodedBytes,
+      processedFrameMat: processedFrame,
+      faces: faces,
+    );
+  }
+
+  /// processFrameSync
+  /// Extracts facial features from the input face boundary and returns
+  /// a `FaceProcessingResult` containing the processed frame and detected
+  /// facial features.
+  static FaceProcessingResult? processFrame(Uint8List inputBytes) {
+    // Decode the input bytes into an OpenCV Mat
+    final (frame) = cv.imdecode(inputBytes, cv.IMREAD_COLOR);
+    if (frame.isEmpty) {
+      print('Failed to decode image!');
+      return null;
+    }
+    // Detect faces in the frame
+    final faces = FaceExtractionService().extractFacesBoundaries(frame);
+
+    // Visualize detected faces on the frame
+    final processedFrame =
+        FaceFeaturesExtractionService().visualizeFaceDetect(frame, faces);
+
+    // Encode the processed frame back into JPEG format
+    final (encodeSuccess, encodedBytes) = cv.imencode('.jpg', processedFrame);
 
     if (!encodeSuccess) {
       if (kDebugMode) {
