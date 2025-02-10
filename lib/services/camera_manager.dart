@@ -218,8 +218,6 @@ class CameraManager extends ChangeNotifier {
 
   Future<void> stopListening() async {
     _isListening = false;
-
-    await _discoveryService.stopDiscovery();
     // Cancel all provider timers
     for (var timer in _pollTimers.values) {
       timer.cancel();
@@ -229,6 +227,8 @@ class CameraManager extends ChangeNotifier {
     for (var provider in activeProviders.values) {
       await provider.closeCamera();
     }
+    await _discoveryService.stopDiscovery();
+
     activeProviders.clear();
     _lastFrames.clear();
   }
