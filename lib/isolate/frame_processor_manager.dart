@@ -2,16 +2,16 @@
 
 import 'dart:async';
 import 'dart:isolate';
+import 'package:automated_attendance/isolate/frame_processor_isolate.dart';
 import 'package:automated_attendance/main.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class FrameProcessorManager {
-  static final FrameProcessorManager _instance =
-      FrameProcessorManager._internal();
-  factory FrameProcessorManager() => _instance;
-  FrameProcessorManager._internal();
+class FrameProcessorManagerIsolate {
+  static final FrameProcessorManagerIsolate _instance =
+      FrameProcessorManagerIsolate._internal();
+  factory FrameProcessorManagerIsolate() => _instance;
+  FrameProcessorManagerIsolate._internal();
 
   SendPort? _sendPort;
   bool _isSpawning = false;

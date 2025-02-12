@@ -91,7 +91,6 @@ class FaceProcessingService {
     return FaceProcessingResult(
       decodedFrame: frame,
       processedFrame: encodedBytes,
-
       processedFrameMat: processedFrame,
       faces: faces,
     );
