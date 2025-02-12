@@ -172,8 +172,8 @@ class CameraManager extends ChangeNotifier {
     int currentFps = _providerFps[address] ?? _fps;
     final expectedInterval = (1000 / currentFps).round();
     if (processingTime > expectedInterval) {
-      currentFps = currentFps > 5 ? currentFps - 5 : 5;
-    } else {
+      currentFps = currentFps > 5 ? currentFps - 1 : 5;
+    } else if (processingTime < expectedInterval) {
       currentFps = currentFps < _fps ? currentFps + 1 : _fps;
     }
     _providerFps[address] = currentFps;
