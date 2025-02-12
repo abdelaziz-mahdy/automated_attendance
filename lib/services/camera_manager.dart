@@ -74,7 +74,8 @@ StackTrace: $s
 /// extract features, and crop thumbnails.
 Future<Map<String, dynamic>?> _processFrameAsync(Uint8List frameBytes) async {
   // 1. Process the frame (decode, detect faces, annotate, etc.)
-  final processingResult = await FaceProcessingService.processFrameAsync(frameBytes);
+  final processingResult =
+      await FaceProcessingService.processFrameAsync(frameBytes);
   if (processingResult == null) return null;
 
   // 2. Extract face features.
@@ -206,6 +207,8 @@ class CameraManager extends ChangeNotifier {
 
   // Keep a timer for each provider
   final Map<String, Timer> _pollTimers = {};
+  // NEW: Map to store dynamic FPS per provider.
+  final Map<String, int> _providerFps = {};
 
   // Stream controller for face embeddings
   final StreamController<List<double>> _faceFeaturesStreamController =
@@ -224,7 +227,7 @@ class CameraManager extends ChangeNotifier {
 
   // Settings variables
   late SharedPreferences _prefs;
-  late int _fps;
+  late int _fps; // This is now the maximum FPS per provider.
   late int _maxFaces;
   // Flag to toggle processing mode. Default true (using isolates).
   bool _useIsolates = true;
@@ -247,6 +250,10 @@ class CameraManager extends ChangeNotifier {
     await _prefs.setInt('maxFaces', maxFaces);
     _fps = fps;
     _maxFaces = maxFaces;
+    // Reset dynamic FPS for each provider.
+    for (var address in activeProviders.keys) {
+      _providerFps[address] = _fps;
+    }
     _restartFramePolling();
     notifyListeners();
   }
@@ -301,32 +308,77 @@ class CameraManager extends ChangeNotifier {
     if (!opened) return;
 
     activeProviders[address] = provider;
-
-    _startPollingForProvider(provider, address);
+    // NEW: Save initial FPS and schedule dynamic polling.
+    _providerFps[address] = _fps;
+    _scheduleNextPolling(provider, address);
     notifyListeners();
   }
 
-  void _startPollingForProvider(ICameraProvider provider, String address) {
-    // Cancel any existing timer for this provider
+  // NEW: Schedule the next polling for a provider based on its dynamic FPS.
+  void _scheduleNextPolling(ICameraProvider provider, String address) {
+    if (!_isListening || !activeProviders.containsKey(address)) return;
+    final currentFps = _providerFps[address] ?? _fps;
+    final intervalMs = (1000 / currentFps).round();
     _pollTimers[address]?.cancel();
-    final pollInterval = Duration(milliseconds: (1000 / _fps).round());
-    _pollTimers[address] = Timer.periodic(pollInterval, (timer) {
-      // If the provider is removed or manager is not listening, cancel the timer.
-      if (!_isListening || !activeProviders.containsKey(address)) {
-        timer.cancel();
-        _pollTimers.remove(address);
-        return;
-      }
-      _pollFramesOnce(provider, address);
+    _pollTimers[address] = Timer(Duration(milliseconds: intervalMs), () async {
+      await _pollFramesOnceDynamic(provider, address);
     });
   }
 
-  // Restarts the frame polling with updated FPS value
+  // NEW: Poll a single frame, adjust dynamic FPS and reschedule polling.
+  Future<void> _pollFramesOnceDynamic(
+      ICameraProvider provider, String address) async {
+    final frameStartTime = DateTime.now();
+    try {
+      final frame = await provider.getFrame();
+      if (frame != null && frame.isNotEmpty) {
+        final result = await processFrameGeneric(frame, _useIsolates);
+        if (result != null) {
+          _lastFrames[address] = result['processedFrame'] as Uint8List;
+          final List<dynamic> features = result['faceFeatures'];
+          final List<dynamic> thumbnails = result['faceThumbnails'];
+          for (int i = 0; i < features.length; i++) {
+            _faceFeaturesStreamController.add(features[i] as List<double>);
+            _compareWithTrackedFaces(
+              features[i] as List<double>,
+              address,
+              thumbnails[i] as Uint8List?,
+            );
+            if (thumbnails[i] != null) {
+              capturedFaces.insert(0, thumbnails[i] as Uint8List);
+              if (capturedFaces.length > _maxFaces) {
+                capturedFaces.removeLast();
+              }
+            }
+          }
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error polling frames for $address: $e");
+    }
+    // Calculate frame processing time and adjust dynamic FPS.
+    final processingTime =
+        DateTime.now().difference(frameStartTime).inMilliseconds;
+    int currentFps = _providerFps[address] ?? _fps;
+    final expectedInterval = (1000 / currentFps).round();
+    if (processingTime > expectedInterval) {
+      currentFps = currentFps > 5 ? currentFps - 5 : 5;
+    } else {
+      currentFps = currentFps < _fps ? currentFps + 1 : _fps;
+    }
+    _providerFps[address] = currentFps;
+    _scheduleNextPolling(provider, address);
+  }
+
+  // Modified: Restart dynamic frame polling with updated FPS values.
   void _restartFramePolling() {
     for (final address in activeProviders.keys) {
+      _pollTimers[address]?.cancel();
+      _providerFps[address] = _fps; // Reset dynamic FPS to max.
       final provider = activeProviders[address];
       if (provider != null) {
-        _startPollingForProvider(provider, address);
+        _scheduleNextPolling(provider, address);
       }
     }
   }
@@ -466,6 +518,9 @@ class CameraManager extends ChangeNotifier {
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
+
+  // NEW: Getter to retrieve the current FPS for a provider.
+  int getProviderFps(String address) => _providerFps[address] ?? _fps;
 
   void updateTrackedFaceName(String faceId, String newName) {
     if (trackedFaces.containsKey(faceId)) {
