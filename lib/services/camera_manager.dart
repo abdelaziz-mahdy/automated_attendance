@@ -183,18 +183,24 @@ Future<Map<String, dynamic>?> frameProcessorIsolateEntry(
   return await _processFrameAsync(frameBytes);
 }
 
-/// Processes the given frame using either the long-running isolate or directly,
-/// based on the [useIsolate] flag.
-Future<Map<String, dynamic>?> processFrameGeneric(
-  Uint8List frameBytes,
-  bool useIsolate,
-) async {
-  if (useIsolate) {
-    // Use the long-running isolate.
-    return await FrameProcessorManager().processFrame(frameBytes);
-  } else {
-    // Process directly on the main thread.
-    return await frameProcessorIsolateEntry(frameBytes);
+// NEW: Define an interface for frame processing.
+abstract class IFrameProcessor {
+  Future<Map<String, dynamic>?> processFrame(Uint8List frame);
+}
+
+// NEW: Isolate-based implementation.
+class IsolateFrameProcessor implements IFrameProcessor {
+  @override
+  Future<Map<String, dynamic>?> processFrame(Uint8List frame) async {
+    return await FrameProcessorManager().processFrame(frame);
+  }
+}
+
+// NEW: Main isolate implementation.
+class MainIsolateFrameProcessor implements IFrameProcessor {
+  @override
+  Future<Map<String, dynamic>?> processFrame(Uint8List frame) async {
+    return await frameProcessorIsolateEntry(frame);
   }
 }
 
@@ -332,7 +338,10 @@ class CameraManager extends ChangeNotifier {
     try {
       final frame = await provider.getFrame();
       if (frame != null && frame.isNotEmpty) {
-        final result = await processFrameGeneric(frame, _useIsolates);
+        final IFrameProcessor processor = _useIsolates
+            ? IsolateFrameProcessor()
+            : MainIsolateFrameProcessor();
+        final result = await processor.processFrame(frame);
         if (result != null) {
           _lastFrames[address] = result['processedFrame'] as Uint8List;
           final List<dynamic> features = result['faceFeatures'];
@@ -399,42 +408,6 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Modify _pollFramesOnce to send the frame to the isolate.
-  Future<void> _pollFramesOnce(ICameraProvider provider, String address) async {
-    try {
-      final frame = await provider.getFrame();
-      if (frame != null && frame.isNotEmpty) {
-        // Use the same processing function regardless of mode.
-        final result = await processFrameGeneric(frame, _useIsolates);
-
-        if (result != null) {
-          _lastFrames[address] = result['processedFrame'] as Uint8List;
-
-          final List<dynamic> features = result['faceFeatures'];
-          final List<dynamic> thumbnails = result['faceThumbnails'];
-
-          for (int i = 0; i < features.length; i++) {
-            _faceFeaturesStreamController.add(features[i] as List<double>);
-            _compareWithTrackedFaces(
-              features[i] as List<double>,
-              address,
-              thumbnails[i] as Uint8List?,
-            );
-            if (thumbnails[i] != null) {
-              capturedFaces.insert(0, thumbnails[i] as Uint8List);
-              if (capturedFaces.length > _maxFaces) {
-                capturedFaces.removeLast();
-              }
-            }
-          }
-        }
-      }
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Error polling frames for $address: $e");
-    }
-  }
-
   /// Compares extracted face features with tracked faces.
   void _compareWithTrackedFaces(
       List<double> features, String providerAddress, Uint8List? faceThumbnail) {
@@ -474,46 +447,6 @@ class CameraManager extends ChangeNotifier {
 
       trackedFaces[newFaceId] = newTrackedFace;
       notifyListeners();
-    }
-  }
-
-  Future<List<List<double>>> _extractFaceFeatures(
-      Mat frameBytes, Mat faces) async {
-    return await FaceFeaturesExtractionService()
-        .extractFaceFeaturesAsync(frameBytes, faces);
-  }
-
-  /// Takes an image (Mat) and a list of detected faces (Mat), then crops
-  /// a single face and encodes it as a JPEG.
-  /// Returns the JPEG bytes (Uint8List) of the cropped face or null if cropping fails.
-  Future<Uint8List?> _cropSingleFace(
-      Mat image, Mat faces, int faceIndex) async {
-    if (faceIndex < 0 || faceIndex >= faces.rows) {
-      return null; // Invalid face index
-    }
-
-    final x = faces.at<double>(faceIndex, 0).toInt();
-    final y = faces.at<double>(faceIndex, 1).toInt();
-    final w = faces.at<double>(faceIndex, 2).toInt();
-    final h = faces.at<double>(faceIndex, 3).toInt();
-    // Make sure bounding box is within image boundaries
-    final safeW = (x + w) > image.width ? image.width - x : w;
-    final safeH = (y + h) > image.height ? image.height - y : h;
-
-    if (safeW <= 0 || safeH <= 0) {
-      return null; // Invalid dimensions
-    }
-
-    final faceRect = Rect(x, y, safeW, safeH);
-    final faceMat = await image.regionAsync(faceRect);
-    // Encode the cropped face to JPEG
-    final (encSuccess, faceBytes) = await imencodeAsync(".jpg", faceMat);
-    faceMat.dispose();
-
-    if (encSuccess) {
-      return faceBytes;
-    } else {
-      return null;
     }
   }
 
