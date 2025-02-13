@@ -6,13 +6,16 @@ import 'package:shimmer/shimmer.dart';
 class ProviderCard extends StatelessWidget {
   final String address;
   final dynamic frame;
-  final String status; // Added status
+  final String status; // Existing status
+  final int fps; // NEW: current FPS
 
-  const ProviderCard(
-      {required this.address,
-      required this.frame,
-      required this.status,
-      super.key});
+  const ProviderCard({
+    required this.address,
+    required this.frame,
+    required this.status,
+    required this.fps, // NEW: add fps parameter
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +65,7 @@ class ProviderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("Status: $status"),
+                  Text("FPS: $fps"), // NEW: Display current FPS
                 ],
               ),
             ),

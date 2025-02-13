@@ -29,12 +29,16 @@ class ActiveProvidersGrid extends StatelessWidget {
           itemBuilder: (context, index) {
             final address = providers[index];
             final frame = manager.getLastFrame(address);
-            // Assuming you have a way to get provider status from CameraManager
             String providerStatus =
-                "Online"; // Replace with actual status logic
+                "Online"; // Replace with actual status logic.
+            final fps = manager.getProviderFps(address);
 
             return ProviderCard(
-                address: address, frame: frame, status: providerStatus);
+              address: address,
+              frame: frame,
+              status: providerStatus,
+              fps: fps, // NEW: Pass current FPS to the ProviderCard.
+            );
           },
         );
       },
