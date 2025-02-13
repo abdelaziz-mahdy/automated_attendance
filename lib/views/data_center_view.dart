@@ -64,9 +64,11 @@ class _DataCenterViewState extends State<DataCenterView> {
                           value: _currentMaxFaces?.toDouble() ?? 10,
                           label: _currentMaxFaces?.toString() ?? "10",
                           onChanged: (value) {
+                            final newMax = value.round();
                             setState(() {
-                              _currentMaxFaces = value.round();
+                              _currentMaxFaces = newMax;
                             });
+                            cameraManager.updateSettings(newMax);
                           },
                         ),
                       ),
@@ -95,15 +97,6 @@ class _DataCenterViewState extends State<DataCenterView> {
                     Navigator.of(context).pop(); // Close the dialog
                   },
                   child: const Text("Cancel"),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // Apply and save settings
-                    cameraManager.updateSettings(_currentMaxFaces!);
-                    if (!mounted) return;
-                    Navigator.of(context).pop(); // Close the dialog
-                  },
-                  child: const Text("Apply"),
                 ),
               ],
             );
