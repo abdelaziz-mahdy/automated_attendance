@@ -1,9 +1,10 @@
 import asyncio
 from aiohttp import web
-from zeroconf import ServiceInfo, Zeroconf
+from zeroconf.asyncio import AsyncZeroconf
 import socket
 import logging
 from camera_provider import LocalCameraProvider
+from zeroconf import ServiceInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class CameraProviderServer:
             await site.start()
             
             # Register zeroconf service
-            self._zeroconf = Zeroconf()
+            self._zeroconf = AsyncZeroconf()
             self._service_info = ServiceInfo(
                 "_camera._tcp.local.",
                 "PythonCameraProvider._camera._tcp.local.",
@@ -55,7 +56,7 @@ class CameraProviderServer:
                 port=12345,
                 properties={},
             )
-            self._zeroconf.register_service(self._service_info)
+            await self._zeroconf.async_register_service(self._service_info)
             
             logger.info(f"Server started at http://0.0.0.0:12345")
             
@@ -66,8 +67,8 @@ class CameraProviderServer:
             
     async def stop(self):
         if self._zeroconf and self._service_info:
-            self._zeroconf.unregister_service(self._service_info)
-            self._zeroconf.close()
+            await self._zeroconf.async_unregister_service(self._service_info)
+            await self._zeroconf.async_close()
             
         if self.camera_provider:
             await self.camera_provider.close_camera()
