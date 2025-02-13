@@ -2,44 +2,44 @@ PODS:
   - bonsoir_darwin (0.0.1):
     - Flutter
     - FlutterMacOS
-  - DartCvMacOS (4.10.0.5):
-    - DartCvMacOS/calib3d (= 4.10.0.5)
-    - DartCvMacOS/contrib (= 4.10.0.5)
-    - DartCvMacOS/core (= 4.10.0.5)
-    - DartCvMacOS/features2d (= 4.10.0.5)
-    - DartCvMacOS/imgproc (= 4.10.0.5)
-    - DartCvMacOS/objdetect (= 4.10.0.5)
-    - DartCvMacOS/photo (= 4.10.0.5)
-    - DartCvMacOS/stitching (= 4.10.0.5)
-    - DartCvMacOS/video (= 4.10.0.5)
-  - DartCvMacOS/calib3d (4.10.0.5):
+  - DartCvMacOS (4.11.0.2):
+    - DartCvMacOS/calib3d (= 4.11.0.2)
+    - DartCvMacOS/contrib (= 4.11.0.2)
+    - DartCvMacOS/core (= 4.11.0.2)
+    - DartCvMacOS/features2d (= 4.11.0.2)
+    - DartCvMacOS/imgproc (= 4.11.0.2)
+    - DartCvMacOS/objdetect (= 4.11.0.2)
+    - DartCvMacOS/photo (= 4.11.0.2)
+    - DartCvMacOS/stitching (= 4.11.0.2)
+    - DartCvMacOS/video (= 4.11.0.2)
+  - DartCvMacOS/calib3d (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/contrib (4.10.0.5):
+  - DartCvMacOS/contrib (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/core (4.10.0.5)
-  - DartCvMacOS/dnn (4.10.0.5):
+  - DartCvMacOS/core (4.11.0.2)
+  - DartCvMacOS/dnn (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/features2d (4.10.0.5):
+  - DartCvMacOS/features2d (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/imgproc (4.10.0.5):
+  - DartCvMacOS/imgproc (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/objdetect (4.10.0.5):
+  - DartCvMacOS/objdetect (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/photo (4.10.0.5):
+  - DartCvMacOS/photo (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/stitching (4.10.0.5):
+  - DartCvMacOS/stitching (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/video (4.10.0.5):
+  - DartCvMacOS/video (4.11.0.2):
     - DartCvMacOS/core
-  - DartCvMacOS/videoio (4.10.0.5):
+  - DartCvMacOS/videoio (4.11.0.2):
     - DartCvMacOS/core
   - FlutterMacOS (1.0.0)
   - network_info_plus (0.0.1):
     - FlutterMacOS
   - opencv_dart (0.0.1):
-    - DartCvMacOS (= 4.10.0.5)
-    - DartCvMacOS/dnn (= 4.10.0.5)
-    - DartCvMacOS/videoio (= 4.10.0.5)
+    - DartCvMacOS (= 4.11.0.2)
+    - DartCvMacOS/dnn (= 4.11.0.2)
+    - DartCvMacOS/videoio (= 4.11.0.2)
     - FlutterMacOS
   - path_provider_foundation (0.0.1):
     - Flutter
@@ -76,10 +76,10 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   bonsoir_darwin: 29c7ccf356646118844721f36e1de4b61f6cbd0e
-  DartCvMacOS: 309045657c896a5801813a38e465c15a314ccc46
+  DartCvMacOS: bc1107881a0773e367db08969df3544f842ebe3f
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
   network_info_plus: 21d1cd6a015ccb2fdff06a1fbfa88d54b4e92f61
-  opencv_dart: 4aa9fd51481bd7aab32c4ec37dd7c725f4161b9c
+  opencv_dart: 3664cfb797b7b1e6bb053062683bd37d5abe952d
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
 
