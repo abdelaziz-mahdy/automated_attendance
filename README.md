@@ -1,6 +1,4 @@
-Below is an updated README with an extra section explaining that if you don’t want to run the full interface, you can run the Python server as a lightweight image provider.
 
----
 
 # Automated Attendance System
 
