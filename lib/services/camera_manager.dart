@@ -30,7 +30,7 @@ class CameraManager extends ChangeNotifier {
 
   bool _isListening = false;
   late SharedPreferences _prefs;
-  late int _fps;
+  final int _fps = 10;
   late int _maxFaces;
   bool _useIsolates = true;
   bool get useIsolates => _useIsolates;
@@ -45,16 +45,13 @@ class CameraManager extends ChangeNotifier {
   // Load settings from SharedPreferences
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();
-    _fps = _prefs.getInt('fps') ?? 10; // Default FPS
     _maxFaces = _prefs.getInt('maxFaces') ?? 10; // Default max faces
     notifyListeners();
   }
 
   // Update settings and restart frame polling
-  Future<void> updateSettings(int fps, int maxFaces) async {
-    await _prefs.setInt('fps', fps);
+  Future<void> updateSettings(int maxFaces) async {
     await _prefs.setInt('maxFaces', maxFaces);
-    _fps = fps;
     _maxFaces = maxFaces;
     // Reset dynamic FPS for each provider.
     for (var address in activeProviders.keys) {

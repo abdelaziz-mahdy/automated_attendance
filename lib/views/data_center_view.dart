@@ -19,7 +19,6 @@ class _DataCenterViewState extends State<DataCenterView> {
   int _selectedIndex = 0; // Track selected index for NavigationRail
 
   // Settings variables
-  int? _currentFps;
   int? _currentMaxFaces;
 
   @override
@@ -32,7 +31,6 @@ class _DataCenterViewState extends State<DataCenterView> {
   Future<void> _loadSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      _currentFps = prefs.getInt('fps') ?? 10;
       _currentMaxFaces = prefs.getInt('maxFaces') ?? 10;
     });
   }
@@ -54,32 +52,6 @@ class _DataCenterViewState extends State<DataCenterView> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // FPS Slider
-                  Row(
-                    children: [
-                      const Text("FPS:"),
-                      Expanded(
-                        child: Slider(
-                          min: 1,
-                          max: 10,
-                          divisions: 9,
-                          value: _currentFps?.toDouble() ?? 10,
-                          label: _currentFps?.toString() ?? "10",
-                          onChanged: (value) {
-                            setState(() {
-                              _currentFps = value.round();
-                            });
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    "Frames Per Second: $_currentFps",
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 20),
-
                   // Max Faces Slider
                   Row(
                     children: [
@@ -115,10 +87,6 @@ class _DataCenterViewState extends State<DataCenterView> {
                       cameraManager.updateUseIsolates(value);
                     },
                   ),
-                  Text(
-                    "Use Isolates: $useIsolates",
-                    style: const TextStyle(fontSize: 12),
-                  ),
                 ],
               ),
               actions: [
@@ -131,8 +99,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                 TextButton(
                   onPressed: () {
                     // Apply and save settings
-                    cameraManager.updateSettings(
-                        _currentFps!, _currentMaxFaces!);
+                    cameraManager.updateSettings(_currentMaxFaces!);
                     if (!mounted) return;
                     Navigator.of(context).pop(); // Close the dialog
                   },
