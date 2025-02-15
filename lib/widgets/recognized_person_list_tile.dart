@@ -59,54 +59,107 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
                 ]
               : null,
         ),
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildThumbnail(),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildNameField(),
-                      const SizedBox(height: 8),
-                      _buildInfoSection(),
-                    ],
-                  ),
+        child: Column(
+          children: [
+            InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildThumbnailsSection(),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildNameField(),
+                          const SizedBox(height: 8),
+                          _buildInfoSection(),
+                          if (widget.trackedFace.mergedFaces.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                'Merged faces: ${widget.trackedFace.mergedFaces.length}',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (widget.onTap != null) _buildNavigationIcon(),
+                  ],
                 ),
-                if (widget.onTap != null) _buildNavigationIcon(),
-              ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnailsSection() {
+    final thumbnails = widget.trackedFace.allThumbnails;
+    if (thumbnails.isEmpty) {
+      return _buildEmptyThumbnail();
+    }
+
+    return SizedBox(
+      width: 250, // Fixed width for thumbnail section
+      height: 120,
+      child: ShaderMask(
+        shaderCallback: (Rect bounds) {
+          return LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.white,
+              Colors.white.withOpacity(0.0),
+            ],
+            stops: const [0.9, 1.0],
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.dstOut,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: thumbnails
+                .map((thumbnail) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          thumbnail,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ))
+                .toList(),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildThumbnail() {
+  Widget _buildEmptyThumbnail() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
         width: 120,
         height: 120,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+        color: Colors.grey.shade100,
+        child: Icon(
+          Icons.person,
+          size: 60,
+          color: Colors.grey.shade400,
         ),
-        child: widget.trackedFace.thumbnail != null
-            ? Image.memory(
-                widget.trackedFace.thumbnail!,
-                fit: BoxFit.cover,
-              )
-            : Icon(
-                Icons.person,
-                size: 60,
-                color: Colors.grey.shade400,
-              ),
       ),
     );
   }
