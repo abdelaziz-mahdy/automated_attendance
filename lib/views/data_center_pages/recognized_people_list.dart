@@ -67,66 +67,26 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
           final personEntry = recognizedPeople[index];
           final trackedFace = personEntry.value;
 
-          return Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: RecognizedPersonListTile(
-                  trackedFace: trackedFace,
-                  onTap: widget.onPersonSelected == null
-                      ? null
-                      : () => widget.onPersonSelected!(trackedFace),
-                ),
-              ),
-              if (_selectedForMerge != null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Material(
-                    borderRadius: BorderRadius.circular(20),
-                    elevation: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _selectedForMerge == trackedFace.id
-                            ? Colors.blue.shade100
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: _selectedForMerge == trackedFace.id
-                          ? TextButton.icon(
-                              icon: const Icon(Icons.close),
-                              label: const Text('Cancel'),
-                              onPressed: () =>
-                                  setState(() => _selectedForMerge = null),
-                            )
-                          : TextButton.icon(
-                              icon: const Icon(Icons.merge),
-                              label: const Text('Merge Here'),
-                              onPressed: () {
-                                manager.mergeFaces(
-                                    _selectedForMerge!, trackedFace.id);
-                                setState(() => _selectedForMerge = null);
-                              },
-                            ),
-                    ),
-                  ),
-                ),
-              if (_selectedForMerge == null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: const Icon(Icons.merge),
-                    onPressed: () =>
-                        setState(() => _selectedForMerge = trackedFace.id),
-                    tooltip: 'Merge with another face',
-                  ),
-                ),
-            ],
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: RecognizedPersonListTile(
+              trackedFace: trackedFace,
+              onTap: widget.onPersonSelected == null
+                  ? null
+                  : () => widget.onPersonSelected!(trackedFace),
+              isSelectedForMerge: _selectedForMerge == trackedFace.id,
+              onMergePressed: () => setState(() {
+                _selectedForMerge =
+                    _selectedForMerge == trackedFace.id ? null : trackedFace.id;
+              }),
+              onMergeWith: _selectedForMerge != null &&
+                      _selectedForMerge != trackedFace.id
+                  ? () {
+                      manager.mergeFaces(_selectedForMerge!, trackedFace.id);
+                      setState(() => _selectedForMerge = null);
+                    }
+                  : null,
+            ),
           );
         },
         childCount: recognizedPeople.length,

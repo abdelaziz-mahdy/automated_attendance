@@ -9,9 +9,18 @@ import 'package:intl/intl.dart';
 class RecognizedPersonListTile extends StatefulWidget {
   final TrackedFace trackedFace;
   final VoidCallback? onTap;
+  final bool isSelectedForMerge;
+  final VoidCallback? onMergePressed;
+  final VoidCallback? onMergeWith;
 
-  const RecognizedPersonListTile(
-      {super.key, required this.trackedFace, required this.onTap});
+  const RecognizedPersonListTile({
+    super.key,
+    required this.trackedFace,
+    this.onTap,
+    this.isSelectedForMerge = false,
+    this.onMergePressed,
+    this.onMergeWith,
+  });
 
   @override
   State<RecognizedPersonListTile> createState() =>
@@ -35,6 +44,43 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
     super.dispose();
   }
 
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        if (widget.onMergeWith != null) ...[
+          FilledButton.icon(
+            onPressed: widget.onMergeWith,
+            icon: const Icon(Icons.merge_type),
+            label: const Text('Merge Here'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.blue.shade100,
+              foregroundColor: Colors.blue.shade900,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ] else if (widget.isSelectedForMerge) ...[
+          OutlinedButton.icon(
+            onPressed: widget.onMergePressed,
+            icon: const Icon(Icons.close),
+            label: const Text('Cancel'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ] else if (widget.onMergePressed != null) ...[
+          IconButton(
+            onPressed: widget.onMergePressed,
+            icon: const Icon(Icons.merge),
+            tooltip: 'Merge with another face',
+          ),
+          const SizedBox(width: 8),
+        ],
+        if (widget.onTap != null) _buildNavigationIcon(),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -46,13 +92,15 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
           color: _isHovered ? Colors.grey.shade50 : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: Colors.grey.shade200,
-            width: 1,
+            color: widget.isSelectedForMerge
+                ? Colors.blue.shade400
+                : (_isHovered ? Colors.blue.shade200 : Colors.grey.shade200),
+            width: widget.isSelectedForMerge || _isHovered ? 2 : 1,
           ),
-          boxShadow: _isHovered
+          boxShadow: _isHovered || widget.isSelectedForMerge
               ? [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.blue.withOpacity(0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   )
@@ -61,40 +109,48 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
         ),
         child: Column(
           children: [
-            InkWell(
-              onTap: widget.onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildThumbnailsSection(),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildNameField(),
-                          const SizedBox(height: 8),
-                          _buildInfoSection(),
-                          if (widget.trackedFace.mergedFaces.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                'Merged faces: ${widget.trackedFace.mergedFaces.length}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                        ],
+            _buildMainContent(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildThumbnailsSection(),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _buildNameField()),
+                      _buildQuickActions(),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildInfoSection(),
+                  if (widget.trackedFace.mergedFaces.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Merged faces: ${widget.trackedFace.mergedFaces.length}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    if (widget.onTap != null) _buildNavigationIcon(),
-                  ],
-                ),
+                ],
               ),
             ),
           ],
