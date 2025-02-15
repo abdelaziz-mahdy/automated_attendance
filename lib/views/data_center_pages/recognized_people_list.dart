@@ -6,10 +6,17 @@ import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class RecognizedPeopleList extends StatelessWidget {
+class RecognizedPeopleList extends StatefulWidget {
   final Function(TrackedFace)? onPersonSelected;
 
   const RecognizedPeopleList({super.key, required this.onPersonSelected});
+
+  @override
+  State<RecognizedPeopleList> createState() => _RecognizedPeopleListState();
+}
+
+class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
+  String? _selectedForMerge;
 
   @override
   Widget build(BuildContext context) {
@@ -62,18 +69,23 @@ class RecognizedPeopleList extends StatelessWidget {
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
-            child: AnimatedScale(
-              scale: 1.0,
-              duration: const Duration(milliseconds: 200),
-              child: Card(
-                elevation: 2,
-                child: RecognizedPersonListTile(
-                  trackedFace: trackedFace,
-                  onTap: onPersonSelected == null
-                      ? null
-                      : () => onPersonSelected!(trackedFace),
-                ),
-              ),
+            child: RecognizedPersonListTile(
+              trackedFace: trackedFace,
+              onTap: widget.onPersonSelected == null
+                  ? null
+                  : () => widget.onPersonSelected!(trackedFace),
+              isSelectedForMerge: _selectedForMerge == trackedFace.id,
+              onMergePressed: () => setState(() {
+                _selectedForMerge =
+                    _selectedForMerge == trackedFace.id ? null : trackedFace.id;
+              }),
+              onMergeWith: _selectedForMerge != null &&
+                      _selectedForMerge != trackedFace.id
+                  ? () {
+                      manager.mergeFaces(_selectedForMerge!, trackedFace.id);
+                      setState(() => _selectedForMerge = null);
+                    }
+                  : null,
             ),
           );
         },
