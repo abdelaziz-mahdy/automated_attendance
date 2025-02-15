@@ -10,7 +10,6 @@ class TrackedFace {
   DateTime? lastSeen;
   String? lastSeenProvider;
   Uint8List? thumbnail;
-  List<TrackedFace> mergedFaces = [];
 
   TrackedFace({
     required this.id,
@@ -24,14 +23,5 @@ class TrackedFace {
 
   void setName(String newName) {
     name = newName;
-  }
-
-  List<Uint8List> get allThumbnails {
-    final thumbnails = <Uint8List>[];
-    if (thumbnail != null) thumbnails.add(thumbnail!);
-    for (var face in mergedFaces) {
-      if (face.thumbnail != null) thumbnails.add(face.thumbnail!);
-    }
-    return thumbnails;
   }
 }

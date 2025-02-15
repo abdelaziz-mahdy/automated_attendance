@@ -259,24 +259,6 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
-  void mergeFaces(String targetId, String sourceId) {
-    if (!trackedFaces.containsKey(targetId) ||
-        !trackedFaces.containsKey(sourceId)) {
-      return;
-    }
-
-    final targetFace = trackedFaces[targetId]!;
-    final sourceFace = trackedFaces[sourceId]!;
-
-    // Add source face to target's merged faces
-    targetFace.mergedFaces.add(sourceFace);
-
-    // Remove the source face from tracked faces
-    trackedFaces.remove(sourceId);
-
-    notifyListeners();
-  }
-
   @override
   void dispose() {
     _faceFeaturesStreamController.close();
