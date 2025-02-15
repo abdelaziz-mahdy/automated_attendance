@@ -6,17 +6,10 @@ import 'package:automated_attendance/widgets/recognized_person_list_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-class RecognizedPeopleList extends StatefulWidget {
+class RecognizedPeopleList extends StatelessWidget {
   final Function(TrackedFace)? onPersonSelected;
 
   const RecognizedPeopleList({super.key, required this.onPersonSelected});
-
-  @override
-  State<RecognizedPeopleList> createState() => _RecognizedPeopleListState();
-}
-
-class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
-  String? _selectedForMerge;
 
   @override
   Widget build(BuildContext context) {
@@ -67,66 +60,21 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
           final personEntry = recognizedPeople[index];
           final trackedFace = personEntry.value;
 
-          return Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: AnimatedScale(
+              scale: 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: Card(
+                elevation: 2,
                 child: RecognizedPersonListTile(
                   trackedFace: trackedFace,
-                  onTap: widget.onPersonSelected == null
+                  onTap: onPersonSelected == null
                       ? null
-                      : () => widget.onPersonSelected!(trackedFace),
+                      : () => onPersonSelected!(trackedFace),
                 ),
               ),
-              if (_selectedForMerge != null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Material(
-                    borderRadius: BorderRadius.circular(20),
-                    elevation: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _selectedForMerge == trackedFace.id
-                            ? Colors.blue.shade100
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: _selectedForMerge == trackedFace.id
-                          ? TextButton.icon(
-                              icon: const Icon(Icons.close),
-                              label: const Text('Cancel'),
-                              onPressed: () =>
-                                  setState(() => _selectedForMerge = null),
-                            )
-                          : TextButton.icon(
-                              icon: const Icon(Icons.merge),
-                              label: const Text('Merge Here'),
-                              onPressed: () {
-                                manager.mergeFaces(
-                                    _selectedForMerge!, trackedFace.id);
-                                setState(() => _selectedForMerge = null);
-                              },
-                            ),
-                    ),
-                  ),
-                ),
-              if (_selectedForMerge == null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: const Icon(Icons.merge),
-                    onPressed: () =>
-                        setState(() => _selectedForMerge = trackedFace.id),
-                    tooltip: 'Merge with another face',
-                  ),
-                ),
-            ],
+            ),
           );
         },
         childCount: recognizedPeople.length,

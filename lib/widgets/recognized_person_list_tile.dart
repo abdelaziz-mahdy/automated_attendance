@@ -59,178 +59,54 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
                 ]
               : null,
         ),
-        child: Column(
-          children: [
-            InkWell(
-              onTap: widget.onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildThumbnailsSection(),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildNameField(),
-                          const SizedBox(height: 8),
-                          _buildInfoSection(),
-                          if (widget.trackedFace.mergedFaces.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                'Merged faces: ${widget.trackedFace.mergedFaces.length}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (widget.onTap != null) _buildNavigationIcon(),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThumbnailsSection() {
-    final allThumbnails = widget.trackedFace.allThumbnails;
-    if (allThumbnails.isEmpty) {
-      return _buildEmptyThumbnail();
-    }
-
-    return Row(
-      children: [
-        // Main thumbnail
-        Hero(
-          tag: 'face_${widget.trackedFace.id}',
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.blue.shade100,
-                width: 2,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Stack(
-                children: [
-                  Image.memory(
-                    allThumbnails.first,
-                    width: 120,
-                    height: 120,
-                    fit: BoxFit.cover,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildThumbnail(),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildNameField(),
+                      const SizedBox(height: 8),
+                      _buildInfoSection(),
+                    ],
                   ),
-                  if (widget.trackedFace.mergedFaces.isNotEmpty)
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '+${widget.trackedFace.mergedFaces.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+                if (widget.onTap != null) _buildNavigationIcon(),
+              ],
             ),
           ),
         ),
-        // Merged thumbnails
-        if (allThumbnails.length > 1) ...[
-          const SizedBox(width: 8),
-          SizedBox(
-            height: 120,
-            width: 120,
-            child: ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.white,
-                    Colors.white.withOpacity(0.0),
-                  ],
-                  stops: const [0.8, 1.0],
-                ).createShader(bounds);
-              },
-              blendMode: BlendMode.dstOut,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: allThumbnails.length - 1,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: Image.memory(
-                          allThumbnails[index + 1],
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 
-  Widget _buildEmptyThumbnail() {
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.grey.shade200,
-          width: 2,
+  Widget _buildThumbnail() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
         ),
-        color: Colors.grey.shade100,
-      ),
-      child: Icon(
-        Icons.person,
-        size: 60,
-        color: Colors.grey.shade400,
+        child: widget.trackedFace.thumbnail != null
+            ? Image.memory(
+                widget.trackedFace.thumbnail!,
+                fit: BoxFit.cover,
+              )
+            : Icon(
+                Icons.person,
+                size: 60,
+                color: Colors.grey.shade400,
+              ),
       ),
     );
   }
