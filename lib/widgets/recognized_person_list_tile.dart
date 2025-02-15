@@ -104,62 +104,133 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
   }
 
   Widget _buildThumbnailsSection() {
-    final thumbnails = widget.trackedFace.allThumbnails;
-    if (thumbnails.isEmpty) {
+    final allThumbnails = widget.trackedFace.allThumbnails;
+    if (allThumbnails.isEmpty) {
       return _buildEmptyThumbnail();
     }
 
-    return SizedBox(
-      width: 250, // Fixed width for thumbnail section
-      height: 120,
-      child: ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.white,
-              Colors.white.withOpacity(0.0),
-            ],
-            stops: const [0.9, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstOut,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: thumbnails
-                .map((thumbnail) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
+    return Row(
+      children: [
+        // Main thumbnail
+        Hero(
+          tag: 'face_${widget.trackedFace.id}',
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.blue.shade100,
+                width: 2,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Stack(
+                children: [
+                  Image.memory(
+                    allThumbnails.first,
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
+                  ),
+                  if (widget.trackedFace.mergedFaces.isNotEmpty)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '+${widget.trackedFace.mergedFaces.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Merged thumbnails
+        if (allThumbnails.length > 1) ...[
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 120,
+            width: 120,
+            child: ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.white,
+                    Colors.white.withOpacity(0.0),
+                  ],
+                  stops: const [0.8, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstOut,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: allThumbnails.length - 1,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: Colors.grey.shade300,
+                          width: 1,
+                        ),
+                      ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(3),
                         child: Image.memory(
-                          thumbnail,
-                          width: 120,
-                          height: 120,
+                          allThumbnails[index + 1],
                           fit: BoxFit.cover,
                         ),
                       ),
-                    ))
-                .toList(),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 
   Widget _buildEmptyThumbnail() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 120,
-        height: 120,
-        color: Colors.grey.shade100,
-        child: Icon(
-          Icons.person,
-          size: 60,
-          color: Colors.grey.shade400,
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.grey.shade200,
+          width: 2,
         ),
+        color: Colors.grey.shade100,
+      ),
+      child: Icon(
+        Icons.person,
+        size: 60,
+        color: Colors.grey.shade400,
       ),
     );
   }
