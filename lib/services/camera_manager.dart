@@ -215,11 +215,25 @@ class CameraManager extends ChangeNotifier {
       final trackedFace = entry.value; // Now a TrackedFace object
       final trackedFeatures = trackedFace.features;
 
-      final isSimilar = _faceComparisonService.areFeaturesSimilar(
+      bool isSimilar = _faceComparisonService.areFeaturesSimilar(
         features,
         trackedFeatures,
       );
 
+      // Check merged faces if not similar
+      if (!isSimilar && trackedFace.mergedFaces.isNotEmpty) {
+        for (final mergedFace in trackedFace.mergedFaces) {
+          final mergedFeatures = mergedFace.features;
+          if (_faceComparisonService.areFeaturesSimilar(
+            features,
+            mergedFeatures,
+          )) {
+            isSimilar = true;
+            break;
+          }
+        }
+      }
+      // Update last seen time and provider if similar
       if (isSimilar) {
         trackedFace.firstSeen ??= DateTime.now();
         trackedFace.lastSeen = DateTime.now();
