@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
+import 'package:automated_attendance/database/faces_repository.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
@@ -8,13 +9,7 @@ import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// lib/isolate/frame_processor_isolate.dart
-// For compute()
-// lib/isolate/frame_processor_manager.dart
-
-/// This is the long-running isolate’s entry point.
-/// It first sends back its SendPort so that the main isolate can communicate with it,
-/// then listens for incoming messages.
+import 'package:uuid/uuid.dart';
 
 class CameraManager extends ChangeNotifier {
   final DiscoveryService _discoveryService = DiscoveryService();
@@ -27,6 +22,10 @@ class CameraManager extends ChangeNotifier {
       StreamController.broadcast();
   final List<Uint8List> capturedFaces = [];
   final Map<String, TrackedFace> trackedFaces = {};
+  final Uuid _uuid = Uuid();
+
+  // Database repository
+  final FacesRepository _facesRepository = FacesRepository();
 
   bool _isListening = false;
   late SharedPreferences _prefs;
@@ -34,6 +33,7 @@ class CameraManager extends ChangeNotifier {
   late int _maxFaces;
   bool _useIsolates = true;
   bool get useIsolates => _useIsolates;
+  bool _dataLoaded = false; // Flag to track if data has been loaded from DB
 
   Stream<List<double>> get faceFeaturesStream =>
       _faceFeaturesStreamController.stream;
@@ -46,7 +46,34 @@ class CameraManager extends ChangeNotifier {
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();
     _maxFaces = _prefs.getInt('maxFaces') ?? 10; // Default max faces
+
+    // Load tracked faces from database
+    await _loadTrackedFacesFromDatabase();
+
     notifyListeners();
+  }
+
+  // Load tracked faces from the database
+  Future<void> _loadTrackedFacesFromDatabase() async {
+    if (_dataLoaded) return;
+
+    try {
+      final loadedFaces = await _facesRepository.loadAllTrackedFaces();
+      trackedFaces.addAll(loadedFaces);
+      _dataLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading tracked faces from database: $e');
+    }
+  }
+
+  // Save a tracked face to the database
+  Future<void> _saveTrackedFaceToDatabase(TrackedFace face) async {
+    try {
+      await _facesRepository.saveTrackedFace(face);
+    } catch (e) {
+      debugPrint('Error saving tracked face to database: $e');
+    }
   }
 
   // Update settings and restart frame polling
@@ -61,7 +88,7 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-// Update the flag (e.g., from a settings dialog)
+  // Update the flag (e.g., from a settings dialog)
   Future<void> updateUseIsolates(bool value) async {
     if (_useIsolates == value) return;
     _useIsolates = value;
@@ -72,6 +99,11 @@ class CameraManager extends ChangeNotifier {
   Future<void> startListening() async {
     if (_isListening) return;
     _isListening = true;
+
+    // Make sure tracked faces are loaded
+    if (!_dataLoaded) {
+      await _loadTrackedFacesFromDatabase();
+    }
 
     await _discoveryService.startDiscovery(serviceType: '_camera._tcp');
     _discoveryService.discoveryStream.listen(_onServiceDiscovered);
@@ -117,7 +149,7 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  // NEW: Schedule the next polling for a provider based on its dynamic FPS.
+  // Schedule the next polling for a provider based on its dynamic FPS.
   void _scheduleNextPolling(ICameraProvider provider, String address) {
     if (!_isListening || !activeProviders.containsKey(address)) return;
     final currentFps = _providerFps[address] ?? _fps;
@@ -128,7 +160,7 @@ class CameraManager extends ChangeNotifier {
     });
   }
 
-  // NEW: Poll a single frame, adjust dynamic FPS and reschedule polling.
+  // Poll a single frame, adjust dynamic FPS and reschedule polling.
   Future<void> _pollFramesOnceDynamic(
       ICameraProvider provider, String address) async {
     final frameStartTime = DateTime.now();
@@ -177,7 +209,7 @@ class CameraManager extends ChangeNotifier {
     _scheduleNextPolling(provider, address);
   }
 
-  // Modified: Restart dynamic frame polling with updated FPS values.
+  // Restart dynamic frame polling with updated FPS values.
   void _restartFramePolling() {
     for (final address in activeProviders.keys) {
       _pollTimers[address]?.cancel();
@@ -211,8 +243,7 @@ class CameraManager extends ChangeNotifier {
     bool isKnownFace = false;
 
     for (final entry in trackedFaces.entries) {
-      // final trackedId = entry.key;
-      final trackedFace = entry.value; // Now a TrackedFace object
+      final trackedFace = entry.value;
       final trackedFeatures = trackedFace.features;
 
       bool isSimilar = _faceComparisonService.areFeaturesSimilar(
@@ -239,13 +270,18 @@ class CameraManager extends ChangeNotifier {
         trackedFace.lastSeen = DateTime.now();
         trackedFace.lastSeenProvider = providerAddress;
         isKnownFace = true;
+
+        // Save the updated face to database
+        _saveTrackedFaceToDatabase(trackedFace);
+
         notifyListeners();
         break;
       }
     }
 
     if (!isKnownFace) {
-      final newFaceId = "face_${trackedFaces.length + 1}";
+      // Generate a truly unique ID using UUID
+      final newFaceId = "face_${_uuid.v4()}";
       final newTrackedFace = TrackedFace(
         id: newFaceId,
         features: features,
@@ -257,18 +293,26 @@ class CameraManager extends ChangeNotifier {
       );
 
       trackedFaces[newFaceId] = newTrackedFace;
+
+      // Save the new face to database
+      _saveTrackedFaceToDatabase(newTrackedFace);
+
       notifyListeners();
     }
   }
 
   Uint8List? getLastFrame(String address) => _lastFrames[address];
 
-  // NEW: Getter to retrieve the current FPS for a provider.
+  // Getter to retrieve the current FPS for a provider.
   int getProviderFps(String address) => _providerFps[address] ?? _fps;
 
   void updateTrackedFaceName(String faceId, String newName) {
     if (trackedFaces.containsKey(faceId)) {
       trackedFaces[faceId]!.setName(newName);
+
+      // Update the name in the database
+      _facesRepository.updateFaceName(faceId, newName);
+
       notifyListeners();
     }
   }
@@ -288,7 +332,22 @@ class CameraManager extends ChangeNotifier {
     // Remove the source face from tracked faces
     trackedFaces.remove(sourceId);
 
+    // Update the database to reflect the merge
+    _facesRepository.mergeFaces(targetId, sourceId);
+
     notifyListeners();
+  }
+
+  // Delete a tracked face from memory and database
+  Future<void> deleteTrackedFace(String faceId) async {
+    if (trackedFaces.containsKey(faceId)) {
+      trackedFaces.remove(faceId);
+
+      // Delete from database
+      await _facesRepository.deleteFace(faceId);
+
+      notifyListeners();
+    }
   }
 
   @override

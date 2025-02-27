@@ -1,0 +1,184 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:automated_attendance/database/database.dart';
+import 'package:automated_attendance/database/database_provider.dart';
+import 'package:automated_attendance/models/tracked_face.dart';
+// import 'package:automated_attendance/models/tracked_face.dart';
+import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
+
+/// Repository to handle tracked faces persistence using Drift database
+class FacesRepository {
+  final DatabaseProvider _databaseProvider = DatabaseProvider();
+  final Uuid _uuid = Uuid();
+
+  /// Loads all tracked faces from the database
+  Future<Map<String, TrackedFace>> loadAllTrackedFaces() async {
+    final database = await _databaseProvider.database;
+    final trackedFacesMap = <String, TrackedFace>{};
+
+    // Load all tracked faces
+    final dbFaces = await database.getAllTrackedFaces();
+    for (final dbFace in dbFaces) {
+      // Convert blob to List<double> features
+      final List<double> features = _blobToFeatures(dbFace.features);
+
+      // Create the tracked face model
+      final trackedFace = TrackedFace(
+        id: dbFace.id,
+        features: features,
+        name: dbFace.name ?? dbFace.id,
+        firstSeen: dbFace.firstSeen,
+        lastSeen: dbFace.lastSeen,
+        lastSeenProvider: dbFace.lastSeenProvider,
+        thumbnail: dbFace.thumbnail,
+      );
+
+      // Load merged faces for this tracked face
+      final mergedDbFaces = await database.getMergedFacesForTarget(dbFace.id);
+      for (final mergedDbFace in mergedDbFaces) {
+        final List<double> mergedFeatures =
+            _blobToFeatures(mergedDbFace.features);
+
+        final mergedFace = TrackedFace(
+          id: mergedDbFace.sourceId,
+          features: mergedFeatures,
+          name: trackedFace.name, // Inherit the name from target face
+          firstSeen: mergedDbFace.firstSeen,
+          lastSeen: mergedDbFace.lastSeen,
+          lastSeenProvider: '', // Not storing this info for merged faces
+          thumbnail: mergedDbFace.thumbnail,
+        );
+
+        trackedFace.mergedFaces.add(mergedFace);
+      }
+
+      trackedFacesMap[dbFace.id] = trackedFace;
+    }
+
+    return trackedFacesMap;
+  }
+
+  /// Save a tracked face to the database
+  Future<void> saveTrackedFace(TrackedFace face) async {
+    final database = await _databaseProvider.database;
+
+    // Convert features to blob
+    final blob = _featuresToBlob(face.features);
+
+    // Create companion object for insertion/update
+    final companion = DBTrackedFacesCompanion(
+      id: Value(face.id),
+      name: Value(face.name),
+      features: Value(blob),
+      thumbnail: Value(face.thumbnail),
+      firstSeen: Value(face.firstSeen),
+      lastSeen: Value(face.lastSeen),
+      lastSeenProvider: Value(face.lastSeenProvider),
+    );
+
+    // Check if face already exists
+    final existingFace = await database.getTrackedFaceById(face.id);
+    if (existingFace == null) {
+      await database.insertTrackedFace(companion);
+    } else {
+      await database.updateTrackedFace(companion);
+    }
+
+    // Save merged faces as well
+    for (final mergedFace in face.mergedFaces) {
+      await saveMergedFace(mergedFace, face.id);
+    }
+  }
+
+  /// Save a merged face to the database
+  Future<void> saveMergedFace(TrackedFace mergedFace, String targetId) async {
+    final database = await _databaseProvider.database;
+
+    // Convert features to blob
+    final blob = _featuresToBlob(mergedFace.features);
+
+    // Create companion object for insertion
+    final companion = DBMergedFacesCompanion(
+      id: Value(_uuid.v4()), // Generate a unique ID for the relationship
+      targetId: Value(targetId),
+      sourceId: Value(mergedFace.id),
+      features: Value(blob),
+      thumbnail: Value(mergedFace.thumbnail),
+      firstSeen: Value(mergedFace.firstSeen),
+      lastSeen: Value(mergedFace.lastSeen),
+    );
+
+    await database.insertMergedFace(companion);
+  }
+
+  /// Merge two faces in the database
+  Future<void> mergeFaces(String targetId, String sourceId) async {
+    final database = await _databaseProvider.database;
+
+    // Get the source face
+    final sourceFace = await database.getTrackedFaceById(sourceId);
+    if (sourceFace == null) return;
+
+    // Save it as a merged face
+    final companion = DBMergedFacesCompanion(
+      id: Value(_uuid.v4()),
+      targetId: Value(targetId),
+      sourceId: Value(sourceId),
+      features: Value(sourceFace.features),
+      thumbnail: Value(sourceFace.thumbnail),
+      firstSeen: Value(sourceFace.firstSeen),
+      lastSeen: Value(sourceFace.lastSeen),
+    );
+
+    await database.insertMergedFace(companion);
+
+    // Delete the source face from tracked faces
+    await database.deleteTrackedFace(sourceId);
+  }
+
+  /// Update the name of a face
+  Future<void> updateFaceName(String faceId, String newName) async {
+    final database = await _databaseProvider.database;
+    final face = await database.getTrackedFaceById(faceId);
+    if (face == null) return;
+
+    final companion = DBTrackedFacesCompanion(
+      id: Value(faceId),
+      name: Value(newName),
+      features: Value(face.features),
+      thumbnail: Value(face.thumbnail),
+      firstSeen: Value(face.firstSeen),
+      lastSeen: Value(face.lastSeen),
+      lastSeenProvider: Value(face.lastSeenProvider),
+    );
+
+    await database.updateTrackedFace(companion);
+  }
+
+  /// Delete a tracked face and all its merged faces
+  Future<void> deleteFace(String faceId) async {
+    final database = await _databaseProvider.database;
+
+    // Delete all merged faces for this target
+    final mergedFaces = await database.getMergedFacesForTarget(faceId);
+    for (final mergedFace in mergedFaces) {
+      await database.deleteMergedFace(mergedFace.sourceId);
+    }
+
+    // Delete the face itself
+    await database.deleteTrackedFace(faceId);
+  }
+
+  // Helper methods to convert between List<double> and Blob
+  Uint8List _featuresToBlob(List<double> features) {
+    final byteData = features.map((e) => e.toString()).join(',');
+    return Uint8List.fromList(utf8.encode(byteData));
+  }
+
+  List<double> _blobToFeatures(Uint8List blob) {
+    final str = utf8.decode(blob);
+    return str.split(',').map((e) => double.parse(e)).toList();
+  }
+}
