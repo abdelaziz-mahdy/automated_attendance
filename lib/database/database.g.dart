@@ -804,12 +804,18 @@ abstract class _$FacesDatabase extends GeneratedDatabase {
   $FacesDatabaseManager get managers => $FacesDatabaseManager(this);
   late final $DBTrackedFacesTable dBTrackedFaces = $DBTrackedFacesTable(this);
   late final $DBMergedFacesTable dBMergedFaces = $DBMergedFacesTable(this);
+  late final Index faceNameIdx = Index('face_name_idx',
+      'CREATE INDEX face_name_idx ON d_b_tracked_faces (name)');
+  late final Index targetIdIdx = Index('target_id_idx',
+      'CREATE INDEX target_id_idx ON d_b_merged_faces (target_id)');
+  late final Index sourceIdIdx = Index('source_id_idx',
+      'CREATE INDEX source_id_idx ON d_b_merged_faces (source_id)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [dBTrackedFaces, dBMergedFaces];
+      [dBTrackedFaces, dBMergedFaces, faceNameIdx, targetIdIdx, sourceIdIdx];
 }
 
 typedef $$DBTrackedFacesTableCreateCompanionBuilder = DBTrackedFacesCompanion

@@ -53,6 +53,7 @@ class FacesDatabase extends _$FacesDatabase {
 }
 
 // The TrackedFaces table definition
+@TableIndex(name: 'face_name_idx', columns: {#name})
 class DBTrackedFaces extends Table {
   TextColumn get id => text()();
   TextColumn get name => text().nullable()();
@@ -67,6 +68,8 @@ class DBTrackedFaces extends Table {
 }
 
 // The MergedFaces table definition to maintain relationships between merged faces
+@TableIndex(name: 'target_id_idx', columns: {#targetId})
+@TableIndex(name: 'source_id_idx', columns: {#sourceId})
 class DBMergedFaces extends Table {
   TextColumn get id => text()();
   TextColumn get targetId => text().references(DBTrackedFaces, #id)();
@@ -80,11 +83,4 @@ class DBMergedFaces extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
-
-  // Additional indices for faster queries
-  @override
-  List<Index> get indexes => [
-        Index('target_id_idx', targetId),
-        Index('source_id_idx', sourceId),
-      ];
 }
