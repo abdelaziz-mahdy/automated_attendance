@@ -5,6 +5,7 @@ import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:automated_attendance/views/data_center_pages/person_visits_view.dart';
 
 class RecognizedPersonListTile extends StatefulWidget {
   final TrackedFace trackedFace;
@@ -108,6 +109,18 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
     );
   }
 
+  void _openVisitHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PersonVisitsView(
+          faceId: widget.trackedFace.id,
+          personName: widget.trackedFace.name,
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuickActions() {
     return Row(
       children: [
@@ -147,6 +160,13 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
               tooltip: 'Edit name',
             ),
           ],
+
+          // Visit history button
+          IconButton(
+            onPressed: _openVisitHistory,
+            icon: const Icon(Icons.history),
+            tooltip: 'View visit history',
+          ),
 
           // Delete button
           IconButton(
@@ -358,6 +378,29 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             Icons.camera,
             'Provider: ${widget.trackedFace.lastSeenProvider!}',
           ),
+        // Add visit history button as part of the info section
+        InkWell(
+          onTap: _openVisitHistory,
+          child: Row(
+            children: [
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.blue.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'View detailed visit history',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

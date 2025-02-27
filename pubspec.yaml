@@ -48,7 +48,9 @@ dependencies:
   drift: ^2.25.1
   sqlite3_flutter_libs: ^0.5.31
   path: ^1.9.1
-  fl_chart: ^0.66.2
+  fl_chart: ^0.70.2
+  table_calendar: ^3.0.9
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

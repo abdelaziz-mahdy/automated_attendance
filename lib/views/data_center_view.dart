@@ -16,7 +16,6 @@ class DataCenterView extends StatefulWidget {
 }
 
 class _DataCenterViewState extends State<DataCenterView> {
-  // Removed SingleTickerProviderStateMixin
   int _selectedIndex = 0; // Track selected index for NavigationRail
 
   // Settings variables
@@ -202,15 +201,6 @@ class _DataCenterViewState extends State<DataCenterView> {
                       ],
                     ),
                   ),
-                  // // DETAILS PANEL (Conditionally shown for Recognized People)
-                  // if (_selectedIndex == 2 &&
-                  //     _selectedPersonDetails !=
-                  //         null) // Show details only for People tab
-                  //   Expanded(
-                  //     flex: 1, // Details panel takes less space
-                  //     child:
-                  //         PersonDetailsPanel(person: _selectedPersonDetails!),
-                  //   ),
                 ],
               ),
             ),
