@@ -2,6 +2,7 @@
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/views/data_center_pages/active_providers_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/captured_faces_grid.dart';
+import 'package:automated_attendance/views/data_center_pages/face_analytics_page.dart';
 import 'package:automated_attendance/views/data_center_pages/recognized_people_list.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -143,6 +144,11 @@ class _DataCenterViewState extends State<DataCenterView> {
                   selectedIcon: Icon(Icons.people),
                   label: Text('People'),
                 ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.analytics_outlined),
+                  selectedIcon: Icon(Icons.analytics),
+                  label: Text('Analytics'),
+                ),
               ],
               trailing: Expanded(
                 // Add extra buttons at the bottom of the rail
@@ -184,13 +190,15 @@ class _DataCenterViewState extends State<DataCenterView> {
                     child: IndexedStack(
                       // Using IndexedStack instead of TabBarView
                       index: _selectedIndex,
-                      children: [
+                      children: const [
                         // Tab 1: Active Providers
                         ActiveProvidersGrid(),
                         // Tab 2: Captured Faces
                         CapturedFacesGrid(),
                         // Tab 3: Recognized People
                         RecognizedPeopleList(onPersonSelected: null),
+                        // Tab 4: Analytics (NEW)
+                        FaceAnalyticsPage(),
                       ],
                     ),
                   ),

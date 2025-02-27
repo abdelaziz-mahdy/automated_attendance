@@ -3,14 +3,29 @@ import 'package:drift/drift.dart';
 part 'database.g.dart';
 
 // This annotation tells drift to prepare a database class that uses both tables
-@DriftDatabase(tables: [DBTrackedFaces, DBMergedFaces])
+@DriftDatabase(tables: [DBTrackedFaces, DBMergedFaces, DBVisits])
 class FacesDatabase extends _$FacesDatabase {
   // We tell the database where to store the data with this constructor
   FacesDatabase(QueryExecutor e) : super(e);
 
   // You should bump this number whenever you change or add a table definition
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) {
+        return m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 2) {
+          // Add the new visits table
+          await m.createTable(dBVisits);
+        }
+      },
+    );
+  }
 
   // Helper methods to query the database
   Future<List<DBTrackedFace>> getAllTrackedFaces() {
@@ -50,6 +65,30 @@ class FacesDatabase extends _$FacesDatabase {
           ..where((tbl) => tbl.sourceId.equals(sourceId)))
         .go();
   }
+
+  // Visits methods
+  Future<List<DBVisit>> getVisits() => select(dBVisits).get();
+  Future<List<DBVisit>> getVisitsForFace(String faceId) =>
+      (select(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).get();
+  Future<List<DBVisit>> getVisitsInDateRange(DateTime start, DateTime end) =>
+      (select(dBVisits)
+        ..where((tbl) => tbl.entryTime.isBiggerThanValue(start))
+        ..where((tbl) => tbl.entryTime.isSmallerOrEqualValue(end))
+      ).get();
+  Future<void> insertVisit(DBVisitsCompanion visit) =>
+      into(dBVisits).insert(visit, mode: InsertMode.insertOrReplace);
+  Future<void> updateVisit(DBVisitsCompanion visit) =>
+      update(dBVisits).replace(visit);
+  Future<void> deleteVisitsForFace(String faceId) =>
+      (delete(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).go();
+  
+  // Query for active visits (no exit time recorded)
+  Future<List<DBVisit>> getActiveVisits() =>
+      (select(dBVisits)..where((tbl) => tbl.exitTime.isNull())).get();
+  
+  // Query for visits by provider
+  Future<List<DBVisit>> getVisitsByProvider(String providerId) =>
+      (select(dBVisits)..where((tbl) => tbl.providerId.equals(providerId))).get();
 }
 
 // The TrackedFaces table definition
@@ -81,6 +120,20 @@ class DBMergedFaces extends Table {
   DateTimeColumn get firstSeen => dateTime().nullable()();
   DateTimeColumn get lastSeen => dateTime().nullable()();
 
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// New table to track individual visits/appearances
+@DataClassName('DBVisit')
+class DBVisits extends Table {
+  TextColumn get id => text()(); // Visit ID
+  TextColumn get faceId => text().nullable()(); // Reference to tracked face
+  DateTimeColumn get entryTime => dateTime()(); // When the face entered
+  DateTimeColumn get exitTime => dateTime().nullable()(); // When the face exited (null if still present)
+  TextColumn get providerId => text()(); // Provider that detected the face
+  IntColumn get durationSeconds => integer().nullable()(); // Duration in seconds (calculated on exit)
+  
   @override
   Set<Column> get primaryKey => {id};
 }
