@@ -8,6 +8,7 @@ import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 // lib/isolate/frame_processor_isolate.dart
 // For compute()
 // lib/isolate/frame_processor_manager.dart
@@ -27,6 +28,7 @@ class CameraManager extends ChangeNotifier {
       StreamController.broadcast();
   final List<Uint8List> capturedFaces = [];
   final Map<String, TrackedFace> trackedFaces = {};
+  final Uuid _uuid = Uuid();
 
   bool _isListening = false;
   late SharedPreferences _prefs;
@@ -245,7 +247,8 @@ class CameraManager extends ChangeNotifier {
     }
 
     if (!isKnownFace) {
-      final newFaceId = "face_${trackedFaces.length + 1}";
+      // Generate a truly unique ID using UUID
+      final newFaceId = "face_${_uuid.v4()}";
       final newTrackedFace = TrackedFace(
         id: newFaceId,
         features: features,
