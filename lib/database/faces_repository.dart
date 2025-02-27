@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:automated_attendance/database/database.dart';
 import 'package:automated_attendance/database/database_provider.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-// import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -86,9 +85,22 @@ class FacesRepository {
       await database.updateTrackedFace(companion);
     }
 
+    // Remove any existing merged faces for this target (will readd them below)
+    await removeMergedFacesForTarget(face.id);
+
     // Save merged faces as well
     for (final mergedFace in face.mergedFaces) {
       await saveMergedFace(mergedFace, face.id);
+    }
+  }
+
+  /// Remove all merged faces associated with a target ID
+  Future<void> removeMergedFacesForTarget(String targetId) async {
+    final database = await _databaseProvider.database;
+    // Delete existing merged faces for this target
+    final mergedFaces = await database.getMergedFacesForTarget(targetId);
+    for (final mergedFace in mergedFaces) {
+      await database.deleteMergedFace(mergedFace.sourceId);
     }
   }
 
@@ -162,13 +174,36 @@ class FacesRepository {
     final database = await _databaseProvider.database;
 
     // Delete all merged faces for this target
-    final mergedFaces = await database.getMergedFacesForTarget(faceId);
-    for (final mergedFace in mergedFaces) {
-      await database.deleteMergedFace(mergedFace.sourceId);
-    }
+    await removeMergedFacesForTarget(faceId);
 
     // Delete the face itself
     await database.deleteTrackedFace(faceId);
+  }
+
+  /// Restore a merged face as a separate tracked face
+  Future<void> restoreMergedFace(
+      String targetId, TrackedFace mergedFace) async {
+    final database = await _databaseProvider.database;
+
+    // Convert features to blob
+    final blob = _featuresToBlob(mergedFace.features);
+
+    // Create companion object for insertion as a new tracked face
+    final trackedFaceCompanion = DBTrackedFacesCompanion(
+      id: Value(mergedFace.id),
+      name: Value(mergedFace.name),
+      features: Value(blob),
+      thumbnail: Value(mergedFace.thumbnail),
+      firstSeen: Value(mergedFace.firstSeen),
+      lastSeen: Value(mergedFace.lastSeen),
+      lastSeenProvider: Value(mergedFace.lastSeenProvider),
+    );
+
+    // Insert as a new tracked face
+    await database.insertTrackedFace(trackedFaceCompanion);
+
+    // Delete from merged faces
+    await database.deleteMergedFace(mergedFace.id);
   }
 
   // Helper methods to convert between List<double> and Blob

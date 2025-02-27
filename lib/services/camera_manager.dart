@@ -350,6 +350,37 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
+  /// Split a merged face from its parent and restore it as a separate tracked face
+  Future<void> splitMergedFace(
+      String parentId, String mergedFaceId, int mergedFaceIndex) async {
+    if (!trackedFaces.containsKey(parentId) ||
+        mergedFaceIndex >= trackedFaces[parentId]!.mergedFaces.length) {
+      return;
+    }
+
+    final parentFace = trackedFaces[parentId]!;
+    final mergedFace = parentFace.mergedFaces[mergedFaceIndex];
+
+    // Remove from parent's merged faces list
+    parentFace.mergedFaces.removeAt(mergedFaceIndex);
+
+    // Add as a new tracked face
+    trackedFaces[mergedFace.id] = mergedFace;
+
+    // Update database - remove from merged faces and add as tracked face
+    try {
+      // First add the face as a new tracked face
+      await _facesRepository.saveTrackedFace(mergedFace);
+
+      // Then update the parent face to reflect removal of the merged face
+      await _facesRepository.saveTrackedFace(parentFace);
+    } catch (e) {
+      debugPrint('Error splitting merged face in database: $e');
+    }
+
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _faceFeaturesStreamController.close();
