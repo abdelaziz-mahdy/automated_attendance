@@ -23,7 +23,7 @@ class CameraManager extends ChangeNotifier {
   final List<Uint8List> capturedFaces = [];
   final Map<String, TrackedFace> trackedFaces = {};
   final Uuid _uuid = Uuid();
-  
+
   // Track active visits (faceId -> visitId)
   final Map<String, String> _activeVisits = {};
 
@@ -312,7 +312,7 @@ class CameraManager extends ChangeNotifier {
 
         // Save the updated face to database
         _saveTrackedFaceToDatabase(trackedFace);
-        
+
         // Handle visit tracking
         _handleFaceVisit(trackedFace.id, providerAddress, now);
 
@@ -339,37 +339,38 @@ class CameraManager extends ChangeNotifier {
 
       // Save the new face to database
       _saveTrackedFaceToDatabase(newTrackedFace);
-      
+
       // Create a new visit record
       _handleFaceVisit(newFaceId, providerAddress, now);
 
       notifyListeners();
     }
   }
-  
+
   // Handle visit tracking for a face
-  Future<void> _handleFaceVisit(String faceId, String providerAddress, DateTime timestamp) async {
+  Future<void> _handleFaceVisit(
+      String faceId, String providerAddress, DateTime timestamp) async {
     try {
       // If there's no active visit for this face, create one
       if (!_activeVisits.containsKey(faceId)) {
         // Create a new visit
         final visitId = "visit_${_uuid.v4()}";
         await _facesRepository.createVisit(
-          id: visitId,
-          faceId: faceId,
-          providerId: providerAddress,
-          entryTime: timestamp
-        );
+            id: visitId,
+            faceId: faceId,
+            providerId: providerAddress,
+            entryTime: timestamp);
         _activeVisits[faceId] = visitId;
       } else {
         // Otherwise update the last seen time of the existing visit
-        await _facesRepository.updateVisitLastSeen(_activeVisits[faceId]!, timestamp);
+        await _facesRepository.updateVisitLastSeen(
+            _activeVisits[faceId]!, timestamp);
       }
     } catch (e) {
       debugPrint('Error handling visit for face $faceId: $e');
     }
   }
-  
+
   // Close a visit for a specific face (called when face is no longer seen)
   Future<void> _closeVisit(String faceId, DateTime exitTime) async {
     final visitId = _activeVisits[faceId];
@@ -378,25 +379,25 @@ class CameraManager extends ChangeNotifier {
       _activeVisits.remove(faceId);
     }
   }
-  
+
   // Close visits for faces not seen in the last timeoutMinutes minutes
   Future<void> cleanupInactiveVisits(int timeoutMinutes) async {
     final now = DateTime.now();
     final List<String> facesToClose = [];
-    
+
     for (var entry in trackedFaces.entries) {
       final face = entry.value;
-      if (face.lastSeen != null && 
+      if (face.lastSeen != null &&
           _activeVisits.containsKey(face.id) &&
           now.difference(face.lastSeen!).inMinutes > timeoutMinutes) {
         facesToClose.add(face.id);
       }
     }
-    
+
     for (var faceId in facesToClose) {
       await _closeVisit(faceId, now);
     }
-    
+
     if (facesToClose.isNotEmpty) {
       notifyListeners();
     }
@@ -426,7 +427,7 @@ class CameraManager extends ChangeNotifier {
 
     final targetFace = trackedFaces[targetId]!;
     final sourceFace = trackedFaces[sourceId]!;
-    
+
     // Close any active visit for the source face
     if (_activeVisits.containsKey(sourceId)) {
       _closeVisit(sourceId, DateTime.now());
@@ -451,12 +452,12 @@ class CameraManager extends ChangeNotifier {
       if (_activeVisits.containsKey(faceId)) {
         await _closeVisit(faceId, DateTime.now());
       }
-      
+
       trackedFaces.remove(faceId);
 
       // Delete from database
       await _facesRepository.deleteFace(faceId);
-      
+
       // Delete all visits for this face
       await _facesRepository.deleteVisitsForFace(faceId);
 
@@ -494,22 +495,20 @@ class CameraManager extends ChangeNotifier {
 
     notifyListeners();
   }
-  
+
   // Get visit statistics for analytics
-  Future<Map<String, dynamic>> getVisitStatistics({
-    DateTime? startDate, 
-    DateTime? endDate, 
-    String? providerId,
-    String? faceId
-  }) async {
+  Future<Map<String, dynamic>> getVisitStatistics(
+      {DateTime? startDate,
+      DateTime? endDate,
+      String? providerId,
+      String? faceId}) async {
     return await _facesRepository.getVisitStatistics(
-      startDate: startDate,
-      endDate: endDate,
-      providerId: providerId,
-      faceId: faceId
-    );
+        startDate: startDate,
+        endDate: endDate,
+        providerId: providerId,
+        faceId: faceId);
   }
-  
+
   // Get all visits for a face
   Future<List<Map<String, dynamic>>> getVisitsForFace(String faceId) async {
     return await _facesRepository.getVisitDetailsForFace(faceId);
@@ -517,14 +516,12 @@ class CameraManager extends ChangeNotifier {
 
   // Timer to periodically check and close inactive visits
   Timer? _inactiveVisitsTimer;
-  
+
   void startInactiveVisitsCleanup() {
     // Check every minute for inactive visits (faces not seen for 5 minutes)
     _inactiveVisitsTimer?.cancel();
     _inactiveVisitsTimer = Timer.periodic(
-      const Duration(minutes: 1), 
-      (_) => cleanupInactiveVisits(5)
-    );
+        const Duration(minutes: 1), (_) => cleanupInactiveVisits(5));
   }
 
   @override

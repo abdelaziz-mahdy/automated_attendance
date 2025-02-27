@@ -72,23 +72,24 @@ class FacesDatabase extends _$FacesDatabase {
       (select(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).get();
   Future<List<DBVisit>> getVisitsInDateRange(DateTime start, DateTime end) =>
       (select(dBVisits)
-        ..where((tbl) => tbl.entryTime.isBiggerThanValue(start))
-        ..where((tbl) => tbl.entryTime.isSmallerOrEqualValue(end))
-      ).get();
+            ..where((tbl) => tbl.entryTime.isBiggerThanValue(start))
+            ..where((tbl) => tbl.entryTime.isSmallerOrEqualValue(end)))
+          .get();
   Future<void> insertVisit(DBVisitsCompanion visit) =>
       into(dBVisits).insert(visit, mode: InsertMode.insertOrReplace);
   Future<void> updateVisit(DBVisitsCompanion visit) =>
       update(dBVisits).replace(visit);
   Future<void> deleteVisitsForFace(String faceId) =>
       (delete(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).go();
-  
+
   // Query for active visits (no exit time recorded)
   Future<List<DBVisit>> getActiveVisits() =>
       (select(dBVisits)..where((tbl) => tbl.exitTime.isNull())).get();
-  
+
   // Query for visits by provider
   Future<List<DBVisit>> getVisitsByProvider(String providerId) =>
-      (select(dBVisits)..where((tbl) => tbl.providerId.equals(providerId))).get();
+      (select(dBVisits)..where((tbl) => tbl.providerId.equals(providerId)))
+          .get();
 }
 
 // The TrackedFaces table definition
@@ -130,10 +131,12 @@ class DBVisits extends Table {
   TextColumn get id => text()(); // Visit ID
   TextColumn get faceId => text().nullable()(); // Reference to tracked face
   DateTimeColumn get entryTime => dateTime()(); // When the face entered
-  DateTimeColumn get exitTime => dateTime().nullable()(); // When the face exited (null if still present)
+  DateTimeColumn get exitTime =>
+      dateTime().nullable()(); // When the face exited (null if still present)
   TextColumn get providerId => text()(); // Provider that detected the face
-  IntColumn get durationSeconds => integer().nullable()(); // Duration in seconds (calculated on exit)
-  
+  IntColumn get durationSeconds =>
+      integer().nullable()(); // Duration in seconds (calculated on exit)
+
   @override
   Set<Column> get primaryKey => {id};
 }

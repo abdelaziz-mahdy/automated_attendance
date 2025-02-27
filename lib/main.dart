@@ -87,16 +87,16 @@ class MyApp extends StatelessWidget {
           useMaterial3: true,
         ),
         routes: {
-        '/': (context) => CameraSourceSelectionView(),
-        '/dataCenter': (context) => MultiProvider(
-              providers: [
-                ChangeNotifierProvider<CameraManager>(
-                  create: (_) => CameraManager()..startListening(),
-                ),
-              ],
-              child: DataCenterView(),
-            ),
-        '/requestLogsPage': (context) => RequestLogsPage(),
+          '/': (context) => CameraSourceSelectionView(),
+          '/dataCenter': (context) => MultiProvider(
+                providers: [
+                  ChangeNotifierProvider<CameraManager>(
+                    create: (_) => CameraManager()..startListening(),
+                  ),
+                ],
+                child: DataCenterView(),
+              ),
+          '/requestLogsPage': (context) => RequestLogsPage(),
         },
       ),
     );
