@@ -72,6 +72,7 @@ class CameraManager extends ChangeNotifier {
       trackedFaces.clear();
       trackedFaces.addAll(loadedFaces);
       _dataLoaded = true;
+      notifyListeners(); // Notify after complete refresh
     } catch (e) {
       debugPrint('Error loading tracked faces from database: $e');
     }
@@ -87,6 +88,7 @@ class CameraManager extends ChangeNotifier {
         // Face was deleted from database, remove from memory too
         trackedFaces.remove(faceId);
       }
+      notifyListeners(); // Always notify after updating a face
     } catch (e) {
       debugPrint('Error refreshing face $faceId from database: $e');
     }
@@ -124,7 +126,7 @@ class CameraManager extends ChangeNotifier {
 
     _pendingFaceRefreshes.clear();
     _batchOperationsScheduled = false;
-    notifyListeners();
+    // No need for notifyListeners here as _refreshFaceFromDatabase already does it
   }
 
   // Load active visits from the database and update tracking
@@ -500,18 +502,17 @@ class CameraManager extends ChangeNotifier {
       // Update database first in a transaction
       await _facesRepository.mergeFaces(targetId, sourceId);
 
-      // Explicitly remove the source face from memory to ensure UI updates properly
+      // Clear the source face from memory immediately to avoid UI confusion
       trackedFaces.remove(sourceId);
 
-      // Then refresh the target face to get the updated merged faces
+      // Then refresh the target face from database to ensure it has all updates
       await _refreshFaceFromDatabase(targetId);
 
-      // Or alternatively, refresh all faces to ensure complete consistency
-      // await _refreshAllFacesFromDatabase();
-
-      notifyListeners();
+      // No need for notifyListeners here as _refreshFaceFromDatabase already does it
     } catch (e) {
       debugPrint('Error merging faces: $e');
+      // If there was an error, do a full refresh to ensure consistent state
+      await _refreshAllFacesFromDatabase();
     }
   }
 
@@ -533,11 +534,15 @@ class CameraManager extends ChangeNotifier {
 
       // Remove from memory after successful database operations
       trackedFaces.remove(faceId);
+
+      // Important: Notify here as we're not calling _refreshFaceFromDatabase
       notifyListeners();
 
       return true;
     } catch (e) {
       debugPrint('Error deleting tracked face $faceId: $e');
+      // If there was an error, do a full refresh to ensure consistent state
+      await _refreshAllFacesFromDatabase();
       return false;
     }
   }
@@ -552,25 +557,30 @@ class CameraManager extends ChangeNotifier {
     }
 
     final parentFace = trackedFaces[parentId]!;
+
+    // Safety check to ensure index is valid
+    if (mergedFaceIndex < 0 ||
+        mergedFaceIndex >= parentFace.mergedFaces.length) {
+      return false;
+    }
+
     final mergedFace = parentFace.mergedFaces[mergedFaceIndex];
 
     try {
       // Database operations first
       await _facesRepository.restoreMergedFace(parentId, mergedFace);
 
-      // Refresh the parent face to reflect removal of the merged face
+      // Important: Don't update memory directly, instead refresh from database
+      // Refresh both affected faces
       await _refreshFaceFromDatabase(parentId);
-      
-      // Make sure the restored face is in the tracked faces map
-      trackedFaces[mergedFace.id] = mergedFace;
-      
-      // Then refresh it to ensure it has the latest data from the database
       await _refreshFaceFromDatabase(mergedFace.id);
 
-      notifyListeners();
+      // No need for notifyListeners here as _refreshFaceFromDatabase already does it
       return true;
     } catch (e) {
       debugPrint('Error splitting merged face: $e');
+      // If there was an error, do a full refresh to ensure consistent state
+      await _refreshAllFacesFromDatabase();
       return false;
     }
   }

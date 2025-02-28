@@ -65,8 +65,9 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: () =>
-                                    setState(() => _selectedForMerge = null),
+                                onPressed: () {
+                                  setState(() => _selectedForMerge = null);
+                                },
                                 tooltip: 'Cancel merge',
                                 color: Colors.blue.shade700,
                               ),
@@ -89,6 +90,7 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
   }
 
   Widget _buildContent(BuildContext context, CameraManager manager) {
+    // Get tracked faces from manager - always from the latest state
     final trackedFaces = manager.trackedFaces;
 
     if (trackedFaces.isEmpty) {
@@ -101,9 +103,11 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
       );
     }
 
+    // Filter recognized people - stable sort by name for consistent UI
     final recognizedPeople = trackedFaces.entries
         .where((entry) => entry.value.firstSeen != null)
-        .toList();
+        .toList()
+      ..sort((a, b) => a.value.name.compareTo(b.value.name));
 
     if (recognizedPeople.isEmpty) {
       return SliverFillRemaining(
@@ -129,6 +133,8 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
           final trackedFace = personEntry.value;
 
           return RecognizedPersonGridCard(
+            key: Key(
+                'tracked-face-${trackedFace.id}'), // Use stable keys for Flutter to track widgets
             trackedFace: trackedFace,
             onTap: widget.onPersonSelected == null
                 ? null
@@ -159,11 +165,11 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
                               ? trackedFace.id
                               : selectedFace.id;
 
-                          // Perform the merge operation
-                          manager.mergeFaces(keepFaceId, sourceId);
-
-                          // Reset the selection
+                          // Reset selection state before the potentially long operation
                           setState(() => _selectedForMerge = null);
+
+                          // Perform the merge operation - this will update the UI via notifyListeners
+                          await manager.mergeFaces(keepFaceId, sourceId);
                         }
                       }
                     : null,
