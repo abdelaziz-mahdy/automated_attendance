@@ -374,9 +374,9 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
                   itemBuilder: (context, index) {
                     final face = filteredFaces[index];
                     return ListTile(
-                      leading: face['imageUrl'] != null
+                      leading: face['thumbnail'] != null
                           ? CircleAvatar(
-                              backgroundImage: NetworkImage(face['imageUrl']),
+                              backgroundImage: MemoryImage(face['thumbnail']),
                             )
                           : const CircleAvatar(child: Icon(Icons.face)),
                       title: Text(face['name'] ?? 'Unknown'),

@@ -767,19 +767,11 @@ class CameraManager extends ChangeNotifier {
     final List<Map<String, dynamic>> facesList = [];
 
     for (final face in trackedFaces.values) {
-      // Create a base64 thumbnail URL if the face has a thumbnail
-      String? imageUrl;
-      if (face.thumbnail != null) {
-        final bytes = face.thumbnail!;
-        final base64Image = base64Encode(bytes);
-        imageUrl = 'data:image/jpeg;base64,$base64Image';
-      }
-
       // Add face data to the list
       facesList.add({
         'id': face.id,
         'name': face.name,
-        'imageUrl': imageUrl,
+        'thumbnail': face.thumbnail,
         'lastSeen': face.lastSeen?.toIso8601String(),
         'firstSeen': face.firstSeen?.toIso8601String(),
         'lastSeenProvider': face.lastSeenProvider,
