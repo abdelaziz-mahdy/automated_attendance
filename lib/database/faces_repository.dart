@@ -133,7 +133,26 @@ class FacesRepository {
     final sourceFace = await database.getTrackedFaceById(sourceId);
     if (sourceFace == null) return;
 
-    // Save it as a merged face
+    // Get all merged faces of the source face
+    final sourceMergedFaces = await database.getMergedFacesForTarget(sourceId);
+    
+    // Transfer all merged faces from source to target
+    for (final mergedFace in sourceMergedFaces) {
+      // Create a new merged face entry pointing to the target
+      final transferCompanion = DBMergedFacesCompanion(
+        id: Value(_uuid.v4()),
+        targetId: Value(targetId), // Now points to the new target
+        sourceId: Value(mergedFace.sourceId), // Keep original source ID
+        features: Value(mergedFace.features),
+        thumbnail: Value(mergedFace.thumbnail),
+        firstSeen: Value(mergedFace.firstSeen),
+        lastSeen: Value(mergedFace.lastSeen),
+      );
+      
+      await database.insertMergedFace(transferCompanion);
+    }
+
+    // Save the source face itself as a merged face under the target
     final companion = DBMergedFacesCompanion(
       id: Value(_uuid.v4()),
       targetId: Value(targetId),
@@ -146,6 +165,9 @@ class FacesRepository {
 
     await database.insertMergedFace(companion);
 
+    // Delete all merged faces associated with the source face
+    await removeMergedFacesForTarget(sourceId);
+    
     // Delete the source face from tracked faces
     await database.deleteTrackedFace(sourceId);
 

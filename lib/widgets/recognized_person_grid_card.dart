@@ -122,7 +122,11 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
           );
         },
       ),
-    );
+    ).then((_) {
+      // When the bottom sheet is closed, refresh the UI to ensure
+      // merged face counts are correctly displayed
+      setState(() {});
+    });
   }
 
   void _showSimilarFaces() {
@@ -278,8 +282,35 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
               Navigator.pop(context);
               final manager =
                   Provider.of<CameraManager>(context, listen: false);
-              manager.splitMergedFace(
-                  widget.trackedFace.id, mergedFace.id, index);
+              manager
+                  .splitMergedFace(widget.trackedFace.id, mergedFace.id, index)
+                  .then((success) {
+                if (success) {
+                  setState(() {
+                    // Update the state immediately to reflect the change
+                    // Check if our local widget state needs refresh
+                    _isShowingDetails =
+                        widget.trackedFace.mergedFaces.isNotEmpty;
+                  });
+
+                  // If no more merged faces, close the bottom sheet
+                  if (widget.trackedFace.mergedFaces.isEmpty) {
+                    if (context.mounted) {
+                      Navigator.pop(context); // Close merged faces view
+                    }
+                  }
+                  if (context.mounted) {
+                    // Show a confirmation snackbar
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Face successfully split from the group'),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              });
             },
             child: const Text('Split'),
           ),

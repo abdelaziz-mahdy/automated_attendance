@@ -30,15 +30,15 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSimilarFaces());
   }
 
-  void _loadSimilarFaces() {
+  void _loadSimilarFaces() async {
     setState(() {
       _isLoading = true;
     });
 
     final cameraManager = Provider.of<CameraManager>(context, listen: false);
     _similarFaces =
-        cameraManager.findSimilarFaces(widget.faceId, limit: _matchLimit);
-
+       await  cameraManager.findSimilarFaces(widget.faceId, limit: _matchLimit);
+    debugPrint('Found ${_similarFaces.length} similar faces');
     setState(() {
       _isLoading = false;
     });

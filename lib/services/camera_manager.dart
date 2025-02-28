@@ -486,7 +486,7 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
-  // Merge faces - updated to use DB as source of truth
+  // Merge faces - updated to handle faces that already have merged faces
   Future<void> mergeFaces(String targetId, String sourceId) async {
     if (!trackedFaces.containsKey(targetId) ||
         !trackedFaces.containsKey(sourceId)) {
@@ -494,18 +494,31 @@ class CameraManager extends ChangeNotifier {
     }
 
     try {
+      // Get both faces to check if they have merged faces
+      final targetFace = trackedFaces[targetId]!;
+      final sourceFace = trackedFaces[sourceId]!;
+
+      // Log the merge operation for debugging
+      debugPrint('Merging face $sourceId into $targetId');
+      debugPrint(
+          'Target face has ${targetFace.mergedFaces.length} merged faces');
+      debugPrint(
+          'Source face has ${sourceFace.mergedFaces.length} merged faces');
+
       // First close any active visit for the source face
       if (_activeVisits.containsKey(sourceId)) {
         await _closeVisit(sourceId, DateTime.now());
       }
 
       // Update database first in a transaction
+      // The repository should handle transferring all nested merged faces
       await _facesRepository.mergeFaces(targetId, sourceId);
 
       // Clear the source face from memory immediately to avoid UI confusion
       trackedFaces.remove(sourceId);
 
       // Then refresh the target face from database to ensure it has all updates
+      // This will include all merged faces from both the source and target
       await _refreshFaceFromDatabase(targetId);
 
       // No need for notifyListeners here as _refreshFaceFromDatabase already does it
@@ -621,8 +634,23 @@ class CameraManager extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Ensures that face data is loaded before proceeding
+  Future<void> ensureDataLoaded() async {
+    if (!_dataLoaded) {
+      debugPrint('Face data not loaded yet, loading now...');
+      await _refreshAllFacesFromDatabase();
+    }
+  }
+
   /// Find faces similar to the given face, sorted by similarity score (highest first)
-  List<FaceMatch> findSimilarFaces(String faceId, {int limit = 5}) {
+  Future<List<FaceMatch>> findSimilarFaces(String faceId,
+      {int limit = 5}) async {
+    debugPrint(
+        'Finding similar faces for $faceId with limit $limit with tracked faces: ${trackedFaces.length}');
+
+    // Ensure data is loaded before proceeding
+    await ensureDataLoaded();
+
     if (!trackedFaces.containsKey(faceId)) {
       return [];
     }
@@ -635,26 +663,24 @@ class CameraManager extends ChangeNotifier {
       if (entry.key == faceId) continue;
 
       final candidateFace = entry.value;
+      double highestSimilarityScore = 0;
+      double bestCosineDistance = 0;
+      double bestNormL2Distance = 0;
 
-      // Calculate similarity scores
+      // Calculate similarity with main candidate face
       final (cosineDistance, normL2Distance) =
           _faceComparisonService.getConfidence(
         targetFace.features,
         candidateFace.features,
       );
 
-      // Convert cosine similarity to percentage (higher is better)
-      // Cosine distance is already between 0-1, with 1 being identical
-      // We map to 0-100 scale for percentage display
+      // Convert cosine similarity to percentage
       double similarityScore = cosineDistance * 100;
 
-      matches.add(FaceMatch(
-        id: candidateFace.id,
-        face: candidateFace,
-        similarityScore: similarityScore,
-        cosineDistance: cosineDistance,
-        normL2Distance: normL2Distance,
-      ));
+      // Initialize with main face scores
+      highestSimilarityScore = similarityScore;
+      bestCosineDistance = cosineDistance;
+      bestNormL2Distance = normL2Distance;
 
       // Also check merged faces for the candidate
       for (var mergedFace in candidateFace.mergedFaces) {
@@ -666,14 +692,22 @@ class CameraManager extends ChangeNotifier {
 
         double mergedSimilarityScore = mergedCosine * 100;
 
-        matches.add(FaceMatch(
-          id: mergedFace.id,
-          face: mergedFace,
-          similarityScore: mergedSimilarityScore,
-          cosineDistance: mergedCosine,
-          normL2Distance: mergedNormL2,
-        ));
+        // Update if this merged face has higher similarity
+        if (mergedSimilarityScore > highestSimilarityScore) {
+          highestSimilarityScore = mergedSimilarityScore;
+          bestCosineDistance = mergedCosine;
+          bestNormL2Distance = mergedNormL2;
+        }
       }
+
+      // Add the candidate once with the highest score found
+      matches.add(FaceMatch(
+        id: candidateFace.id,
+        face: candidateFace,
+        similarityScore: highestSimilarityScore,
+        cosineDistance: bestCosineDistance,
+        normL2Distance: bestNormL2Distance,
+      ));
     }
 
     // Sort by similarity score (highest first)
@@ -683,8 +717,12 @@ class CameraManager extends ChangeNotifier {
     return matches.take(limit).toList();
   }
 
-// Checks if two faces are likely to be the same person
-  bool areFacesLikelyTheSamePerson(String faceId1, String faceId2) {
+  // Checks if two faces are likely to be the same person
+  Future<bool> areFacesLikelyTheSamePerson(
+      String faceId1, String faceId2) async {
+    // Ensure data is loaded before proceeding
+    await ensureDataLoaded();
+
     if (!trackedFaces.containsKey(faceId1) ||
         !trackedFaces.containsKey(faceId2)) {
       return false;
@@ -697,8 +735,11 @@ class CameraManager extends ChangeNotifier {
         face1.features, face2.features);
   }
 
-// Get similarity score between two faces as a percentage
-  double getFaceSimilarityScore(String faceId1, String faceId2) {
+  // Get similarity score between two faces as a percentage
+  Future<double> getFaceSimilarityScore(String faceId1, String faceId2) async {
+    // Ensure data is loaded before proceeding
+    await ensureDataLoaded();
+
     if (!trackedFaces.containsKey(faceId1) ||
         !trackedFaces.containsKey(faceId2)) {
       return 0.0;
