@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/camera_providers/remote_camera_provider.dart';
 import 'package:automated_attendance/database/faces_repository.dart';
@@ -11,6 +12,7 @@ import 'package:automated_attendance/isolate/frame_processor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
 
 class CameraManager extends ChangeNotifier {
   final DiscoveryService _discoveryService = DiscoveryService();
@@ -755,5 +757,40 @@ class CameraManager extends ChangeNotifier {
 
     // Convert to percentage
     return cosineDistance * 100;
+  }
+
+  /// Returns a list of all available faces for filtering
+  Future<List<Map<String, dynamic>>> getAvailableFaces() async {
+    // Ensure data is loaded before proceeding
+    await ensureDataLoaded();
+
+    final List<Map<String, dynamic>> facesList = [];
+
+    for (final face in trackedFaces.values) {
+      // Create a base64 thumbnail URL if the face has a thumbnail
+      String? imageUrl;
+      if (face.thumbnail != null) {
+        final bytes = face.thumbnail!;
+        final base64Image = base64Encode(bytes);
+        imageUrl = 'data:image/jpeg;base64,$base64Image';
+      }
+
+      // Add face data to the list
+      facesList.add({
+        'id': face.id,
+        'name': face.name,
+        'imageUrl': imageUrl,
+        'lastSeen': face.lastSeen?.toIso8601String(),
+        'firstSeen': face.firstSeen?.toIso8601String(),
+        'lastSeenProvider': face.lastSeenProvider,
+        'visitCount': await _facesRepository.getVisitCountForFace(face.id),
+      });
+    }
+
+    // Sort by name for easier discovery
+    facesList
+        .sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+
+    return facesList;
   }
 }

@@ -135,7 +135,7 @@ class FacesRepository {
 
     // Get all merged faces of the source face
     final sourceMergedFaces = await database.getMergedFacesForTarget(sourceId);
-    
+
     // Transfer all merged faces from source to target
     for (final mergedFace in sourceMergedFaces) {
       // Create a new merged face entry pointing to the target
@@ -148,7 +148,7 @@ class FacesRepository {
         firstSeen: Value(mergedFace.firstSeen),
         lastSeen: Value(mergedFace.lastSeen),
       );
-      
+
       await database.insertMergedFace(transferCompanion);
     }
 
@@ -167,7 +167,7 @@ class FacesRepository {
 
     // Delete all merged faces associated with the source face
     await removeMergedFacesForTarget(sourceId);
-    
+
     // Delete the source face from tracked faces
     await database.deleteTrackedFace(sourceId);
 
@@ -523,5 +523,16 @@ class FacesRepository {
     );
 
     await database.updateTrackedFace(companion);
+  }
+
+  /// Get the number of visits for a specific face
+  Future<int> getVisitCountForFace(String faceId) async {
+    final database = await _databaseProvider.database;
+
+    final query = database.select(database.dBVisits)
+      ..where((tbl) => tbl.faceId.equals(faceId));
+
+    final visits = await query.get();
+    return visits.length;
   }
 }

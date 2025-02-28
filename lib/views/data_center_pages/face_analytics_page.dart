@@ -1,9 +1,12 @@
+import 'dart:math' as Math;
+
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'dart:async';
 
 class FaceAnalyticsPage extends StatefulWidget {
   const FaceAnalyticsPage({super.key});
@@ -12,7 +15,8 @@ class FaceAnalyticsPage extends StatefulWidget {
   State<FaceAnalyticsPage> createState() => _FaceAnalyticsPageState();
 }
 
-class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
+class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
+    with AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
   Map<String, dynamic> _statistics = {};
   DateTimeRange _dateRange = DateTimeRange(
@@ -22,6 +26,16 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
   String? _selectedProviderId;
   bool _ignoreTouch = false;
 
+  // Timer for periodic updates
+  Timer? _updateTimer;
+  DateTime _lastUpdated = DateTime.now();
+
+  // Face filtering variables
+  String? _selectedFaceId;
+  String _searchQuery = '';
+  List<Map<String, dynamic>> _availableFaces = [];
+  bool _isSearching = false;
+
   // Calendar view related variables
   bool _showCalendarView = false;
   DateTime _focusedDay = DateTime.now();
@@ -30,9 +44,58 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
   Map<DateTime, List<dynamic>> _eventsMap = {};
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
     _loadStatistics();
+    _startPeriodicUpdates();
+
+    // Load available faces
+    _loadAvailableFaces();
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This will update data when the widget becomes visible again
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshIfNeeded();
+    });
+  }
+
+  void _startPeriodicUpdates() {
+    // Update every 3 minutes
+    _updateTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
+      if (mounted) {
+        _loadStatistics();
+      }
+    });
+  }
+
+  void _refreshIfNeeded() {
+    // If it's been more than 2 minutes since last update, refresh
+    if (DateTime.now().difference(_lastUpdated).inMinutes > 2) {
+      _loadStatistics();
+    }
+  }
+
+  Future<void> _loadAvailableFaces() async {
+    final manager = Provider.of<CameraManager>(context, listen: false);
+    final faces = await manager.getAvailableFaces();
+
+    if (mounted) {
+      setState(() {
+        _availableFaces = faces;
+      });
+    }
   }
 
   Future<void> _loadStatistics() async {
@@ -45,11 +108,13 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
       startDate: _dateRange.start,
       endDate: _dateRange.end,
       providerId: _selectedProviderId,
+      faceId: _selectedFaceId,
     );
 
     setState(() {
       _statistics = stats;
       _isLoading = false;
+      _lastUpdated = DateTime.now();
       _generateEventsMap();
     });
   }
@@ -114,6 +179,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -135,21 +201,21 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
                 children: [
                   _buildDateRangeSelector(),
                   const SizedBox(height: 16),
+                  _buildLastUpdatedInfo(),
+                  const SizedBox(height: 16),
+                  _buildFaceFilterSection(),
+                  const SizedBox(height: 16),
                   _buildViewToggle(),
                   const SizedBox(height: 16),
                   _buildProviderSelector(),
                   const SizedBox(height: 24),
                   _buildStatCards(),
                   const SizedBox(height: 24),
-                  _showCalendarView
-                      ? _buildCalendarView()
-                      : Column(
-                          children: [
-                            _buildDailyVisitsChart(),
-                            const SizedBox(height: 24),
-                            _buildHourlyDistributionChart(),
-                          ],
-                        ),
+                  _buildDailyVisitsChart(),
+                  const SizedBox(height: 24),
+                  _buildHourlyDistributionChart(),
+                  const SizedBox(height: 32),
+                  _buildCalendarViewSection(),
                 ],
               ),
             ),
@@ -180,12 +246,185 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
     );
   }
 
+  Widget _buildLastUpdatedInfo() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        'Last updated: ${DateFormat('MMM dd, yyyy - HH:mm').format(_lastUpdated)}',
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 12,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFaceFilterSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Filter by Face',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search faces by name',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _searchQuery = '';
+                                _isSearching = false;
+                              });
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      _isSearching = value.isNotEmpty;
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: () {
+                _showFaceSelectionDialog();
+              },
+              child: const Text('Select Face'),
+            ),
+          ],
+        ),
+        if (_selectedFaceId != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Chip(
+              label: Text(_getFaceNameById(_selectedFaceId!)),
+              onDeleted: () {
+                setState(() {
+                  _selectedFaceId = null;
+                });
+                _loadStatistics();
+              },
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _getFaceNameById(String id) {
+    final face = _availableFaces.firstWhere(
+      (face) => face['id'] == id,
+      orElse: () => {'name': 'Unknown'},
+    );
+    return face['name'] ?? 'Unknown';
+  }
+
+  void _showFaceSelectionDialog() {
+    final filteredFaces = _searchQuery.isEmpty
+        ? _availableFaces
+        : _availableFaces
+            .where((face) => face['name']
+                .toString()
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
+            .toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select a Face'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: filteredFaces.isEmpty
+              ? const Center(child: Text('No faces found'))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: filteredFaces.length,
+                  itemBuilder: (context, index) {
+                    final face = filteredFaces[index];
+                    return ListTile(
+                      leading: face['imageUrl'] != null
+                          ? CircleAvatar(
+                              backgroundImage: NetworkImage(face['imageUrl']),
+                            )
+                          : const CircleAvatar(child: Icon(Icons.face)),
+                      title: Text(face['name'] ?? 'Unknown'),
+                      subtitle: Text('ID: ${face['id'] ?? 'N/A'}'),
+                      selected: _selectedFaceId == face['id'],
+                      onTap: () {
+                        setState(() {
+                          _selectedFaceId = face['id'];
+                          _searchQuery = '';
+                          _isSearching = false;
+                        });
+                        Navigator.pop(context);
+                        _loadStatistics();
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedFaceId = null;
+                _searchQuery = '';
+                _isSearching = false;
+              });
+              Navigator.pop(context);
+              _loadStatistics();
+            },
+            child: const Text('Clear Selection'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildViewToggle() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         const Text(
-          'Calendar View',
+          'Show Calendar Details',
           style: TextStyle(
             fontWeight: FontWeight.w500,
           ),
@@ -284,76 +523,243 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage> {
     );
   }
 
-  Widget _buildCalendarView() {
+  Widget _buildCalendarViewSection() {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Visit Calendar',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              IconButton(
+                icon: Icon(_showCalendarView
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down),
+                onPressed: () {
+                  setState(() {
+                    _showCalendarView = !_showCalendarView;
+                  });
+                },
+              ),
+            ],
+          ),
+          if (_showCalendarView) ...[
+            const SizedBox(height: 16),
+            _buildEnhancedCalendarView(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedCalendarView() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            _buildCalendarHeader(),
+            const SizedBox(height: 8),
+            TableCalendar(
+              firstDay: _dateRange.start.subtract(const Duration(days: 30)),
+              lastDay: _dateRange.end.add(const Duration(days: 30)),
+              focusedDay: _focusedDay,
+              calendarFormat: _calendarFormat,
+              selectedDayPredicate: (day) {
+                return isSameDay(_selectedDay, day);
+              },
+              eventLoader: _getEventsForDay,
+              startingDayOfWeek: StartingDayOfWeek.monday,
+              calendarStyle: CalendarStyle(
+                markersMaxCount: 4,
+                markerDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                markerSize: 8,
+                markersAnchor: 0.7,
+                todayDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                tableBorder: TableBorder(
+                  top: BorderSide(color: Colors.grey.shade200, width: 1),
+                  horizontalInside:
+                      BorderSide(color: Colors.grey.shade200, width: 1),
+                ),
+              ),
+              headerStyle: HeaderStyle(
+                formatButtonVisible: true,
+                formatButtonShowsNext: false,
+                titleCentered: true,
+                formatButtonDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onFormatChanged: (format) {
+                setState(() {
+                  _calendarFormat = format;
+                });
+              },
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+              },
+              onPageChanged: (focusedDay) {
+                setState(() {
+                  _focusedDay = focusedDay;
+                });
+              },
+            ),
+            const Divider(height: 32),
+            _buildSelectedDayVisits(),
+            if (_eventsMap.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildDailyVisitsList(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Calendar shows visits from ${DateFormat('MMM dd').format(_dateRange.start)} to ${DateFormat('MMM dd').format(_dateRange.end)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyVisitsList() {
+    final visitDays = _eventsMap.keys.toList()
+      ..sort((a, b) => b.compareTo(a)); // Sort by most recent
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Visit Calendar',
+        Text(
+          'Recent Visit Days',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
-        const SizedBox(height: 16),
-        Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+        const SizedBox(height: 8),
+        Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color:
+                Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TableCalendar(
-                  firstDay: _dateRange.start.subtract(const Duration(days: 1)),
-                  lastDay: _dateRange.end.add(const Duration(days: 1)),
-                  focusedDay: _focusedDay,
-                  calendarFormat: _calendarFormat,
-                  selectedDayPredicate: (day) {
-                    return isSameDay(_selectedDay, day);
-                  },
-                  eventLoader: _getEventsForDay,
-                  startingDayOfWeek: StartingDayOfWeek.monday,
-                  calendarStyle: CalendarStyle(
-                    markersMaxCount: 3,
-                    markerDecoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: Math.min(10, visitDays.length),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemBuilder: (context, index) {
+              final day = visitDays[index];
+              final events = _eventsMap[day] ?? [];
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedDay = day;
+                    _focusedDay = day;
+                  });
+                },
+                child: Container(
+                  width: 100,
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSameDay(_selectedDay, day)
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSameDay(_selectedDay, day)
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey.shade300,
                     ),
-                    todayDecoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    selectedDecoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  onFormatChanged: (format) {
-                    setState(() {
-                      _calendarFormat = format;
-                    });
-                  },
-                  onDaySelected: (selectedDay, focusedDay) {
-                    setState(() {
-                      _selectedDay = selectedDay;
-                      _focusedDay = focusedDay;
-                    });
-                  },
-                  onPageChanged: (focusedDay) {
-                    setState(() {
-                      _focusedDay = focusedDay;
-                    });
-                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        DateFormat('MMM dd').format(day),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isSameDay(_selectedDay, day)
+                              ? Colors.white
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${events.length} visits',
+                        style: TextStyle(
+                          color: isSameDay(_selectedDay, day)
+                              ? Colors.white
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      Icon(
+                        Icons.circle,
+                        size: 10,
+                        color: isSameDay(_selectedDay, day)
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.primary,
+                      ),
+                    ],
+                  ),
                 ),
-                const Divider(height: 32),
-                _buildSelectedDayVisits(),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ],
