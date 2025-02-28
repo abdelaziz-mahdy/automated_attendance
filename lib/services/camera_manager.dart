@@ -500,10 +500,15 @@ class CameraManager extends ChangeNotifier {
       // Update database first in a transaction
       await _facesRepository.mergeFaces(targetId, sourceId);
 
-      // Then refresh affected faces
+      // Explicitly remove the source face from memory to ensure UI updates properly
+      trackedFaces.remove(sourceId);
+
+      // Then refresh the target face to get the updated merged faces
       await _refreshFaceFromDatabase(targetId);
 
-      // Source face should no longer exist, so it will be removed during refresh
+      // Or alternatively, refresh all faces to ensure complete consistency
+      // await _refreshAllFacesFromDatabase();
+
       notifyListeners();
     } catch (e) {
       debugPrint('Error merging faces: $e');

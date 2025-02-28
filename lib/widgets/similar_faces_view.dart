@@ -1,6 +1,7 @@
 import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/utils/face_management_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -43,9 +44,9 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
     });
   }
 
-  void _mergeFaces(String targetId) {
+  void _mergeFaces(String targetId, String sourceId) {
     final cameraManager = Provider.of<CameraManager>(context, listen: false);
-    cameraManager.mergeFaces(targetId, widget.faceId);
+    cameraManager.mergeFaces(targetId, sourceId);
 
     if (widget.onMergeComplete != null) {
       widget.onMergeComplete!();
@@ -296,10 +297,10 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            // Merge button
+                            // Merge button with clearer label
                             OutlinedButton.icon(
                               icon: const Icon(Icons.merge_type, size: 16),
-                              label: const Text('Merge'),
+                              label: const Text('Choose Merge Direction'),
                               onPressed: () => _showMergeConfirmation(match),
                             ),
                           ],
@@ -347,162 +348,23 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
     return Colors.red.shade700; // Very low similarity
   }
 
-  void _showMergeConfirmation(FaceMatch match) {
+  void _showMergeConfirmation(FaceMatch match) async {
     final cameraManager = Provider.of<CameraManager>(context, listen: false);
     final currentFace = cameraManager.trackedFaces[widget.faceId]!;
     final matchFace = match.face;
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Merge Faces?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-                'Are you sure you want to merge "${currentFace.name}" into "${matchFace.name}"?'),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Current face thumbnail
-                Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.blue.shade300,
-                          width: 2,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: currentFace.allThumbnails.isNotEmpty
-                            ? Image.memory(
-                                currentFace.allThumbnails.first,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      currentFace.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                // Arrow
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.arrow_forward,
-                        color: Colors.blue.shade700,
-                        size: 32,
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getSimilarityColor(match.similarityScore)
-                              .withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _getSimilarityColor(match.similarityScore)
-                                .withOpacity(0.5),
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          _formatSimilarityPercentage(match.similarityScore),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _getSimilarityColor(match.similarityScore),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Target face thumbnail
-                Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.green.shade300,
-                          width: 2,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: matchFace.allThumbnails.isNotEmpty
-                            ? Image.memory(
-                                matchFace.allThumbnails.first,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      matchFace.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'This action will merge all data and visits from "${currentFace.name}" into "${matchFace.name}".',
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              _mergeFaces(match.face.id);
-              Navigator.pop(context);
-            },
-            child: const Text('Merge Faces'),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-            ),
-          ),
-        ],
-      ),
+    final keepFaceId = await FaceManagementDialogs.showMergeConfirmation(
+      context,
+      currentFace,
+      matchFace,
+      similarityScore: match.similarityScore,
     );
+
+    if (keepFaceId != null) {
+      final sourceId =
+          keepFaceId == currentFace.id ? matchFace.id : currentFace.id;
+
+      _mergeFaces(keepFaceId, sourceId);
+    }
   }
 }

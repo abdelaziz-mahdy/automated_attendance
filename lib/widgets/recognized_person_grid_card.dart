@@ -2,6 +2,7 @@
 
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/utils/face_management_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -37,11 +38,20 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   bool _isShowingDetails = false;
   bool _isEditing = false;
   bool _isShowingActions = false;
+  String?
+      _selectedForMerge; // Add this variable to track the selected face for merging
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.trackedFace.name);
+    
+    // Set _selectedForMerge from external sources when this widget is created for merging
+    if (widget.onMergeWith != null) {
+      // Find the currently selected face ID from the CameraManager
+      final cameraManager = Provider.of<CameraManager>(context, listen: false);
+      // We'll retrieve this from the parent widget later in the merge process
+    }
   }
 
   @override
@@ -58,31 +68,14 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
         .updateTrackedFaceName(widget.trackedFace.id, _nameController.text);
   }
 
-  void _showDeleteConfirmation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Face'),
-        content: Text(
-            'Are you sure you want to delete ${widget.trackedFace.name}? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(context);
-              final manager =
-                  Provider.of<CameraManager>(context, listen: false);
-              manager.deleteTrackedFace(widget.trackedFace.id);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  void _showDeleteConfirmation() async {
+    bool confirmed = await FaceManagementDialogs.showDeleteConfirmation(
+        context, widget.trackedFace);
+
+    if (confirmed) {
+      final manager = Provider.of<CameraManager>(context, listen: false);
+      manager.deleteTrackedFace(widget.trackedFace.id);
+    }
   }
 
   void _openMergedFacesView() {
@@ -305,6 +298,22 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
         ),
       ),
     );
+  }
+
+  void _mergeFaces(String targetId, String sourceId) {
+    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    cameraManager.mergeFaces(targetId, sourceId);
+  }
+
+  void _showMergeConfirmationWithSelected() async {
+    // Get the selected face ID from the parent widget via callback
+    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    
+    // The parent widget should pass the selected face ID through widget.onMergeWith
+    if (widget.onMergeWith != null) {
+      widget.onMergeWith!(); // Call the callback to trigger merge in parent
+      return;
+    }
   }
 
   @override
@@ -612,7 +621,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
             ),
           ),
 
-        // Merge target overlay
+        // Merge target overlay - Modified to use the direct callback
         if (widget.onMergeWith != null)
           Positioned.fill(
             child: Container(
@@ -640,11 +649,11 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: widget.onMergeWith,
+                    onPressed: widget.onMergeWith, // Use the direct callback
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade500,
                     ),
-                    child: const Text('Confirm Merge'),
+                    child: const Text('Merge'),
                   ),
                 ],
               ),
@@ -730,19 +739,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   }
 
   Widget _buildCardFooter() {
-    if (widget.onMergeWith != null) {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: FilledButton(
-          onPressed: widget.onMergeWith,
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.blue.shade500,
-          ),
-          child: const Text('Merge Here'),
-        ),
-      );
-    }
-
-    return const SizedBox(height: 0);
+    // Always return an empty SizedBox - no UI elements here
+    return const SizedBox.shrink();
   }
 }
