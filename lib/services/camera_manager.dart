@@ -558,8 +558,13 @@ class CameraManager extends ChangeNotifier {
       // Database operations first
       await _facesRepository.restoreMergedFace(parentId, mergedFace);
 
-      // Refresh both faces from database
+      // Refresh the parent face to reflect removal of the merged face
       await _refreshFaceFromDatabase(parentId);
+      
+      // Make sure the restored face is in the tracked faces map
+      trackedFaces[mergedFace.id] = mergedFace;
+      
+      // Then refresh it to ensure it has the latest data from the database
       await _refreshFaceFromDatabase(mergedFace.id);
 
       notifyListeners();

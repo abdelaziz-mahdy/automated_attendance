@@ -2,6 +2,7 @@
 
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/utils/face_management_dialogs.dart';
 import 'package:automated_attendance/widgets/recognized_person_grid_card.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -33,6 +34,50 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
       builder: (context, manager, child) {
         return CustomScrollView(
           slivers: [
+            // Add a header with X button when in merge mode
+            if (_selectedForMerge != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.merge_type,
+                                  color: Colors.blue.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Select another face to merge with the selected face',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () =>
+                                    setState(() => _selectedForMerge = null),
+                                tooltip: 'Cancel merge',
+                                color: Colors.blue.shade700,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             SliverPadding(
               padding: const EdgeInsets.all(16),
               sliver: _buildContent(context, manager),
@@ -95,9 +140,31 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
             }),
             onMergeWith:
                 _selectedForMerge != null && _selectedForMerge != trackedFace.id
-                    ? () {
-                        manager.mergeFaces(_selectedForMerge!, trackedFace.id);
-                        setState(() => _selectedForMerge = null);
+                    ? () async {
+                        // Get the selected face object
+                        final selectedFace =
+                            manager.trackedFaces[_selectedForMerge!]!;
+
+                        // Show the merge confirmation dialog
+                        final keepFaceId =
+                            await FaceManagementDialogs.showMergeConfirmation(
+                          context,
+                          selectedFace, // The previously selected face
+                          trackedFace, // The current face being viewed
+                        );
+
+                        if (keepFaceId != null) {
+                          // Determine which is source and which is target
+                          final sourceId = keepFaceId == selectedFace.id
+                              ? trackedFace.id
+                              : selectedFace.id;
+
+                          // Perform the merge operation
+                          manager.mergeFaces(keepFaceId, sourceId);
+
+                          // Reset the selection
+                          setState(() => _selectedForMerge = null);
+                        }
                       }
                     : null,
           );

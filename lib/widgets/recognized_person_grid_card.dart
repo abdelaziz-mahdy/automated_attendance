@@ -45,7 +45,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.trackedFace.name);
-    
+
     // Set _selectedForMerge from external sources when this widget is created for merging
     if (widget.onMergeWith != null) {
       // Find the currently selected face ID from the CameraManager
@@ -308,7 +308,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   void _showMergeConfirmationWithSelected() async {
     // Get the selected face ID from the parent widget via callback
     final cameraManager = Provider.of<CameraManager>(context, listen: false);
-    
+
     // The parent widget should pass the selected face ID through widget.onMergeWith
     if (widget.onMergeWith != null) {
       widget.onMergeWith!(); // Call the callback to trigger merge in parent
@@ -331,6 +331,8 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
             () {
               setState(() {
                 _isShowingDetails = !_isShowingDetails;
+                // Always show actions when details are shown
+                _isShowingActions = _isShowingDetails;
               });
             },
         child: AnimatedContainer(
@@ -360,6 +362,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
               _buildCardHeader(),
               Expanded(child: _buildCardContent()),
               if (_isShowingDetails) _buildCardDetails(),
+              // Always build footer but it will be empty when not showing details
               _buildCardFooter(),
             ],
           ),
@@ -481,8 +484,12 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
             ),
           ),
 
-        // Selection overlay if hovered
-        if (_isHovered && !_isShowingActions && !widget.isSelectedForMerge)
+        // Selection overlay if hovered - only show if not in merge mode and details aren't shown
+        if (_isHovered &&
+            !_isShowingActions &&
+            !widget.isSelectedForMerge &&
+            widget.onMergeWith == null &&
+            !_isShowingDetails)
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -493,18 +500,13 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // IconButton(
-                    //   icon: const Icon(Icons.visibility, color: Colors.white),
-                    //   onPressed: () => setState(() {
-                    //     _isShowingDetails = !_isShowingDetails;
-                    //     _isShowingActions = true;
-                    //   }),
-                    //   tooltip: 'Show details',
-                    // ),
                     IconButton(
                       icon: const Icon(Icons.more_horiz, color: Colors.white),
-                      onPressed: () => setState(() => _isShowingActions = true),
-                      tooltip: 'Show actions',
+                      onPressed: () => setState(() {
+                        _isShowingDetails = true;
+                        _isShowingActions = true;
+                      }),
+                      tooltip: 'Show details',
                     ),
                   ],
                 ),
@@ -512,76 +514,8 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
             ),
           ),
 
-        // Action buttons overlay if showing actions
-        if (_isShowingActions && !widget.isSelectedForMerge)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Close button in top-right corner
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () =>
-                          setState(() => _isShowingActions = false),
-                    ),
-                  ),
-                  const Spacer(),
-
-                  // Actions
-                  _buildActionButton(
-                    icon: Icons.history,
-                    label: 'Visit History',
-                    onPressed: _openVisitHistory,
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Find similar faces button
-                  _buildActionButton(
-                    icon: Icons.face,
-                    label: 'Find Similar Faces',
-                    onPressed: _showSimilarFaces,
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (widget.trackedFace.mergedFaces.isNotEmpty)
-                    _buildActionButton(
-                      icon: Icons.people,
-                      label: 'Merged Faces',
-                      onPressed: _openMergedFacesView,
-                    ),
-                  if (widget.trackedFace.mergedFaces.isNotEmpty)
-                    const SizedBox(height: 8),
-
-                  if (widget.onMergePressed != null)
-                    _buildActionButton(
-                      icon: Icons.merge,
-                      label: 'Merge',
-                      onPressed: widget.onMergePressed!,
-                    ),
-                  if (widget.onMergePressed != null) const SizedBox(height: 8),
-
-                  _buildActionButton(
-                    icon: Icons.delete_outline,
-                    label: 'Delete',
-                    onPressed: _showDeleteConfirmation,
-                    color: Colors.red,
-                  ),
-
-                  const Spacer(),
-                ],
-              ),
-            ),
-          ),
+        // Hide the action buttons overlay - we'll move these to the footer
+        // ...existing code (remove or comment out the action buttons overlay)...
 
         // Merge selection overlay
         if (widget.isSelectedForMerge)
@@ -638,22 +572,22 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                     color: Colors.green.shade700,
                     size: 40,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Merge into this face?',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.green.shade700,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  // const SizedBox(height: 8),
+                  // Text(
+                  //   'Merge With this Face',
+                  //   textAlign: TextAlign.center,
+                  //   style: TextStyle(
+                  //     color: Colors.green.shade700,
+                  //     fontWeight: FontWeight.bold,
+                  //   ),
+                  // ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: widget.onMergeWith, // Use the direct callback
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade500,
                     ),
-                    child: const Text('Merge'),
+                    child: const Text('Select Merge Direction'),
                   ),
                 ],
               ),
@@ -739,7 +673,72 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   }
 
   Widget _buildCardFooter() {
-    // Always return an empty SizedBox - no UI elements here
-    return const SizedBox.shrink();
+    // Only show actions in footer when details are showing and not in merge mode
+    if (!_isShowingDetails ||
+        widget.isSelectedForMerge ||
+        widget.onMergeWith != null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      color: Colors.grey.shade50,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Actions
+          _buildActionButton(
+            icon: Icons.history,
+            label: 'Visit History',
+            onPressed: _openVisitHistory,
+          ),
+          const SizedBox(height: 8),
+
+          // Find similar faces button
+          _buildActionButton(
+            icon: Icons.face,
+            label: 'Find Similar Faces',
+            onPressed: _showSimilarFaces,
+          ),
+          const SizedBox(height: 8),
+
+          if (widget.trackedFace.mergedFaces.isNotEmpty)
+            _buildActionButton(
+              icon: Icons.people,
+              label: 'Merged Faces',
+              onPressed: _openMergedFacesView,
+            ),
+          if (widget.trackedFace.mergedFaces.isNotEmpty)
+            const SizedBox(height: 8),
+
+          if (widget.onMergePressed != null)
+            _buildActionButton(
+              icon: Icons.merge,
+              label: 'Merge',
+              onPressed: widget.onMergePressed!,
+            ),
+          if (widget.onMergePressed != null) const SizedBox(height: 8),
+
+          _buildActionButton(
+            icon: Icons.delete_outline,
+            label: 'Delete',
+            onPressed: _showDeleteConfirmation,
+            color: Colors.red,
+          ),
+
+          const SizedBox(height: 8),
+          // Close button
+          _buildActionButton(
+            icon: Icons.close,
+            label: 'Close',
+            onPressed: () => setState(() {
+              _isShowingDetails = false;
+              _isShowingActions = false;
+            }),
+            color: Colors.grey,
+          ),
+        ],
+      ),
+    );
   }
 }
