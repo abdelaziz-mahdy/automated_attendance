@@ -26,7 +26,7 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
   @override
   void initState() {
     super.initState();
-    _loadSimilarFaces();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSimilarFaces());
   }
 
   void _loadSimilarFaces() {

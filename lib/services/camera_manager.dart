@@ -275,11 +275,13 @@ class CameraManager extends ChangeNotifier {
   }
 
   /// Compares extracted face features with tracked faces.
-  void _compareWithTrackedFaces(
-      List<double> features, String providerAddress, Uint8List? faceThumbnail) {
+  Future<void> _compareWithTrackedFaces(List<double> features,
+      String providerAddress, Uint8List? faceThumbnail) async {
     bool isKnownFace = false;
     String? matchedFaceId;
+    final now = DateTime.now();
 
+    // Step 1: Match against existing faces in memory
     for (final entry in trackedFaces.entries) {
       final trackedFace = entry.value;
       final trackedFeatures = trackedFace.features;
@@ -302,50 +304,61 @@ class CameraManager extends ChangeNotifier {
           }
         }
       }
+
       // Update last seen time and provider if similar
       if (isSimilar) {
-        trackedFace.firstSeen ??= DateTime.now();
-        final now = DateTime.now();
+        // Update memory state first
+        trackedFace.firstSeen ??= now;
         trackedFace.lastSeen = now;
         trackedFace.lastSeenProvider = providerAddress;
         isKnownFace = true;
         matchedFaceId = trackedFace.id;
 
-        // Save the updated face to database
-        _saveTrackedFaceToDatabase(trackedFace);
+        try {
+          // Then update database
+          await _saveTrackedFaceToDatabase(trackedFace);
+          // Handle visit tracking
+          await _handleFaceVisit(trackedFace.id, providerAddress, now);
+        } catch (e) {
+          debugPrint('Error updating recognized face: $e');
+        }
 
-        // Handle visit tracking
-        _handleFaceVisit(trackedFace.id, providerAddress, now);
-
-        notifyListeners();
         break;
       }
     }
 
+    // Step 2: If not recognized, create a new face record
     if (!isKnownFace) {
-      // Generate a truly unique ID using UUID
-      final newFaceId = "face_${_uuid.v4()}";
-      final now = DateTime.now();
-      final newTrackedFace = TrackedFace(
-        id: newFaceId,
-        features: features,
-        name: newFaceId, // Default name is the ID
-        firstSeen: now,
-        lastSeen: now,
-        lastSeenProvider: providerAddress,
-        thumbnail: faceThumbnail, // Store thumbnail directly
-      );
+      try {
+        // Generate a truly unique ID using UUID
+        final newFaceId = "face_${_uuid.v4()}";
 
-      trackedFaces[newFaceId] = newTrackedFace;
+        // Create the new face object
+        final newTrackedFace = TrackedFace(
+          id: newFaceId,
+          features: features,
+          name: newFaceId, // Default name is the ID
+          firstSeen: now,
+          lastSeen: now,
+          lastSeenProvider: providerAddress,
+          thumbnail: faceThumbnail, // Store thumbnail directly
+        );
 
-      // Save the new face to database
-      _saveTrackedFaceToDatabase(newTrackedFace);
+        // First save to database to ensure persistence
+        await _saveTrackedFaceToDatabase(newTrackedFace);
 
-      // Create a new visit record
-      _handleFaceVisit(newFaceId, providerAddress, now);
+        // Create a new visit record
+        await _handleFaceVisit(newFaceId, providerAddress, now);
 
-      notifyListeners();
+        // Finally update memory state
+        trackedFaces[newFaceId] = newTrackedFace;
+      } catch (e) {
+        debugPrint('Error creating new tracked face: $e');
+      }
     }
+
+    // Notify listeners after all operations are complete
+    notifyListeners();
   }
 
   // Handle visit tracking for a face
@@ -447,54 +460,62 @@ class CameraManager extends ChangeNotifier {
   }
 
   // Delete a tracked face from memory and database
-  Future<void> deleteTrackedFace(String faceId) async {
-    if (trackedFaces.containsKey(faceId)) {
-      // Close any active visit
+  Future<bool> deleteTrackedFace(String faceId) async {
+    if (!trackedFaces.containsKey(faceId)) {
+      return false;
+    }
+
+    try {
+      // First close any active visit to maintain data consistency
       if (_activeVisits.containsKey(faceId)) {
         await _closeVisit(faceId, DateTime.now());
       }
 
-      trackedFaces.remove(faceId);
-
-      // Delete from database
+      // Perform all database operations before updating UI state
       await _facesRepository.deleteFace(faceId);
-
-      // Delete all visits for this face
       await _facesRepository.deleteVisitsForFace(faceId);
 
+      // Only after database operations succeed, update the UI state
+      trackedFaces.remove(faceId);
       notifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting tracked face $faceId: $e');
+      return false;
     }
   }
 
   /// Split a merged face from its parent and restore it as a separate tracked face
-  Future<void> splitMergedFace(
+  Future<bool> splitMergedFace(
       String parentId, String mergedFaceId, int mergedFaceIndex) async {
+    // Validate input parameters
     if (!trackedFaces.containsKey(parentId) ||
         mergedFaceIndex >= trackedFaces[parentId]!.mergedFaces.length) {
-      return;
+      return false;
     }
 
     final parentFace = trackedFaces[parentId]!;
     final mergedFace = parentFace.mergedFaces[mergedFaceIndex];
 
-    // Remove from parent's merged faces list
-    parentFace.mergedFaces.removeAt(mergedFaceIndex);
-
-    // Add as a new tracked face
-    trackedFaces[mergedFace.id] = mergedFace;
-
-    // Update database - remove from merged faces and add as tracked face
     try {
+      // Start with database operations to ensure consistency
       // First add the face as a new tracked face
-      await _facesRepository.saveTrackedFace(mergedFace);
+      await _facesRepository.restoreMergedFace(parentId, mergedFace);
 
-      // Then update the parent face to reflect removal of the merged face
+      // Remove the face from the parent's merged faces
+      parentFace.mergedFaces.removeAt(mergedFaceIndex);
       await _facesRepository.saveTrackedFace(parentFace);
-    } catch (e) {
-      debugPrint('Error splitting merged face in database: $e');
-    }
 
-    notifyListeners();
+      // After database operations succeed, update memory state
+      trackedFaces[mergedFace.id] = mergedFace;
+      notifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint('Error splitting merged face: $e');
+      return false;
+    }
   }
 
   // Get visit statistics for analytics
