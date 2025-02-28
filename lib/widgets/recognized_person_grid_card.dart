@@ -436,14 +436,14 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.visibility, color: Colors.white),
-                      onPressed: () => setState(() {
-                        _isShowingDetails = !_isShowingDetails;
-                        _isShowingActions = true;
-                      }),
-                      tooltip: 'Show details',
-                    ),
+                    // IconButton(
+                    //   icon: const Icon(Icons.visibility, color: Colors.white),
+                    //   onPressed: () => setState(() {
+                    //     _isShowingDetails = !_isShowingDetails;
+                    //     _isShowingActions = true;
+                    //   }),
+                    //   tooltip: 'Show details',
+                    // ),
                     IconButton(
                       icon: const Icon(Icons.more_horiz, color: Colors.white),
                       onPressed: () => setState(() => _isShowingActions = true),

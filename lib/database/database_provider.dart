@@ -15,19 +15,19 @@ class DatabaseProvider {
 
   // Database instance
   FacesDatabase? _database;
-  
+
   // Completer to handle concurrent initialization requests
   Completer<FacesDatabase>? _dbCompleter;
 
   // Get database instance
   Future<FacesDatabase> get database async {
     if (_database != null) return _database!;
-    
+
     // If already initializing, return the future from the completer
     if (_dbCompleter != null) {
       return _dbCompleter!.future;
     }
-    
+
     // Create a new completer and start initialization
     _dbCompleter = Completer<FacesDatabase>();
     try {
