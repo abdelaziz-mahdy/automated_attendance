@@ -24,7 +24,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     end: DateTime.now(),
   );
   String? _selectedProviderId;
-  bool _ignoreTouch = false;
+  final bool _ignoreTouch = false;
 
   // Timer for periodic updates
   Timer? _updateTimer;
@@ -650,7 +650,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -685,8 +685,10 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
         Container(
           height: 100,
           decoration: BoxDecoration(
-            color:
-                Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withOpacity(0.3),
             borderRadius: BorderRadius.circular(8),
           ),
           child: ListView.builder(

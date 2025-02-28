@@ -576,10 +576,10 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                   const SizedBox(height: 16),
                   OutlinedButton(
                     onPressed: widget.onMergePressed,
-                    child: const Text('Cancel'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.blue.shade700,
                     ),
+                    child: const Text('Cancel'),
                   ),
                 ],
               ),

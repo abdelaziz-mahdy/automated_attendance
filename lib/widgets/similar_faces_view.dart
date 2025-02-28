@@ -37,7 +37,7 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
 
     final cameraManager = Provider.of<CameraManager>(context, listen: false);
     _similarFaces =
-       await  cameraManager.findSimilarFaces(widget.faceId, limit: _matchLimit);
+        await cameraManager.findSimilarFaces(widget.faceId, limit: _matchLimit);
     debugPrint('Found ${_similarFaces.length} similar faces');
     setState(() {
       _isLoading = false;
@@ -137,7 +137,7 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${face.name}',
+                  face.name,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,

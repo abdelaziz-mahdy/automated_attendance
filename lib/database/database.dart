@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:drift/drift.dart';
 part 'database.g.dart';
 
@@ -6,7 +5,7 @@ part 'database.g.dart';
 @DriftDatabase(tables: [DBTrackedFaces, DBMergedFaces, DBVisits])
 class FacesDatabase extends _$FacesDatabase {
   // We tell the database where to store the data with this constructor
-  FacesDatabase(QueryExecutor e) : super(e);
+  FacesDatabase(super.e);
 
   // You should bump this number whenever you change or add a table definition
   @override

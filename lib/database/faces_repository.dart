@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:automated_attendance/database/database.dart';
 import 'package:automated_attendance/database/database_provider.dart';

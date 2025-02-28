@@ -1,7 +1,5 @@
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:flutter/material.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
-import 'package:provider/provider.dart';
 
 class FaceManagementDialogs {
   /// Shows a confirmation dialog for deleting a face
