@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:automated_attendance/views/data_center_pages/person_visits_view.dart';
+import 'package:automated_attendance/widgets/similar_faces_view.dart';
 
 class RecognizedPersonGridCard extends StatefulWidget {
   final TrackedFace trackedFace;
@@ -122,6 +123,53 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                 const Divider(),
                 Expanded(
                   child: _buildMergedFacesGrid(controller),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSimilarFaces() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Similar faces content
+                Expanded(
+                  child: SimilarFacesView(
+                    faceId: widget.trackedFace.id,
+                    onMergeComplete: () {
+                      Navigator.pop(context);
+                      setState(() => _isShowingActions = false);
+                    },
+                  ),
                 ),
               ],
             ),
@@ -485,6 +533,14 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                     icon: Icons.history,
                     label: 'Visit History',
                     onPressed: _openVisitHistory,
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Find similar faces button
+                  _buildActionButton(
+                    icon: Icons.face,
+                    label: 'Find Similar Faces',
+                    onPressed: _showSimilarFaces,
                   ),
                   const SizedBox(height: 8),
 

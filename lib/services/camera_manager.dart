@@ -4,6 +4,7 @@ import 'package:automated_attendance/camera_providers/remote_camera_provider.dar
 import 'package:automated_attendance/database/faces_repository.dart';
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
+import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
@@ -530,5 +531,100 @@ class CameraManager extends ChangeNotifier {
     _inactiveVisitsTimer?.cancel();
     stopListening();
     super.dispose();
+  }
+
+  /// Find faces similar to the given face, sorted by similarity score (highest first)
+  List<FaceMatch> findSimilarFaces(String faceId, {int limit = 5}) {
+    if (!trackedFaces.containsKey(faceId)) {
+      return [];
+    }
+
+    final targetFace = trackedFaces[faceId]!;
+    final List<FaceMatch> matches = [];
+
+    for (final entry in trackedFaces.entries) {
+      // Skip comparing to self
+      if (entry.key == faceId) continue;
+
+      final candidateFace = entry.value;
+
+      // Calculate similarity scores
+      final (cosineDistance, normL2Distance) =
+          _faceComparisonService.getConfidence(
+        targetFace.features,
+        candidateFace.features,
+      );
+
+      // Convert cosine similarity to percentage (higher is better)
+      // Cosine distance is already between 0-1, with 1 being identical
+      // We map to 0-100 scale for percentage display
+      double similarityScore = cosineDistance * 100;
+
+      matches.add(FaceMatch(
+        id: candidateFace.id,
+        face: candidateFace,
+        similarityScore: similarityScore,
+        cosineDistance: cosineDistance,
+        normL2Distance: normL2Distance,
+      ));
+
+      // Also check merged faces for the candidate
+      for (var mergedFace in candidateFace.mergedFaces) {
+        final (mergedCosine, mergedNormL2) =
+            _faceComparisonService.getConfidence(
+          targetFace.features,
+          mergedFace.features,
+        );
+
+        double mergedSimilarityScore = mergedCosine * 100;
+
+        matches.add(FaceMatch(
+          id: mergedFace.id,
+          face: mergedFace,
+          similarityScore: mergedSimilarityScore,
+          cosineDistance: mergedCosine,
+          normL2Distance: mergedNormL2,
+        ));
+      }
+    }
+
+    // Sort by similarity score (highest first)
+    matches.sort((a, b) => b.similarityScore.compareTo(a.similarityScore));
+
+    // Return top matches up to the limit
+    return matches.take(limit).toList();
+  }
+
+// Checks if two faces are likely to be the same person
+  bool areFacesLikelyTheSamePerson(String faceId1, String faceId2) {
+    if (!trackedFaces.containsKey(faceId1) ||
+        !trackedFaces.containsKey(faceId2)) {
+      return false;
+    }
+
+    final face1 = trackedFaces[faceId1]!;
+    final face2 = trackedFaces[faceId2]!;
+
+    return _faceComparisonService.areFeaturesSimilar(
+        face1.features, face2.features);
+  }
+
+// Get similarity score between two faces as a percentage
+  double getFaceSimilarityScore(String faceId1, String faceId2) {
+    if (!trackedFaces.containsKey(faceId1) ||
+        !trackedFaces.containsKey(faceId2)) {
+      return 0.0;
+    }
+
+    final face1 = trackedFaces[faceId1]!;
+    final face2 = trackedFaces[faceId2]!;
+
+    final (cosineDistance, _) = _faceComparisonService.getConfidence(
+      face1.features,
+      face2.features,
+    );
+
+    // Convert to percentage
+    return cosineDistance * 100;
   }
 }

@@ -2,6 +2,7 @@
 
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/widgets/similar_faces_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -121,6 +122,50 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
     );
   }
 
+  void _showSimilarFaces() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Content
+                Expanded(
+                  child: SimilarFacesView(
+                    faceId: widget.trackedFace.id,
+                    onMergeComplete: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildQuickActions() {
     return Row(
       children: [
@@ -166,6 +211,13 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             onPressed: _openVisitHistory,
             icon: const Icon(Icons.history),
             tooltip: 'View visit history',
+          ),
+
+          // Find similar faces button
+          IconButton(
+            onPressed: _showSimilarFaces,
+            icon: const Icon(Icons.face),
+            tooltip: 'Find similar faces',
           ),
 
           // Delete button
