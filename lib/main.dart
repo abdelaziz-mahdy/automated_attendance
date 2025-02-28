@@ -72,21 +72,33 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Camera Grid',
-      initialRoute: '/',
-      routes: {
-        '/': (context) => CameraSourceSelectionView(),
-        '/dataCenter': (context) => MultiProvider(
-              providers: [
-                ChangeNotifierProvider<CameraManager>(
-                  create: (_) => CameraManager()..startListening(),
-                ),
-              ],
-              child: DataCenterView(),
-            ),
-        '/requestLogsPage': (context) => RequestLogsPage(),
+    return ChangeNotifierProvider(
+      create: (context) {
+        final manager = CameraManager();
+        // Start tracking inactive visits for analytics
+        manager.startInactiveVisitsCleanup();
+        return manager;
       },
+      child: MaterialApp(
+        title: 'Automated Attendance',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        routes: {
+          '/': (context) => CameraSourceSelectionView(),
+          '/dataCenter': (context) => MultiProvider(
+                providers: [
+                  ChangeNotifierProvider<CameraManager>(
+                    create: (_) => CameraManager()..startListening(),
+                  ),
+                ],
+                child: DataCenterView(),
+              ),
+          '/requestLogsPage': (context) => RequestLogsPage(),
+        },
+      ),
     );
   }
 }

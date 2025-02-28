@@ -2,9 +2,11 @@
 
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/widgets/similar_faces_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:automated_attendance/views/data_center_pages/person_visits_view.dart';
 
 class RecognizedPersonListTile extends StatefulWidget {
   final TrackedFace trackedFace;
@@ -108,6 +110,62 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
     );
   }
 
+  void _openVisitHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PersonVisitsView(
+          faceId: widget.trackedFace.id,
+          personName: widget.trackedFace.name,
+        ),
+      ),
+    );
+  }
+
+  void _showSimilarFaces() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Content
+                Expanded(
+                  child: SimilarFacesView(
+                    faceId: widget.trackedFace.id,
+                    onMergeComplete: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildQuickActions() {
     return Row(
       children: [
@@ -147,6 +205,20 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
               tooltip: 'Edit name',
             ),
           ],
+
+          // Visit history button
+          IconButton(
+            onPressed: _openVisitHistory,
+            icon: const Icon(Icons.history),
+            tooltip: 'View visit history',
+          ),
+
+          // Find similar faces button
+          IconButton(
+            onPressed: _showSimilarFaces,
+            icon: const Icon(Icons.face),
+            tooltip: 'Find similar faces',
+          ),
 
           // Delete button
           IconButton(
@@ -358,6 +430,29 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             Icons.camera,
             'Provider: ${widget.trackedFace.lastSeenProvider!}',
           ),
+        // Add visit history button as part of the info section
+        InkWell(
+          onTap: _openVisitHistory,
+          child: Row(
+            children: [
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.blue.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'View detailed visit history',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

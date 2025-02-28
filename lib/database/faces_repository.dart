@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:automated_attendance/database/database.dart';
 import 'package:automated_attendance/database/database_provider.dart';
@@ -133,7 +132,26 @@ class FacesRepository {
     final sourceFace = await database.getTrackedFaceById(sourceId);
     if (sourceFace == null) return;
 
-    // Save it as a merged face
+    // Get all merged faces of the source face
+    final sourceMergedFaces = await database.getMergedFacesForTarget(sourceId);
+
+    // Transfer all merged faces from source to target
+    for (final mergedFace in sourceMergedFaces) {
+      // Create a new merged face entry pointing to the target
+      final transferCompanion = DBMergedFacesCompanion(
+        id: Value(_uuid.v4()),
+        targetId: Value(targetId), // Now points to the new target
+        sourceId: Value(mergedFace.sourceId), // Keep original source ID
+        features: Value(mergedFace.features),
+        thumbnail: Value(mergedFace.thumbnail),
+        firstSeen: Value(mergedFace.firstSeen),
+        lastSeen: Value(mergedFace.lastSeen),
+      );
+
+      await database.insertMergedFace(transferCompanion);
+    }
+
+    // Save the source face itself as a merged face under the target
     final companion = DBMergedFacesCompanion(
       id: Value(_uuid.v4()),
       targetId: Value(targetId),
@@ -146,8 +164,14 @@ class FacesRepository {
 
     await database.insertMergedFace(companion);
 
+    // Delete all merged faces associated with the source face
+    await removeMergedFacesForTarget(sourceId);
+
     // Delete the source face from tracked faces
     await database.deleteTrackedFace(sourceId);
+
+    // Update visits for the merged face to point to the target face
+    await updateVisitsForMergedFace(sourceId, targetId);
   }
 
   /// Update the name of a face
@@ -215,5 +239,299 @@ class FacesRepository {
   List<double> _blobToFeatures(Uint8List blob) {
     final str = utf8.decode(blob);
     return str.split(',').map((e) => double.parse(e)).toList();
+  }
+
+  // Visit tracking methods
+
+  /// Create a new visit record
+  Future<void> createVisit(
+      {required String id,
+      required String faceId,
+      required String providerId,
+      required DateTime entryTime}) async {
+    final database = await _databaseProvider.database;
+
+    final companion = DBVisitsCompanion(
+      id: Value(id),
+      faceId: Value(faceId),
+      providerId: Value(providerId),
+      entryTime: Value(entryTime),
+      // exitTime is null initially
+      // durationSeconds is null initially
+    );
+
+    await database.insertVisit(companion);
+  }
+
+  /// Update the last seen time of an active visit
+  Future<void> updateVisitLastSeen(String visitId, DateTime timestamp) async {
+    final database = await _databaseProvider.database;
+
+    // Get the current visit
+    final visits = await (database.select(database.dBVisits)
+          ..where((tbl) => tbl.id.equals(visitId)))
+        .get();
+
+    if (visits.isEmpty) return;
+
+    final visit = visits.first;
+    final companion = DBVisitsCompanion(
+      id: Value(visitId),
+      faceId: Value(visit.faceId),
+      providerId: Value(visit.providerId),
+      entryTime: Value(visit.entryTime),
+      // Update exitTime to be the last seen time (but still active)
+      exitTime: Value(timestamp),
+      // durationSeconds is still null as the visit is ongoing
+    );
+
+    await database.updateVisit(companion);
+  }
+
+  /// Update a visit with exit time and calculate duration
+  Future<void> updateVisitExit(String visitId, DateTime exitTime) async {
+    final database = await _databaseProvider.database;
+
+    // Get the current visit
+    final visits = await (database.select(database.dBVisits)
+          ..where((tbl) => tbl.id.equals(visitId)))
+        .get();
+
+    if (visits.isEmpty) return;
+
+    final visit = visits.first;
+
+    // Calculate duration in seconds
+    final durationSeconds = exitTime.difference(visit.entryTime).inSeconds;
+
+    final companion = DBVisitsCompanion(
+      id: Value(visitId),
+      faceId: Value(visit.faceId),
+      providerId: Value(visit.providerId),
+      entryTime: Value(visit.entryTime),
+      exitTime: Value(exitTime),
+      durationSeconds: Value(durationSeconds),
+    );
+
+    await database.updateVisit(companion);
+  }
+
+  /// Get all active visits (no exit time)
+  Future<List<DBVisit>> getActiveVisits() async {
+    final database = await _databaseProvider.database;
+    return await database.getActiveVisits();
+  }
+
+  /// Delete all visits for a face
+  Future<void> deleteVisitsForFace(String faceId) async {
+    final database = await _databaseProvider.database;
+    await database.deleteVisitsForFace(faceId);
+  }
+
+  /// Update visits for a merged face to point to the target face
+  Future<void> updateVisitsForMergedFace(
+      String sourceId, String targetId) async {
+    final database = await _databaseProvider.database;
+
+    final visits = await (database.select(database.dBVisits)
+          ..where((tbl) => tbl.faceId.equals(sourceId)))
+        .get();
+
+    for (var visit in visits) {
+      final companion = DBVisitsCompanion(
+        id: Value(visit.id),
+        faceId: Value(targetId), // Change to target face ID
+        providerId: Value(visit.providerId),
+        entryTime: Value(visit.entryTime),
+        exitTime: Value(visit.exitTime),
+        durationSeconds: Value(visit.durationSeconds),
+      );
+
+      await database.updateVisit(companion);
+    }
+  }
+
+  /// Get visit statistics for analytics
+  Future<Map<String, dynamic>> getVisitStatistics(
+      {DateTime? startDate,
+      DateTime? endDate,
+      String? providerId,
+      String? faceId}) async {
+    final database = await _databaseProvider.database;
+
+    // Start with all visits
+    var query = database.select(database.dBVisits);
+
+    // Apply filters
+    if (startDate != null) {
+      query = query
+        ..where((tbl) => tbl.entryTime.isBiggerOrEqualValue(startDate));
+    }
+
+    if (endDate != null) {
+      query = query
+        ..where((tbl) => tbl.entryTime.isSmallerOrEqualValue(endDate));
+    }
+
+    if (providerId != null) {
+      query = query..where((tbl) => tbl.providerId.equals(providerId));
+    }
+
+    if (faceId != null) {
+      query = query..where((tbl) => tbl.faceId.equals(faceId));
+    }
+
+    final visits = await query.get();
+
+    // Calculate statistics
+    final Map<String, dynamic> stats = {
+      'totalVisits': visits.length,
+      'activeVisits': visits.where((v) => v.exitTime == null).length,
+      'completedVisits': visits.where((v) => v.exitTime != null).length,
+      'avgDurationSeconds': 0.0,
+      'providers': <String>{},
+      'uniqueFaces': <String?>{},
+      'visitsByDay': <String, int>{},
+      'visitsByHour': <int, int>{},
+    };
+
+    // Calculate average duration for completed visits
+    final completedVisits =
+        visits.where((v) => v.durationSeconds != null).toList();
+    if (completedVisits.isNotEmpty) {
+      final totalDuration = completedVisits.fold<int>(
+          0, (sum, visit) => sum + (visit.durationSeconds ?? 0));
+      stats['avgDurationSeconds'] = totalDuration / completedVisits.length;
+    }
+
+    // Collect unique providers
+    for (var visit in visits) {
+      stats['providers'].add(visit.providerId);
+      stats['uniqueFaces'].add(visit.faceId);
+
+      // Track visits by day
+      final day = _formatDate(visit.entryTime);
+      stats['visitsByDay'][day] = (stats['visitsByDay'][day] ?? 0) + 1;
+
+      // Track visits by hour
+      final hour = visit.entryTime.hour;
+      stats['visitsByHour'][hour] = (stats['visitsByHour'][hour] ?? 0) + 1;
+    }
+
+    stats['providerCount'] = (stats['providers'] as Set<String>).length;
+    stats['uniqueFacesCount'] = (stats['uniqueFaces'] as Set<String?>).length;
+
+    return stats;
+  }
+
+  /// Get detailed visit history for a specific face
+  Future<List<Map<String, dynamic>>> getVisitDetailsForFace(
+      String faceId) async {
+    final database = await _databaseProvider.database;
+
+    final visits = await (database.select(database.dBVisits)
+          ..where((tbl) => tbl.faceId.equals(faceId))
+          ..orderBy([(t) => OrderingTerm.desc(t.entryTime)]))
+        .get();
+
+    // Convert to a more detailed format
+    return visits.map((visit) {
+      return {
+        'id': visit.id,
+        'providerId': visit.providerId,
+        'entryTime': visit.entryTime,
+        'exitTime': visit.exitTime,
+        'duration': visit.durationSeconds != null
+            ? Duration(seconds: visit.durationSeconds!)
+            : null,
+        'isActive': visit.exitTime == null,
+        'date': _formatDate(visit.entryTime),
+        'entryHour': visit.entryTime.hour,
+        'exitHour': visit.exitTime?.hour,
+      };
+    }).toList();
+  }
+
+  // Helper to format date as YYYY-MM-DD
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Gets a single tracked face by ID
+  Future<TrackedFace?> getTrackedFace(String faceId) async {
+    final database = await _databaseProvider.database;
+
+    // Get the tracked face from database
+    final dbFace = await database.getTrackedFaceById(faceId);
+    if (dbFace == null) {
+      return null;
+    }
+
+    // Convert blob to List<double> features
+    final List<double> features = _blobToFeatures(dbFace.features);
+
+    // Create the tracked face model
+    final trackedFace = TrackedFace(
+      id: dbFace.id,
+      features: features,
+      name: dbFace.name ?? dbFace.id,
+      firstSeen: dbFace.firstSeen,
+      lastSeen: dbFace.lastSeen,
+      lastSeenProvider: dbFace.lastSeenProvider,
+      thumbnail: dbFace.thumbnail,
+    );
+
+    // Load merged faces for this tracked face
+    final mergedDbFaces = await database.getMergedFacesForTarget(dbFace.id);
+    for (final mergedDbFace in mergedDbFaces) {
+      final List<double> mergedFeatures =
+          _blobToFeatures(mergedDbFace.features);
+
+      final mergedFace = TrackedFace(
+        id: mergedDbFace.sourceId,
+        features: mergedFeatures,
+        name: trackedFace.name, // Inherit the name from target face
+        firstSeen: mergedDbFace.firstSeen,
+        lastSeen: mergedDbFace.lastSeen,
+        lastSeenProvider: '', // Not storing this info for merged faces
+        thumbnail: mergedDbFace.thumbnail,
+      );
+
+      trackedFace.mergedFaces.add(mergedFace);
+    }
+
+    return trackedFace;
+  }
+
+  /// Update a face's last seen time and provider
+  Future<void> updateFaceLastSeen(
+      String faceId, DateTime timestamp, String providerId) async {
+    final database = await _databaseProvider.database;
+    final face = await database.getTrackedFaceById(faceId);
+    if (face == null) return;
+
+    final companion = DBTrackedFacesCompanion(
+      id: Value(faceId),
+      name: Value(face.name),
+      features: Value(face.features),
+      thumbnail: Value(face.thumbnail),
+      firstSeen: Value(
+          face.firstSeen ?? timestamp), // Use timestamp if firstSeen is null
+      lastSeen: Value(timestamp),
+      lastSeenProvider: Value(providerId),
+    );
+
+    await database.updateTrackedFace(companion);
+  }
+
+  /// Get the number of visits for a specific face
+  Future<int> getVisitCountForFace(String faceId) async {
+    final database = await _databaseProvider.database;
+
+    final query = database.select(database.dBVisits)
+      ..where((tbl) => tbl.faceId.equals(faceId));
+
+    final visits = await query.get();
+    return visits.length;
   }
 }

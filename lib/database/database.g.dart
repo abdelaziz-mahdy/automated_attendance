@@ -799,11 +799,368 @@ class DBMergedFacesCompanion extends UpdateCompanion<DBMergedFace> {
   }
 }
 
+class $DBVisitsTable extends DBVisits with TableInfo<$DBVisitsTable, DBVisit> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DBVisitsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _faceIdMeta = const VerificationMeta('faceId');
+  @override
+  late final GeneratedColumn<String> faceId = GeneratedColumn<String>(
+      'face_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _entryTimeMeta =
+      const VerificationMeta('entryTime');
+  @override
+  late final GeneratedColumn<DateTime> entryTime = GeneratedColumn<DateTime>(
+      'entry_time', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _exitTimeMeta =
+      const VerificationMeta('exitTime');
+  @override
+  late final GeneratedColumn<DateTime> exitTime = GeneratedColumn<DateTime>(
+      'exit_time', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _providerIdMeta =
+      const VerificationMeta('providerId');
+  @override
+  late final GeneratedColumn<String> providerId = GeneratedColumn<String>(
+      'provider_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _durationSecondsMeta =
+      const VerificationMeta('durationSeconds');
+  @override
+  late final GeneratedColumn<int> durationSeconds = GeneratedColumn<int>(
+      'duration_seconds', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, faceId, entryTime, exitTime, providerId, durationSeconds];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'd_b_visits';
+  @override
+  VerificationContext validateIntegrity(Insertable<DBVisit> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('face_id')) {
+      context.handle(_faceIdMeta,
+          faceId.isAcceptableOrUnknown(data['face_id']!, _faceIdMeta));
+    }
+    if (data.containsKey('entry_time')) {
+      context.handle(_entryTimeMeta,
+          entryTime.isAcceptableOrUnknown(data['entry_time']!, _entryTimeMeta));
+    } else if (isInserting) {
+      context.missing(_entryTimeMeta);
+    }
+    if (data.containsKey('exit_time')) {
+      context.handle(_exitTimeMeta,
+          exitTime.isAcceptableOrUnknown(data['exit_time']!, _exitTimeMeta));
+    }
+    if (data.containsKey('provider_id')) {
+      context.handle(
+          _providerIdMeta,
+          providerId.isAcceptableOrUnknown(
+              data['provider_id']!, _providerIdMeta));
+    } else if (isInserting) {
+      context.missing(_providerIdMeta);
+    }
+    if (data.containsKey('duration_seconds')) {
+      context.handle(
+          _durationSecondsMeta,
+          durationSeconds.isAcceptableOrUnknown(
+              data['duration_seconds']!, _durationSecondsMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DBVisit map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DBVisit(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      faceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}face_id']),
+      entryTime: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}entry_time'])!,
+      exitTime: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}exit_time']),
+      providerId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}provider_id'])!,
+      durationSeconds: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}duration_seconds']),
+    );
+  }
+
+  @override
+  $DBVisitsTable createAlias(String alias) {
+    return $DBVisitsTable(attachedDatabase, alias);
+  }
+}
+
+class DBVisit extends DataClass implements Insertable<DBVisit> {
+  final String id;
+  final String? faceId;
+  final DateTime entryTime;
+  final DateTime? exitTime;
+  final String providerId;
+  final int? durationSeconds;
+  const DBVisit(
+      {required this.id,
+      this.faceId,
+      required this.entryTime,
+      this.exitTime,
+      required this.providerId,
+      this.durationSeconds});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || faceId != null) {
+      map['face_id'] = Variable<String>(faceId);
+    }
+    map['entry_time'] = Variable<DateTime>(entryTime);
+    if (!nullToAbsent || exitTime != null) {
+      map['exit_time'] = Variable<DateTime>(exitTime);
+    }
+    map['provider_id'] = Variable<String>(providerId);
+    if (!nullToAbsent || durationSeconds != null) {
+      map['duration_seconds'] = Variable<int>(durationSeconds);
+    }
+    return map;
+  }
+
+  DBVisitsCompanion toCompanion(bool nullToAbsent) {
+    return DBVisitsCompanion(
+      id: Value(id),
+      faceId:
+          faceId == null && nullToAbsent ? const Value.absent() : Value(faceId),
+      entryTime: Value(entryTime),
+      exitTime: exitTime == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exitTime),
+      providerId: Value(providerId),
+      durationSeconds: durationSeconds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationSeconds),
+    );
+  }
+
+  factory DBVisit.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DBVisit(
+      id: serializer.fromJson<String>(json['id']),
+      faceId: serializer.fromJson<String?>(json['faceId']),
+      entryTime: serializer.fromJson<DateTime>(json['entryTime']),
+      exitTime: serializer.fromJson<DateTime?>(json['exitTime']),
+      providerId: serializer.fromJson<String>(json['providerId']),
+      durationSeconds: serializer.fromJson<int?>(json['durationSeconds']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'faceId': serializer.toJson<String?>(faceId),
+      'entryTime': serializer.toJson<DateTime>(entryTime),
+      'exitTime': serializer.toJson<DateTime?>(exitTime),
+      'providerId': serializer.toJson<String>(providerId),
+      'durationSeconds': serializer.toJson<int?>(durationSeconds),
+    };
+  }
+
+  DBVisit copyWith(
+          {String? id,
+          Value<String?> faceId = const Value.absent(),
+          DateTime? entryTime,
+          Value<DateTime?> exitTime = const Value.absent(),
+          String? providerId,
+          Value<int?> durationSeconds = const Value.absent()}) =>
+      DBVisit(
+        id: id ?? this.id,
+        faceId: faceId.present ? faceId.value : this.faceId,
+        entryTime: entryTime ?? this.entryTime,
+        exitTime: exitTime.present ? exitTime.value : this.exitTime,
+        providerId: providerId ?? this.providerId,
+        durationSeconds: durationSeconds.present
+            ? durationSeconds.value
+            : this.durationSeconds,
+      );
+  DBVisit copyWithCompanion(DBVisitsCompanion data) {
+    return DBVisit(
+      id: data.id.present ? data.id.value : this.id,
+      faceId: data.faceId.present ? data.faceId.value : this.faceId,
+      entryTime: data.entryTime.present ? data.entryTime.value : this.entryTime,
+      exitTime: data.exitTime.present ? data.exitTime.value : this.exitTime,
+      providerId:
+          data.providerId.present ? data.providerId.value : this.providerId,
+      durationSeconds: data.durationSeconds.present
+          ? data.durationSeconds.value
+          : this.durationSeconds,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DBVisit(')
+          ..write('id: $id, ')
+          ..write('faceId: $faceId, ')
+          ..write('entryTime: $entryTime, ')
+          ..write('exitTime: $exitTime, ')
+          ..write('providerId: $providerId, ')
+          ..write('durationSeconds: $durationSeconds')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, faceId, entryTime, exitTime, providerId, durationSeconds);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DBVisit &&
+          other.id == this.id &&
+          other.faceId == this.faceId &&
+          other.entryTime == this.entryTime &&
+          other.exitTime == this.exitTime &&
+          other.providerId == this.providerId &&
+          other.durationSeconds == this.durationSeconds);
+}
+
+class DBVisitsCompanion extends UpdateCompanion<DBVisit> {
+  final Value<String> id;
+  final Value<String?> faceId;
+  final Value<DateTime> entryTime;
+  final Value<DateTime?> exitTime;
+  final Value<String> providerId;
+  final Value<int?> durationSeconds;
+  final Value<int> rowid;
+  const DBVisitsCompanion({
+    this.id = const Value.absent(),
+    this.faceId = const Value.absent(),
+    this.entryTime = const Value.absent(),
+    this.exitTime = const Value.absent(),
+    this.providerId = const Value.absent(),
+    this.durationSeconds = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DBVisitsCompanion.insert({
+    required String id,
+    this.faceId = const Value.absent(),
+    required DateTime entryTime,
+    this.exitTime = const Value.absent(),
+    required String providerId,
+    this.durationSeconds = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        entryTime = Value(entryTime),
+        providerId = Value(providerId);
+  static Insertable<DBVisit> custom({
+    Expression<String>? id,
+    Expression<String>? faceId,
+    Expression<DateTime>? entryTime,
+    Expression<DateTime>? exitTime,
+    Expression<String>? providerId,
+    Expression<int>? durationSeconds,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (faceId != null) 'face_id': faceId,
+      if (entryTime != null) 'entry_time': entryTime,
+      if (exitTime != null) 'exit_time': exitTime,
+      if (providerId != null) 'provider_id': providerId,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DBVisitsCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? faceId,
+      Value<DateTime>? entryTime,
+      Value<DateTime?>? exitTime,
+      Value<String>? providerId,
+      Value<int?>? durationSeconds,
+      Value<int>? rowid}) {
+    return DBVisitsCompanion(
+      id: id ?? this.id,
+      faceId: faceId ?? this.faceId,
+      entryTime: entryTime ?? this.entryTime,
+      exitTime: exitTime ?? this.exitTime,
+      providerId: providerId ?? this.providerId,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (faceId.present) {
+      map['face_id'] = Variable<String>(faceId.value);
+    }
+    if (entryTime.present) {
+      map['entry_time'] = Variable<DateTime>(entryTime.value);
+    }
+    if (exitTime.present) {
+      map['exit_time'] = Variable<DateTime>(exitTime.value);
+    }
+    if (providerId.present) {
+      map['provider_id'] = Variable<String>(providerId.value);
+    }
+    if (durationSeconds.present) {
+      map['duration_seconds'] = Variable<int>(durationSeconds.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DBVisitsCompanion(')
+          ..write('id: $id, ')
+          ..write('faceId: $faceId, ')
+          ..write('entryTime: $entryTime, ')
+          ..write('exitTime: $exitTime, ')
+          ..write('providerId: $providerId, ')
+          ..write('durationSeconds: $durationSeconds, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$FacesDatabase extends GeneratedDatabase {
   _$FacesDatabase(QueryExecutor e) : super(e);
   $FacesDatabaseManager get managers => $FacesDatabaseManager(this);
   late final $DBTrackedFacesTable dBTrackedFaces = $DBTrackedFacesTable(this);
   late final $DBMergedFacesTable dBMergedFaces = $DBMergedFacesTable(this);
+  late final $DBVisitsTable dBVisits = $DBVisitsTable(this);
   late final Index faceNameIdx = Index('face_name_idx',
       'CREATE INDEX face_name_idx ON d_b_tracked_faces (name)');
   late final Index targetIdIdx = Index('target_id_idx',
@@ -814,8 +1171,14 @@ abstract class _$FacesDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [dBTrackedFaces, dBMergedFaces, faceNameIdx, targetIdIdx, sourceIdIdx];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+        dBTrackedFaces,
+        dBMergedFaces,
+        dBVisits,
+        faceNameIdx,
+        targetIdIdx,
+        sourceIdIdx
+      ];
 }
 
 typedef $$DBTrackedFacesTableCreateCompanionBuilder = DBTrackedFacesCompanion
@@ -1416,6 +1779,188 @@ typedef $$DBMergedFacesTableProcessedTableManager = ProcessedTableManager<
     (DBMergedFace, $$DBMergedFacesTableReferences),
     DBMergedFace,
     PrefetchHooks Function({bool targetId})>;
+typedef $$DBVisitsTableCreateCompanionBuilder = DBVisitsCompanion Function({
+  required String id,
+  Value<String?> faceId,
+  required DateTime entryTime,
+  Value<DateTime?> exitTime,
+  required String providerId,
+  Value<int?> durationSeconds,
+  Value<int> rowid,
+});
+typedef $$DBVisitsTableUpdateCompanionBuilder = DBVisitsCompanion Function({
+  Value<String> id,
+  Value<String?> faceId,
+  Value<DateTime> entryTime,
+  Value<DateTime?> exitTime,
+  Value<String> providerId,
+  Value<int?> durationSeconds,
+  Value<int> rowid,
+});
+
+class $$DBVisitsTableFilterComposer
+    extends Composer<_$FacesDatabase, $DBVisitsTable> {
+  $$DBVisitsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get faceId => $composableBuilder(
+      column: $table.faceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get entryTime => $composableBuilder(
+      column: $table.entryTime, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get exitTime => $composableBuilder(
+      column: $table.exitTime, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get providerId => $composableBuilder(
+      column: $table.providerId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get durationSeconds => $composableBuilder(
+      column: $table.durationSeconds,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$DBVisitsTableOrderingComposer
+    extends Composer<_$FacesDatabase, $DBVisitsTable> {
+  $$DBVisitsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get faceId => $composableBuilder(
+      column: $table.faceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get entryTime => $composableBuilder(
+      column: $table.entryTime, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get exitTime => $composableBuilder(
+      column: $table.exitTime, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get providerId => $composableBuilder(
+      column: $table.providerId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get durationSeconds => $composableBuilder(
+      column: $table.durationSeconds,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$DBVisitsTableAnnotationComposer
+    extends Composer<_$FacesDatabase, $DBVisitsTable> {
+  $$DBVisitsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get faceId =>
+      $composableBuilder(column: $table.faceId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get entryTime =>
+      $composableBuilder(column: $table.entryTime, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get exitTime =>
+      $composableBuilder(column: $table.exitTime, builder: (column) => column);
+
+  GeneratedColumn<String> get providerId => $composableBuilder(
+      column: $table.providerId, builder: (column) => column);
+
+  GeneratedColumn<int> get durationSeconds => $composableBuilder(
+      column: $table.durationSeconds, builder: (column) => column);
+}
+
+class $$DBVisitsTableTableManager extends RootTableManager<
+    _$FacesDatabase,
+    $DBVisitsTable,
+    DBVisit,
+    $$DBVisitsTableFilterComposer,
+    $$DBVisitsTableOrderingComposer,
+    $$DBVisitsTableAnnotationComposer,
+    $$DBVisitsTableCreateCompanionBuilder,
+    $$DBVisitsTableUpdateCompanionBuilder,
+    (DBVisit, BaseReferences<_$FacesDatabase, $DBVisitsTable, DBVisit>),
+    DBVisit,
+    PrefetchHooks Function()> {
+  $$DBVisitsTableTableManager(_$FacesDatabase db, $DBVisitsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DBVisitsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DBVisitsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DBVisitsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> faceId = const Value.absent(),
+            Value<DateTime> entryTime = const Value.absent(),
+            Value<DateTime?> exitTime = const Value.absent(),
+            Value<String> providerId = const Value.absent(),
+            Value<int?> durationSeconds = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DBVisitsCompanion(
+            id: id,
+            faceId: faceId,
+            entryTime: entryTime,
+            exitTime: exitTime,
+            providerId: providerId,
+            durationSeconds: durationSeconds,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            Value<String?> faceId = const Value.absent(),
+            required DateTime entryTime,
+            Value<DateTime?> exitTime = const Value.absent(),
+            required String providerId,
+            Value<int?> durationSeconds = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DBVisitsCompanion.insert(
+            id: id,
+            faceId: faceId,
+            entryTime: entryTime,
+            exitTime: exitTime,
+            providerId: providerId,
+            durationSeconds: durationSeconds,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DBVisitsTableProcessedTableManager = ProcessedTableManager<
+    _$FacesDatabase,
+    $DBVisitsTable,
+    DBVisit,
+    $$DBVisitsTableFilterComposer,
+    $$DBVisitsTableOrderingComposer,
+    $$DBVisitsTableAnnotationComposer,
+    $$DBVisitsTableCreateCompanionBuilder,
+    $$DBVisitsTableUpdateCompanionBuilder,
+    (DBVisit, BaseReferences<_$FacesDatabase, $DBVisitsTable, DBVisit>),
+    DBVisit,
+    PrefetchHooks Function()>;
 
 class $FacesDatabaseManager {
   final _$FacesDatabase _db;
@@ -1424,4 +1969,6 @@ class $FacesDatabaseManager {
       $$DBTrackedFacesTableTableManager(_db, _db.dBTrackedFaces);
   $$DBMergedFacesTableTableManager get dBMergedFaces =>
       $$DBMergedFacesTableTableManager(_db, _db.dBMergedFaces);
+  $$DBVisitsTableTableManager get dBVisits =>
+      $$DBVisitsTableTableManager(_db, _db.dBVisits);
 }
