@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async'; // Added for Completer
 import 'package:automated_attendance/database/database.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -14,12 +15,30 @@ class DatabaseProvider {
 
   // Database instance
   FacesDatabase? _database;
+  
+  // Completer to handle concurrent initialization requests
+  Completer<FacesDatabase>? _dbCompleter;
 
   // Get database instance
   Future<FacesDatabase> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    
+    // If already initializing, return the future from the completer
+    if (_dbCompleter != null) {
+      return _dbCompleter!.future;
+    }
+    
+    // Create a new completer and start initialization
+    _dbCompleter = Completer<FacesDatabase>();
+    try {
+      _database = await _initDatabase();
+      _dbCompleter!.complete(_database);
+      return _database!;
+    } catch (e) {
+      _dbCompleter!.completeError(e);
+      _dbCompleter = null;
+      rethrow;
+    }
   }
 
   // Initialize database
@@ -35,6 +54,7 @@ class DatabaseProvider {
     if (db != null) {
       await db.close();
       _database = null;
+      _dbCompleter = null;
     }
   }
 }
