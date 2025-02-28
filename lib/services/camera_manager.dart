@@ -37,7 +37,11 @@ class CameraManager extends ChangeNotifier {
   late int _maxFaces;
   bool _useIsolates = true;
   bool get useIsolates => _useIsolates;
-  bool _dataLoaded = false; // Flag to track if data has been loaded from DB
+  bool _dataLoaded = false;
+
+  // Pending database operations tracking for batching
+  final Set<String> _pendingFaceRefreshes = {};
+  bool _batchOperationsScheduled = false;
 
   Stream<List<double>> get faceFeaturesStream =>
       _faceFeaturesStreamController.stream;
@@ -52,7 +56,7 @@ class CameraManager extends ChangeNotifier {
     _maxFaces = _prefs.getInt('maxFaces') ?? 10; // Default max faces
 
     // Load tracked faces from database
-    await _loadTrackedFacesFromDatabase();
+    await _refreshAllFacesFromDatabase();
 
     // Load and process active visits
     await _loadActiveVisitsFromDatabase();
@@ -60,24 +64,74 @@ class CameraManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Load tracked faces from the database
-  Future<void> _loadTrackedFacesFromDatabase() async {
-    if (_dataLoaded) return;
-
+  // Load tracked faces from the database - this is now our core refresh method
+  Future<void> _refreshAllFacesFromDatabase() async {
     try {
       final loadedFaces = await _facesRepository.loadAllTrackedFaces();
+      // Clear and reload all faces
+      trackedFaces.clear();
       trackedFaces.addAll(loadedFaces);
       _dataLoaded = true;
-      notifyListeners();
     } catch (e) {
       debugPrint('Error loading tracked faces from database: $e');
     }
+  }
+
+  // Refresh a specific face from the database
+  Future<void> _refreshFaceFromDatabase(String faceId) async {
+    try {
+      final face = await _facesRepository.getTrackedFace(faceId);
+      if (face != null) {
+        trackedFaces[faceId] = face;
+      } else {
+        // Face was deleted from database, remove from memory too
+        trackedFaces.remove(faceId);
+      }
+    } catch (e) {
+      debugPrint('Error refreshing face $faceId from database: $e');
+    }
+  }
+
+  // Schedule refresh of faces with batching for efficiency
+  void _scheduleFaceRefresh(String faceId) {
+    _pendingFaceRefreshes.add(faceId);
+
+    if (!_batchOperationsScheduled) {
+      _batchOperationsScheduled = true;
+      // Use microtask to batch updates in one frame
+      Future.microtask(() {
+        _processPendingRefreshes();
+      });
+    }
+  }
+
+  // Process all pending face refreshes
+  Future<void> _processPendingRefreshes() async {
+    if (_pendingFaceRefreshes.isEmpty) {
+      _batchOperationsScheduled = false;
+      return;
+    }
+
+    // If too many faces need refresh, just refresh all
+    if (_pendingFaceRefreshes.length > 10) {
+      await _refreshAllFacesFromDatabase();
+    } else {
+      // Otherwise, refresh just the faces that changed
+      for (final faceId in _pendingFaceRefreshes) {
+        await _refreshFaceFromDatabase(faceId);
+      }
+    }
+
+    _pendingFaceRefreshes.clear();
+    _batchOperationsScheduled = false;
+    notifyListeners();
   }
 
   // Load active visits from the database and update tracking
   Future<void> _loadActiveVisitsFromDatabase() async {
     try {
       final activeVisits = await _facesRepository.getActiveVisits();
+      _activeVisits.clear();
       for (var visit in activeVisits) {
         if (visit.faceId != null) {
           _activeVisits[visit.faceId!] = visit.id;
@@ -85,15 +139,6 @@ class CameraManager extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading active visits from database: $e');
-    }
-  }
-
-  // Save a tracked face to the database
-  Future<void> _saveTrackedFaceToDatabase(TrackedFace face) async {
-    try {
-      await _facesRepository.saveTrackedFace(face);
-    } catch (e) {
-      debugPrint('Error saving tracked face to database: $e');
     }
   }
 
@@ -113,7 +158,6 @@ class CameraManager extends ChangeNotifier {
   Future<void> updateUseIsolates(bool value) async {
     if (_useIsolates == value) return;
     _useIsolates = value;
-
     notifyListeners();
   }
 
@@ -123,7 +167,7 @@ class CameraManager extends ChangeNotifier {
 
     // Make sure tracked faces are loaded
     if (!_dataLoaded) {
-      await _loadTrackedFacesFromDatabase();
+      await _refreshAllFacesFromDatabase();
     }
 
     await _discoveryService.startDiscovery(serviceType: '_camera._tcp');
@@ -307,16 +351,17 @@ class CameraManager extends ChangeNotifier {
 
       // Update last seen time and provider if similar
       if (isSimilar) {
-        // Update memory state first
-        trackedFace.firstSeen ??= now;
-        trackedFace.lastSeen = now;
-        trackedFace.lastSeenProvider = providerAddress;
         isKnownFace = true;
         matchedFaceId = trackedFace.id;
 
         try {
-          // Then update database
-          await _saveTrackedFaceToDatabase(trackedFace);
+          // Update database first (source of truth)
+          await _facesRepository.updateFaceLastSeen(
+              trackedFace.id, now, providerAddress);
+
+          // Then refresh from database to ensure consistency
+          await _refreshFaceFromDatabase(trackedFace.id);
+
           // Handle visit tracking
           await _handleFaceVisit(trackedFace.id, providerAddress, now);
         } catch (e) {
@@ -344,14 +389,14 @@ class CameraManager extends ChangeNotifier {
           thumbnail: faceThumbnail, // Store thumbnail directly
         );
 
-        // First save to database to ensure persistence
-        await _saveTrackedFaceToDatabase(newTrackedFace);
+        // Save to database first (source of truth)
+        await _facesRepository.saveTrackedFace(newTrackedFace);
 
         // Create a new visit record
         await _handleFaceVisit(newFaceId, providerAddress, now);
 
-        // Finally update memory state
-        trackedFaces[newFaceId] = newTrackedFace;
+        // Refresh from database to ensure consistency
+        await _refreshFaceFromDatabase(newFaceId);
       } catch (e) {
         debugPrint('Error creating new tracked face: $e');
       }
@@ -385,7 +430,7 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
-  // Close a visit for a specific face (called when face is no longer seen)
+  // Close a visit for a specific face
   Future<void> _closeVisit(String faceId, DateTime exitTime) async {
     final visitId = _activeVisits[faceId];
     if (visitId != null) {
@@ -422,44 +467,50 @@ class CameraManager extends ChangeNotifier {
   // Getter to retrieve the current FPS for a provider.
   int getProviderFps(String address) => _providerFps[address] ?? _fps;
 
-  void updateTrackedFaceName(String faceId, String newName) {
-    if (trackedFaces.containsKey(faceId)) {
-      trackedFaces[faceId]!.setName(newName);
+  // Update face name - updated to use DB as source of truth
+  Future<void> updateTrackedFaceName(String faceId, String newName) async {
+    if (!trackedFaces.containsKey(faceId)) return;
 
-      // Update the name in the database
-      _facesRepository.updateFaceName(faceId, newName);
+    try {
+      // Update database first
+      await _facesRepository.updateFaceName(faceId, newName);
+
+      // Then refresh from database
+      await _refreshFaceFromDatabase(faceId);
 
       notifyListeners();
+    } catch (e) {
+      debugPrint('Error updating face name: $e');
     }
   }
 
-  void mergeFaces(String targetId, String sourceId) {
+  // Merge faces - updated to use DB as source of truth
+  Future<void> mergeFaces(String targetId, String sourceId) async {
     if (!trackedFaces.containsKey(targetId) ||
         !trackedFaces.containsKey(sourceId)) {
       return;
     }
 
-    final targetFace = trackedFaces[targetId]!;
-    final sourceFace = trackedFaces[sourceId]!;
+    try {
+      // First close any active visit for the source face
+      if (_activeVisits.containsKey(sourceId)) {
+        await _closeVisit(sourceId, DateTime.now());
+      }
 
-    // Close any active visit for the source face
-    if (_activeVisits.containsKey(sourceId)) {
-      _closeVisit(sourceId, DateTime.now());
+      // Update database first in a transaction
+      await _facesRepository.mergeFaces(targetId, sourceId);
+
+      // Then refresh affected faces
+      await _refreshFaceFromDatabase(targetId);
+
+      // Source face should no longer exist, so it will be removed during refresh
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error merging faces: $e');
     }
-
-    // Add source face to target's merged faces
-    targetFace.mergedFaces.add(sourceFace);
-
-    // Remove the source face from tracked faces
-    trackedFaces.remove(sourceId);
-
-    // Update the database to reflect the merge
-    _facesRepository.mergeFaces(targetId, sourceId);
-
-    notifyListeners();
   }
 
-  // Delete a tracked face from memory and database
+  // Delete a tracked face - updated to use DB as source of truth
   Future<bool> deleteTrackedFace(String faceId) async {
     if (!trackedFaces.containsKey(faceId)) {
       return false;
@@ -471,11 +522,11 @@ class CameraManager extends ChangeNotifier {
         await _closeVisit(faceId, DateTime.now());
       }
 
-      // Perform all database operations before updating UI state
+      // Perform all database operations
       await _facesRepository.deleteFace(faceId);
       await _facesRepository.deleteVisitsForFace(faceId);
 
-      // Only after database operations succeed, update the UI state
+      // Remove from memory after successful database operations
       trackedFaces.remove(faceId);
       notifyListeners();
 
@@ -486,7 +537,7 @@ class CameraManager extends ChangeNotifier {
     }
   }
 
-  /// Split a merged face from its parent and restore it as a separate tracked face
+  /// Split a merged face - updated to use DB as source of truth
   Future<bool> splitMergedFace(
       String parentId, String mergedFaceId, int mergedFaceIndex) async {
     // Validate input parameters
@@ -499,18 +550,14 @@ class CameraManager extends ChangeNotifier {
     final mergedFace = parentFace.mergedFaces[mergedFaceIndex];
 
     try {
-      // Start with database operations to ensure consistency
-      // First add the face as a new tracked face
+      // Database operations first
       await _facesRepository.restoreMergedFace(parentId, mergedFace);
 
-      // Remove the face from the parent's merged faces
-      parentFace.mergedFaces.removeAt(mergedFaceIndex);
-      await _facesRepository.saveTrackedFace(parentFace);
+      // Refresh both faces from database
+      await _refreshFaceFromDatabase(parentId);
+      await _refreshFaceFromDatabase(mergedFace.id);
 
-      // After database operations succeed, update memory state
-      trackedFaces[mergedFace.id] = mergedFace;
       notifyListeners();
-
       return true;
     } catch (e) {
       debugPrint('Error splitting merged face: $e');

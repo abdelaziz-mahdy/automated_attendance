@@ -435,4 +435,71 @@ class FacesRepository {
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+
+  /// Gets a single tracked face by ID
+  Future<TrackedFace?> getTrackedFace(String faceId) async {
+    final database = await _databaseProvider.database;
+
+    // Get the tracked face from database
+    final dbFace = await database.getTrackedFaceById(faceId);
+    if (dbFace == null) {
+      return null;
+    }
+
+    // Convert blob to List<double> features
+    final List<double> features = _blobToFeatures(dbFace.features);
+
+    // Create the tracked face model
+    final trackedFace = TrackedFace(
+      id: dbFace.id,
+      features: features,
+      name: dbFace.name ?? dbFace.id,
+      firstSeen: dbFace.firstSeen,
+      lastSeen: dbFace.lastSeen,
+      lastSeenProvider: dbFace.lastSeenProvider,
+      thumbnail: dbFace.thumbnail,
+    );
+
+    // Load merged faces for this tracked face
+    final mergedDbFaces = await database.getMergedFacesForTarget(dbFace.id);
+    for (final mergedDbFace in mergedDbFaces) {
+      final List<double> mergedFeatures =
+          _blobToFeatures(mergedDbFace.features);
+
+      final mergedFace = TrackedFace(
+        id: mergedDbFace.sourceId,
+        features: mergedFeatures,
+        name: trackedFace.name, // Inherit the name from target face
+        firstSeen: mergedDbFace.firstSeen,
+        lastSeen: mergedDbFace.lastSeen,
+        lastSeenProvider: '', // Not storing this info for merged faces
+        thumbnail: mergedDbFace.thumbnail,
+      );
+
+      trackedFace.mergedFaces.add(mergedFace);
+    }
+
+    return trackedFace;
+  }
+
+  /// Update a face's last seen time and provider
+  Future<void> updateFaceLastSeen(
+      String faceId, DateTime timestamp, String providerId) async {
+    final database = await _databaseProvider.database;
+    final face = await database.getTrackedFaceById(faceId);
+    if (face == null) return;
+
+    final companion = DBTrackedFacesCompanion(
+      id: Value(faceId),
+      name: Value(face.name),
+      features: Value(face.features),
+      thumbnail: Value(face.thumbnail),
+      firstSeen: Value(
+          face.firstSeen ?? timestamp), // Use timestamp if firstSeen is null
+      lastSeen: Value(timestamp),
+      lastSeenProvider: Value(providerId),
+    );
+
+    await database.updateTrackedFace(companion);
+  }
 }
