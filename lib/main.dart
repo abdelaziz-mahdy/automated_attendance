@@ -1,11 +1,8 @@
 import 'dart:io';
-
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
-import 'package:automated_attendance/services/camera_manager_service.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
-import 'package:automated_attendance/services/face_management_service.dart';
 import 'package:automated_attendance/views/camera_source_selection_view.dart';
 import 'package:automated_attendance/views/data_center_view.dart';
 import 'package:automated_attendance/views/request_logs_page.dart';
@@ -19,7 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeServices();
-  await initializeSharedPreferences(); // Initialize SharedPreferences
+  await initializeSharedPreferences();
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     print('${record.level.name}: ${record.time}: ${record.message}');
@@ -48,24 +45,20 @@ Future<void> initializeServices() async {
   final faceFeaturesExtractionModelPath =
       await copyAssetFileToTmp("assets/face_recognition_sface_2021dec.onnx");
 
-  // Initialize services
   faceExtractionService.initialize(faceDetectionModelPath);
   faceFeaturesExtractionService.initialize(faceFeaturesExtractionModelPath);
   faceComparisonService.initialize(faceFeaturesExtractionModelPath);
 }
 
-// Initialize shared preferences with default values
 Future<void> initializeSharedPreferences() async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
 
-  // Set default FPS if not already set
   if (!prefs.containsKey('fps')) {
-    await prefs.setInt('fps', 10); // Default FPS
+    await prefs.setInt('fps', 10);
   }
 
-  // Set default max faces if not already set
   if (!prefs.containsKey('maxFaces')) {
-    await prefs.setInt('maxFaces', 10); // Default max faces
+    await prefs.setInt('maxFaces', 10);
   }
 }
 
@@ -74,32 +67,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // Create the service providers
-        ChangeNotifierProvider(
-          create: (context) => FaceManagementService(),
-        ),
-        ChangeNotifierProxyProvider<FaceManagementService,
-            CameraManagerService>(
-          create: (context) => CameraManagerService(
-            Provider.of<FaceManagementService>(context, listen: false),
-          ),
-          update: (context, faceManagementService, previous) =>
-              previous ?? CameraManagerService(faceManagementService),
-        ),
-        ChangeNotifierProxyProvider2<FaceManagementService,
-            CameraManagerService, UIStateController>(
-          create: (context) => UIStateController(
-            Provider.of<FaceManagementService>(context, listen: false),
-            Provider.of<CameraManagerService>(context, listen: false),
-          ),
-          update: (context, faceManagementService, cameraManagerService,
-                  previous) =>
-              previous ??
-              UIStateController(faceManagementService, cameraManagerService),
-        ),
-      ],
+    return ChangeNotifierProvider(
+      create: (context) => UIStateController(),
       child: MaterialApp(
         title: 'Automated Attendance',
         debugShowCheckedModeBanner: false,
@@ -111,14 +80,11 @@ class MyApp extends StatelessWidget {
           '/': (context) => CameraSourceSelectionView(),
           '/dataCenter': (context) => Consumer<UIStateController>(
                 builder: (context, controller, child) {
-                  // Start the controller's services when this route is accessed
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    controller.start();
-                  });
+                  controller.start();
                   return DataCenterView();
                 },
               ),
-          '/requestLogsPage': (context) => RequestLogsPage(),
+          '/logs': (context) => RequestLogsPage(),
         },
       ),
     );

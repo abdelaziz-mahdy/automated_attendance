@@ -1,5 +1,6 @@
 import 'dart:math' as Math;
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -88,7 +89,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
   }
 
   Future<void> _loadAvailableFaces() async {
-    final manager = Provider.of<CameraManager>(context, listen: false);
+    final manager = Provider.of<UIStateController>(context, listen: false);
     final faces = await manager.getAvailableFaces();
 
     if (mounted) {
@@ -103,7 +104,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
       _isLoading = true;
     });
 
-    final manager = Provider.of<CameraManager>(context, listen: false);
+    final manager = Provider.of<UIStateController>(context, listen: false);
     final stats = await manager.getVisitStatistics(
       startDate: _dateRange.start,
       endDate: _dateRange.end,

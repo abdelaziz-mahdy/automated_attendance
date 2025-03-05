@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/database/faces_repository.dart';
@@ -6,8 +7,10 @@ import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:uuid/uuid.dart';
 
+typedef FaceManagementCallback = void Function();
+
 /// Service responsible for managing face recognition, tracking, and database operations
-class FaceManagementService extends ChangeNotifier {
+class FaceManagementService {
   // Database repository
   final FacesRepository _facesRepository = FacesRepository();
   final FaceComparisonService _faceComparisonService = FaceComparisonService();
@@ -24,6 +27,9 @@ class FaceManagementService extends ChangeNotifier {
   bool _batchOperationsScheduled = false;
   bool _dataLoaded = false;
 
+  // Callback for state changes
+  FaceManagementCallback? onStateChanged;
+
   FaceManagementService() {
     _initialize();
   }
@@ -31,7 +37,7 @@ class FaceManagementService extends ChangeNotifier {
   Future<void> _initialize() async {
     await _refreshAllFacesFromDatabase();
     await _loadActiveVisitsFromDatabase();
-    notifyListeners();
+    _notifyStateChanged();
   }
 
   // Load tracked faces from the database
@@ -42,7 +48,7 @@ class FaceManagementService extends ChangeNotifier {
       trackedFaces.clear();
       trackedFaces.addAll(loadedFaces);
       _dataLoaded = true;
-      notifyListeners();
+      _notifyStateChanged();
     } catch (e) {
       debugPrint('Error loading tracked faces from database: $e');
     }
@@ -58,7 +64,7 @@ class FaceManagementService extends ChangeNotifier {
         // Face was deleted from database, remove from memory too
         trackedFaces.remove(faceId);
       }
-      notifyListeners();
+      _notifyStateChanged();
     } catch (e) {
       debugPrint('Error refreshing face $faceId from database: $e');
     }
@@ -199,7 +205,7 @@ class FaceManagementService extends ChangeNotifier {
     }
 
     // Notify listeners after all operations are complete
-    notifyListeners();
+    _notifyStateChanged();
   }
 
   // Handle visit tracking for a face
@@ -267,7 +273,7 @@ class FaceManagementService extends ChangeNotifier {
     }
 
     if (facesToClose.isNotEmpty) {
-      notifyListeners();
+      _notifyStateChanged();
     }
   }
 
@@ -333,7 +339,7 @@ class FaceManagementService extends ChangeNotifier {
       // Remove from memory after successful database operations
       trackedFaces.remove(faceId);
 
-      notifyListeners();
+      _notifyStateChanged();
       return true;
     } catch (e) {
       debugPrint('Error deleting tracked face $faceId: $e');
@@ -542,8 +548,11 @@ class FaceManagementService extends ChangeNotifier {
     return facesList;
   }
 
-  @override
+  void _notifyStateChanged() {
+    onStateChanged?.call();
+  }
+
   void dispose() {
-    super.dispose();
+    // Clean up any resources if needed
   }
 }

@@ -1,3 +1,4 @@
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
@@ -35,7 +36,8 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
       _isLoading = true;
     });
 
-    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    final cameraManager =
+        Provider.of<UIStateController>(context, listen: false);
     _similarFaces =
         await cameraManager.findSimilarFaces(widget.faceId, limit: _matchLimit);
     debugPrint('Found ${_similarFaces.length} similar faces');
@@ -45,7 +47,8 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
   }
 
   void _mergeFaces(String targetId, String sourceId) {
-    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    final cameraManager =
+        Provider.of<UIStateController>(context, listen: false);
     cameraManager.mergeFaces(targetId, sourceId);
 
     if (widget.onMergeComplete != null) {
@@ -60,7 +63,7 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
   @override
   Widget build(BuildContext context) {
     final trackedFace =
-        Provider.of<CameraManager>(context).trackedFaces[widget.faceId];
+        Provider.of<UIStateController>(context).trackedFaces[widget.faceId];
 
     if (trackedFace == null) {
       return const Center(child: Text('Face not found'));
@@ -349,7 +352,7 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
   }
 
   void _showMergeConfirmation(FaceMatch match) async {
-    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    final cameraManager = Provider.of<UIStateController>(context, listen: false);
     final currentFace = cameraManager.trackedFaces[widget.faceId]!;
     final matchFace = match.face;
 

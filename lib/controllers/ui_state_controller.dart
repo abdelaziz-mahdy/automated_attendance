@@ -5,137 +5,134 @@ import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager_service.dart';
+import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/services/face_management_service.dart';
 
-/// Controller that coordinates between the services and UI
-/// Acts as a facade to simplify UI interactions with the underlying services
-class UIStateController extends ChangeNotifier {
-  final FaceManagementService _faceManagementService;
-  final CameraManagerService _cameraManagerService;
+/// The main provider that coordinates all UI state and service interactions
+class UIStateController with ChangeNotifier {
+  late final FaceManagementService _faceManagementService;
+  late final CameraManager _cameraManager;
   Timer? _inactiveVisitsTimer;
 
-  UIStateController(this._faceManagementService, this._cameraManagerService);
+  UIStateController() {
+    _initializeServices();
+  }
 
-  // Public access to tracked faces and captured faces for UI components
+  void _initializeServices() {
+    // Initialize face management service first
+    _faceManagementService = FaceManagementService()
+      ..onStateChanged = _onFaceManagementStateChanged;
+
+    // Initialize camera manager with face management service
+    _cameraManager = CameraManager(_faceManagementService)
+      ..onStateChanged = _onCameraStateChanged
+      // Connect face features detection to face management
+      ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) {
+        _faceManagementService.processFace(
+            features, providerAddress, thumbnail);
+      };
+  }
+
+  void _onCameraStateChanged() {
+    notifyListeners();
+  }
+
+  void _onFaceManagementStateChanged() {
+    notifyListeners();
+  }
+
+  // Public accessors that delegate to the appropriate service
   Map<String, TrackedFace> get trackedFaces =>
       _faceManagementService.trackedFaces;
-  List<Uint8List> get capturedFaces => _cameraManagerService.capturedFaces;
+  List<Uint8List> get capturedFaces => _cameraManager.capturedFaces;
   Map<String, ICameraProvider> get activeProviders =>
-      _cameraManagerService.activeProviders;
-  Stream<List<double>> get faceFeaturesStream =>
-      _cameraManagerService.faceFeaturesStream;
-  bool get useIsolates => _cameraManagerService.useIsolates;
+      _cameraManager.activeProviders;
+  bool get useIsolates => _cameraManager.useIsolates;
 
   // Start all necessary services and monitoring
-  void start() {
-    _cameraManagerService.startListening();
+  Future<void> start() async {
+    await _cameraManager.startListening();
     startInactiveVisitsCleanup();
   }
 
   // Clean up resources
-  void stop() {
-    _cameraManagerService.stopListening();
+  Future<void> stop() async {
+    await _cameraManager.stopListening();
     _inactiveVisitsTimer?.cancel();
   }
 
   // Get the last frame from a specific camera provider
   Uint8List? getLastFrame(String address) =>
-      _cameraManagerService.getLastFrame(address);
+      _cameraManager.getLastFrame(address);
 
   // Get current FPS for a provider
-  int getProviderFps(String address) =>
-      _cameraManagerService.getProviderFps(address);
+  int getProviderFps(String address) => _cameraManager.getProviderFps(address);
 
-  // Update face name
-  Future<void> updateTrackedFaceName(String faceId, String newName) async {
-    await _faceManagementService.updateTrackedFaceName(faceId, newName);
-  }
+  // Face management operations delegating to FaceManagementService
+  Future<void> updateTrackedFaceName(String faceId, String newName) =>
+      _faceManagementService.updateTrackedFaceName(faceId, newName);
 
-  // Merge faces
-  Future<void> mergeFaces(String targetId, String sourceId) async {
-    await _faceManagementService.mergeFaces(targetId, sourceId);
-  }
+  Future<void> mergeFaces(String targetId, String sourceId) =>
+      _faceManagementService.mergeFaces(targetId, sourceId);
 
-  // Delete a tracked face
-  Future<bool> deleteTrackedFace(String faceId) async {
-    return await _faceManagementService.deleteTrackedFace(faceId);
-  }
+  Future<bool> deleteTrackedFace(String faceId) =>
+      _faceManagementService.deleteTrackedFace(faceId);
 
-  // Split a merged face
   Future<bool> splitMergedFace(
-      String parentId, String mergedFaceId, int mergedFaceIndex) async {
-    return await _faceManagementService.splitMergedFace(
-        parentId, mergedFaceId, mergedFaceIndex);
-  }
+          String parentId, String mergedFaceId, int mergedFaceIndex) =>
+      _faceManagementService.splitMergedFace(
+          parentId, mergedFaceId, mergedFaceIndex);
 
-  // Get visit statistics
+  // Statistics and analytics operations
   Future<Map<String, dynamic>> getVisitStatistics({
     DateTime? startDate,
     DateTime? endDate,
     String? providerId,
     String? faceId,
-  }) async {
-    return await _faceManagementService.getVisitStatistics(
-      startDate: startDate,
-      endDate: endDate,
-      providerId: providerId,
-      faceId: faceId,
-    );
-  }
+  }) =>
+      _faceManagementService.getVisitStatistics(
+        startDate: startDate,
+        endDate: endDate,
+        providerId: providerId,
+        faceId: faceId,
+      );
 
-  // Get visits for a specific face
-  Future<List<Map<String, dynamic>>> getVisitsForFace(String faceId) async {
-    return await _faceManagementService.getVisitsForFace(faceId);
-  }
+  Future<List<Map<String, dynamic>>> getVisitsForFace(String faceId) =>
+      _faceManagementService.getVisitsForFace(faceId);
 
-  // Find similar faces
-  Future<List<FaceMatch>> findSimilarFaces(String faceId,
-      {int limit = 5}) async {
-    return await _faceManagementService.findSimilarFaces(faceId, limit: limit);
-  }
+  Future<List<FaceMatch>> findSimilarFaces(String faceId, {int limit = 5}) =>
+      _faceManagementService.findSimilarFaces(faceId, limit: limit);
 
-  // Check if two faces are likely the same person
-  Future<bool> areFacesLikelyTheSamePerson(
-      String faceId1, String faceId2) async {
-    return await _faceManagementService.areFacesLikelyTheSamePerson(
-        faceId1, faceId2);
-  }
+  Future<bool> areFacesLikelyTheSamePerson(String faceId1, String faceId2) =>
+      _faceManagementService.areFacesLikelyTheSamePerson(faceId1, faceId2);
 
-  // Get similarity score between two faces
-  Future<double> getFaceSimilarityScore(String faceId1, String faceId2) async {
-    return await _faceManagementService.getFaceSimilarityScore(
-        faceId1, faceId2);
-  }
+  Future<double> getFaceSimilarityScore(String faceId1, String faceId2) =>
+      _faceManagementService.getFaceSimilarityScore(faceId1, faceId2);
 
-  // Get all available faces for filtering
-  Future<List<Map<String, dynamic>>> getAvailableFaces() async {
-    return await _faceManagementService.getAvailableFaces();
-  }
+  Future<List<Map<String, dynamic>>> getAvailableFaces() =>
+      _faceManagementService.getAvailableFaces();
 
-  // Update settings
-  Future<void> updateSettings(int maxFaces) async {
-    await _cameraManagerService.updateSettings(maxFaces);
-  }
+  // Settings operations delegating to CameraManager
+  Future<void> updateSettings(int maxFaces) =>
+      _cameraManager.updateSettings(maxFaces);
 
-  // Update isolate usage setting
-  Future<void> updateUseIsolates(bool value) async {
-    await _cameraManagerService.updateUseIsolates(value);
-  }
+  Future<void> updateUseIsolates(bool value) =>
+      _cameraManager.updateUseIsolates(value);
 
-  // Start periodic cleanup of inactive visits
+  // Maintenance operations
   void startInactiveVisitsCleanup() {
     _inactiveVisitsTimer?.cancel();
     _inactiveVisitsTimer = Timer.periodic(
       const Duration(minutes: 1),
-      (_) => _faceManagementService
-          .cleanupInactiveVisits(5), // Check for visits inactive for 5 minutes
+      (_) => _faceManagementService.cleanupInactiveVisits(5),
     );
   }
 
   @override
   void dispose() {
     _inactiveVisitsTimer?.cancel();
+    _cameraManager.dispose();
+    _faceManagementService.dispose();
     stop();
     super.dispose();
   }

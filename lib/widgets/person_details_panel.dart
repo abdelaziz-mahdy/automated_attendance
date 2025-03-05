@@ -1,5 +1,6 @@
 // lib/views/data_center_view.dart
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
@@ -56,7 +57,7 @@ class _PersonDetailsPanelState extends State<PersonDetailsPanel> {
                 border: OutlineInputBorder(),
               ),
               onChanged: (newValue) {
-                Provider.of<CameraManager>(context, listen: false)
+                Provider.of<UIStateController>(context, listen: false)
                     .updateTrackedFaceName(widget.person.id, newValue);
               },
             ),

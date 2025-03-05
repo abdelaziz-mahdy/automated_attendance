@@ -1,5 +1,6 @@
 // filepath: /Users/AbdelazizMahdy/flutter_projects/cameras_viewer/lib/widgets/recognized_person_grid_card.dart
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/utils/face_management_dialogs.dart';
@@ -64,7 +65,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
     setState(() {
       _isEditing = false;
     });
-    Provider.of<CameraManager>(context, listen: false)
+    Provider.of<UIStateController>(context, listen: false)
         .updateTrackedFaceName(widget.trackedFace.id, _nameController.text);
   }
 
@@ -73,7 +74,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
         context, widget.trackedFace);
 
     if (confirmed) {
-      final manager = Provider.of<CameraManager>(context, listen: false);
+      final manager = Provider.of<UIStateController>(context, listen: false);
       manager.deleteTrackedFace(widget.trackedFace.id);
     }
   }
@@ -281,7 +282,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
             onPressed: () {
               Navigator.pop(context);
               final manager =
-                  Provider.of<CameraManager>(context, listen: false);
+                  Provider.of<UIStateController>(context, listen: false);
               manager
                   .splitMergedFace(widget.trackedFace.id, mergedFace.id, index)
                   .then((success) {
@@ -332,7 +333,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   }
 
   void _mergeFaces(String targetId, String sourceId) {
-    final cameraManager = Provider.of<CameraManager>(context, listen: false);
+    final cameraManager = Provider.of<UIStateController>(context, listen: false);
     cameraManager.mergeFaces(targetId, sourceId);
   }
 
