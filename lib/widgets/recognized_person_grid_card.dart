@@ -213,6 +213,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                     ? Image.memory(
                         mergedFace.allThumbnails.first,
                         fit: BoxFit.cover,
+                        gaplessPlayback: true,
                       )
                     : Container(
                         color: Colors.grey.shade200,
@@ -333,7 +334,8 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
   }
 
   void _mergeFaces(String targetId, String sourceId) {
-    final cameraManager = Provider.of<UIStateController>(context, listen: false);
+    final cameraManager =
+        Provider.of<UIStateController>(context, listen: false);
     cameraManager.mergeFaces(targetId, sourceId);
   }
 
@@ -469,6 +471,7 @@ class _RecognizedPersonGridCardState extends State<RecognizedPersonGridCard> {
                   child: Image.memory(
                     widget.trackedFace.allThumbnails.first,
                     fit: BoxFit.cover,
+                    gaplessPlayback: true,
                   ),
                 )
               : Container(
