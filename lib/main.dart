@@ -84,7 +84,7 @@ class MyApp extends StatelessWidget {
                   return DataCenterView();
                 },
               ),
-          '/logs': (context) => RequestLogsPage(),
+          '/requestLogsPage': (context) => RequestLogsPage(),
         },
       ),
     );
