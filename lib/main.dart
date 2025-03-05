@@ -1,9 +1,11 @@
 import 'dart:io';
 
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
+import 'package:automated_attendance/services/camera_manager_service.dart';
 import 'package:automated_attendance/services/face_comparison_service.dart';
 import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
+import 'package:automated_attendance/services/face_management_service.dart';
 import 'package:automated_attendance/views/camera_source_selection_view.dart';
 import 'package:automated_attendance/views/data_center_view.dart';
 import 'package:automated_attendance/views/request_logs_page.dart';
@@ -72,13 +74,32 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) {
-        final manager = CameraManager();
-        // Start tracking inactive visits for analytics
-        manager.startInactiveVisitsCleanup();
-        return manager;
-      },
+    return MultiProvider(
+      providers: [
+        // Create the service providers
+        ChangeNotifierProvider(
+          create: (context) => FaceManagementService(),
+        ),
+        ChangeNotifierProxyProvider<FaceManagementService,
+            CameraManagerService>(
+          create: (context) => CameraManagerService(
+            Provider.of<FaceManagementService>(context, listen: false),
+          ),
+          update: (context, faceManagementService, previous) =>
+              previous ?? CameraManagerService(faceManagementService),
+        ),
+        ChangeNotifierProxyProvider2<FaceManagementService,
+            CameraManagerService, UIStateController>(
+          create: (context) => UIStateController(
+            Provider.of<FaceManagementService>(context, listen: false),
+            Provider.of<CameraManagerService>(context, listen: false),
+          ),
+          update: (context, faceManagementService, cameraManagerService,
+                  previous) =>
+              previous ??
+              UIStateController(faceManagementService, cameraManagerService),
+        ),
+      ],
       child: MaterialApp(
         title: 'Automated Attendance',
         debugShowCheckedModeBanner: false,
@@ -88,13 +109,14 @@ class MyApp extends StatelessWidget {
         ),
         routes: {
           '/': (context) => CameraSourceSelectionView(),
-          '/dataCenter': (context) => MultiProvider(
-                providers: [
-                  ChangeNotifierProvider<CameraManager>(
-                    create: (_) => CameraManager()..startListening(),
-                  ),
-                ],
-                child: DataCenterView(),
+          '/dataCenter': (context) => Consumer<UIStateController>(
+                builder: (context, controller, child) {
+                  // Start the controller's services when this route is accessed
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    controller.start();
+                  });
+                  return DataCenterView();
+                },
               ),
           '/requestLogsPage': (context) => RequestLogsPage(),
         },

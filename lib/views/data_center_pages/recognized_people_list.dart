@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 class RecognizedPeopleList extends StatefulWidget {
   final Function(TrackedFace)? onPersonSelected;
 
-  const RecognizedPeopleList({super.key, required this.onPersonSelected});
+  const RecognizedPeopleList({super.key, this.onPersonSelected});
 
   @override
   State<RecognizedPeopleList> createState() => _RecognizedPeopleListState();

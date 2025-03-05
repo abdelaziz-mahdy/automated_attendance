@@ -1,5 +1,5 @@
 // lib/views/data_center_view.dart
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/views/data_center_pages/active_providers_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/captured_faces_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/face_analytics_page.dart';
@@ -37,15 +37,14 @@ class _DataCenterViewState extends State<DataCenterView> {
 
   // Function to show the settings dialog
   void _showSettingsDialog(BuildContext context) {
-    final cameraManager =
-        Provider.of<CameraManager>(context, listen: false); // Get it here
+    final controller = Provider.of<UIStateController>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
-            bool useIsolates = cameraManager.useIsolates;
+            bool useIsolates = controller.useIsolates;
 
             return AlertDialog(
               title: const Text("Settings"),
@@ -68,7 +67,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                             setState(() {
                               _currentMaxFaces = newMax;
                             });
-                            cameraManager.updateSettings(newMax);
+                            controller.updateSettings(newMax);
                           },
                         ),
                       ),
@@ -86,7 +85,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                       setState(() {
                         useIsolates = value;
                       });
-                      cameraManager.updateUseIsolates(value);
+                      controller.updateUseIsolates(value);
                     },
                   ),
                 ],
@@ -96,7 +95,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                   onPressed: () {
                     Navigator.of(context).pop(); // Close the dialog
                   },
-                  child: const Text("Cancel"),
+                  child: const Text("Close"),
                 ),
               ],
             );
@@ -117,96 +116,96 @@ class _DataCenterViewState extends State<DataCenterView> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // LEFT SIDE: NAVIGATION RAIL
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              labelType: NavigationRailLabelType.all, // Show all labels
-              groupAlignment: -0.9, // Align items towards the top
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.videocam_outlined),
-                  selectedIcon: Icon(Icons.videocam),
-                  label: Text('Providers'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.face_outlined),
-                  selectedIcon: Icon(Icons.face),
-                  label: Text('Faces'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.people_outlined),
-                  selectedIcon: Icon(Icons.people),
-                  label: Text('People'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.analytics_outlined),
-                  selectedIcon: Icon(Icons.analytics),
-                  label: Text('Analytics'),
-                ),
-              ],
-              trailing: Expanded(
-                // Add extra buttons at the bottom of the rail
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Divider(thickness: 1),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0, top: 12.0),
-                      child: IconButton(
-                        icon: const Icon(Icons.settings_outlined),
-                        tooltip: 'Settings',
-                        onPressed: () {
-                          _showSettingsDialog(context); // Show settings dialog
+            // Navigation Rail on the left
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
+                    child: IntrinsicHeight(
+                      child: NavigationRail(
+                        selectedIndex: _selectedIndex,
+                        onDestinationSelected: (index) {
+                          setState(() {
+                            _selectedIndex = index;
+                          });
                         },
+                        labelType: NavigationRailLabelType.all,
+                        destinations: const [
+                          NavigationRailDestination(
+                            icon: Icon(Icons.videocam_outlined),
+                            selectedIcon: Icon(Icons.videocam),
+                            label: Text('Cameras'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.face_outlined),
+                            selectedIcon: Icon(Icons.face),
+                            label: Text('Captured'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.people_outlined),
+                            selectedIcon: Icon(Icons.people),
+                            label: Text('People'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.analytics_outlined),
+                            selectedIcon: Icon(Icons.analytics),
+                            label: Text('Analytics'),
+                          ),
+                        ],
+                        trailing: Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: IconButton(
+                                icon: const Icon(Icons.settings),
+                                onPressed: () {
+                                  _showSettingsDialog(context);
+                                },
+                                tooltip: 'Settings',
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24.0),
-                      child: IconButton(
-                        icon: const Icon(Icons.info_outlined),
-                        tooltip: 'About',
-                        onPressed: () {
-                          // Handle about action
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            // RIGHT SIDE: MAIN CONTENT AREA - Now directly using IndexedStack
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3, // Main content takes more space
-                    child: IndexedStack(
-                      // Using IndexedStack instead of TabBarView
-                      index: _selectedIndex,
-                      children: const [
-                        // Tab 1: Active Providers
-                        ActiveProvidersGrid(),
-                        // Tab 2: Captured Faces
-                        CapturedFacesGrid(),
-                        // Tab 3: Recognized People
-                        RecognizedPeopleList(onPersonSelected: null),
-                        // Tab 4: Analytics (NEW)
-                        FaceAnalyticsPage(),
-                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
+            ),
+
+            // Vertical divider
+            const VerticalDivider(
+              width: 24,
+              thickness: 1,
+              indent: 8,
+              endIndent: 8,
+            ),
+
+            // Content area - Expanded to take remaining width
+            Expanded(
+              child: _buildSelectedView(_selectedIndex),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSelectedView(int index) {
+    switch (index) {
+      case 0:
+        return const ActiveProvidersGrid();
+      case 1:
+        return const CapturedFacesGrid();
+      case 2:
+        return const RecognizedPeopleList();
+      case 3:
+        return const FaceAnalyticsPage();
+      default:
+        return const Center(child: Text("Unknown view"));
+    }
   }
 }
