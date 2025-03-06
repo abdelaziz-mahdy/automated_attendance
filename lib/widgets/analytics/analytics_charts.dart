@@ -191,7 +191,6 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
       final date = sortedDates[i];
       final dateTime = DateTime.parse(date);
       final visits = visitsByDay[date] ?? 0;
-      print("date: $date, visits: $visits");
       spots.add(FlSpot(
           dateTime.microsecondsSinceEpoch.toDouble(), visits.toDouble()));
     }
