@@ -119,9 +119,10 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
   Widget _buildVisitsHeader(BuildContext context) {
     // Count stats for header section
     final allVisits = widget.visitData.length;
-    final activeVisits = widget.visitData.where((v) => v['isActive'] == true).length;
+    final activeVisits =
+        widget.visitData.where((v) => v['isActive'] == true).length;
     final completedVisits = allVisits - activeVisits;
-    
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -191,7 +192,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
           children: [
             Row(
               children: [
-                Icon(Icons.filter_list, 
+                Icon(
+                  Icons.filter_list,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
@@ -215,9 +217,12 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                     ),
-                    value: _selectedProviderId.isEmpty ? null : _selectedProviderId,
+                    value: _selectedProviderId.isEmpty
+                        ? null
+                        : _selectedProviderId,
                     hint: const Text('All Providers'),
                     isExpanded: true,
                     onChanged: (newValue) {
@@ -568,7 +573,10 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withOpacity(0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -652,7 +660,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: recentVisits.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final visit = recentVisits[index];
                       return _buildVisitTableRow(visit);
@@ -682,7 +691,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.2),
                   child: Text(
                     personName.isNotEmpty ? personName[0].toUpperCase() : '?',
                     style: TextStyle(
@@ -829,7 +839,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.2),
                   child: Text(
                     personName.isNotEmpty ? personName[0].toUpperCase() : '?',
                     style: TextStyle(
@@ -861,7 +872,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: isActive
                         ? Colors.green.withOpacity(0.2)

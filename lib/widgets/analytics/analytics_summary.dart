@@ -268,7 +268,7 @@ class AnalyticsSummary extends StatelessWidget {
         ? '${peakHour!} AM'
         : '${peakHour! == 12 ? 12 : peakHour! - 12} PM';
 
-    return '$hourFormatted (${maxVisits} visits)';
+    return '$hourFormatted ($maxVisits visits)';
   }
 
   int? _calculateCompletionRate() {

@@ -2,7 +2,6 @@
 
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 

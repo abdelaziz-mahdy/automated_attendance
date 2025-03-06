@@ -76,7 +76,10 @@ class _AnalyticsFiltersState extends State<AnalyticsFilters> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withOpacity(0.3),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(

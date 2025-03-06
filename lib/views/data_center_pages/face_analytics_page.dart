@@ -1,16 +1,12 @@
-import 'dart:math' as math;
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/widgets/analytics/analytics_charts.dart';
 import 'package:automated_attendance/widgets/analytics/analytics_filters.dart';
 import 'package:automated_attendance/widgets/analytics/analytics_summary.dart';
 import 'package:automated_attendance/widgets/analytics/people_analytics.dart';
 import 'package:automated_attendance/widgets/analytics/visits_analytics.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'dart:async';
 
 class FaceAnalyticsPage extends StatefulWidget {
@@ -801,7 +797,8 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
   }
 
   String? _findMostActiveCamera() {
-    final visitsByProvider = _statistics['visitsByProvider'] as Map<String, int>? ?? {};
+    final visitsByProvider =
+        _statistics['visitsByProvider'] as Map<String, int>? ?? {};
     if (visitsByProvider.isEmpty) return null;
 
     String? mostActiveProvider;
@@ -824,14 +821,14 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     }
 
     // Find the day with the most visits
-    String mostFrequentDay = visitsByDay.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    String mostFrequentDay =
+        visitsByDay.entries.reduce((a, b) => a.value > b.value ? a : b).key;
 
     // Calculate total visits for a general comparison
     int totalVisits = visitsByDay.values.reduce((a, b) => a + b);
 
     return "The day with the most visits is $mostFrequentDay. Overall, visit patterns are relatively consistent throughout the week.";
   }
-
 
   String _analyzeTimeOfDayPattern() {
     final visitsByHour = _statistics['visitsByHour'] as Map<int, int>? ?? {};
@@ -840,7 +837,8 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     }
 
     // Find the hour with the most visits
-    int peakHour = visitsByHour.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    int peakHour =
+        visitsByHour.entries.reduce((a, b) => a.value > b.value ? a : b).key;
 
     // Determine if the peak hour is AM or PM
     String period = peakHour < 12 ? "AM" : "PM";
@@ -849,7 +847,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     int displayHour = peakHour % 12;
     if (displayHour == 0) displayHour = 12; // Midnight
 
-    return "Peak activity occurs around ${displayHour}${period}. We see consistent activity throughout the day, with quieter periods overnight.";
+    return "Peak activity occurs around $displayHour$period. We see consistent activity throughout the day, with quieter periods overnight.";
   }
 
   String _analyzeDurationPattern() {

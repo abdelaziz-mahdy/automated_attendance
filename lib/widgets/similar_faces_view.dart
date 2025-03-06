@@ -1,7 +1,6 @@
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/utils/face_management_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -352,7 +351,8 @@ class _SimilarFacesViewState extends State<SimilarFacesView> {
   }
 
   void _showMergeConfirmation(FaceMatch match) async {
-    final cameraManager = Provider.of<UIStateController>(context, listen: false);
+    final cameraManager =
+        Provider.of<UIStateController>(context, listen: false);
     final currentFace = cameraManager.trackedFaces[widget.faceId]!;
     final matchFace = match.face;
 

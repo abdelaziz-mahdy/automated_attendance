@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/database/faces_repository.dart';
 import 'package:automated_attendance/models/face_match.dart';

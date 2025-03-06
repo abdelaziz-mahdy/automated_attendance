@@ -223,8 +223,8 @@ class _PeopleAnalyticsState extends State<PeopleAnalytics> {
               backgroundImage: MemoryImage(face['thumbnail']),
             )
           : CircleAvatar(
-              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
               backgroundColor: Colors.blue.shade200,
+              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
             ),
       title: Row(
         children: [
