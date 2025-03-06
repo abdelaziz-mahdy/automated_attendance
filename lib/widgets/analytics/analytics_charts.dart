@@ -177,12 +177,23 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
       ..sort((a, b) => a.compareTo(b));
 
     final spots = <FlSpot>[];
-
+    final renderedDates = {};
+    // /// if there is only one date, improve it by adding dates before and after
+    // if (sortedDates.length == 1) {
+    //   final date = DateTime.parse(sortedDates[0]);
+    //   final previousDate = date.subtract(const Duration(days: 1));
+    //   final nextDate = date.add(const Duration(days: 1));
+    //   sortedDates.insert(0, previousDate.toIso8601String());
+    //   sortedDates.add(nextDate.toIso8601String());
+    // }
     // Create spots for the chart
     for (int i = 0; i < sortedDates.length; i++) {
       final date = sortedDates[i];
+      final dateTime = DateTime.parse(date);
       final visits = visitsByDay[date] ?? 0;
-      spots.add(FlSpot(i.toDouble(), visits.toDouble()));
+      print("date: $date, visits: $visits");
+      spots.add(FlSpot(
+          dateTime.microsecondsSinceEpoch.toDouble(), visits.toDouble()));
     }
 
     return Card(
@@ -199,7 +210,6 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: true,
-                    horizontalInterval: 1,
                     getDrawingHorizontalLine: (value) {
                       return FlLine(
                         color: Colors.grey.shade300,
@@ -233,24 +243,20 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 30,
+                        maxIncluded: false,
+                        minIncluded: false,
                         getTitlesWidget: (value, meta) {
-                          final index = value.toInt();
-                          if (index >= 0 &&
-                              index < sortedDates.length &&
-                              index % 2 == 0) {
-                            final date = sortedDates[index];
-                            final parts = date.split('-');
-                            if (parts.length >= 3) {
-                              return SideTitleWidget(
-                                meta: meta,
-                                child: Text(
-                                  '${parts[1]}/${parts[2]}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              );
-                            }
-                          }
-                          return const SizedBox();
+                          final date = DateTime.fromMicrosecondsSinceEpoch(
+                              value.toInt());
+                          return SideTitleWidget(
+                            meta: meta,
+                            child: Text(
+                              '${date.month}/${date.day}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+
+                          // return const SizedBox();
                         },
                       ),
                     ),
@@ -265,8 +271,8 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
                     show: true,
                     border: Border.all(color: Colors.grey.shade300),
                   ),
-                  minX: -0.5,
-                  maxX: sortedDates.length - 0.5,
+                  // minX: -0.5,
+                  // maxX: sortedDates.length - 0.5,
                   minY: 0,
                   lineBarsData: [
                     LineChartBarData(
@@ -539,6 +545,8 @@ class _AnalyticsChartsState extends State<AnalyticsCharts>
                               reservedSize: 30,
                               getTitlesWidget: (value, meta) {
                                 final index = value.toInt();
+
+                                /// Show only every 2nd hour
                                 if (index % 2 == 0 && index < 24) {
                                   final amPm = index < 12 ? 'AM' : 'PM';
                                   final hour =
