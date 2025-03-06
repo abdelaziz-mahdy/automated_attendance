@@ -5,6 +5,7 @@ import 'package:automated_attendance/services/face_extraction_service.dart';
 import 'package:automated_attendance/services/face_features_extraction_service.dart';
 import 'package:automated_attendance/views/camera_source_selection_view.dart';
 import 'package:automated_attendance/views/data_center_view.dart';
+import 'package:automated_attendance/views/data_center_pages/person_visits_view.dart';
 import 'package:automated_attendance/views/request_logs_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -85,6 +86,19 @@ class MyApp extends StatelessWidget {
                 },
               ),
           '/requestLogsPage': (context) => RequestLogsPage(),
+        },
+        // Add onGenerateRoute to handle routes with arguments
+        onGenerateRoute: (settings) {
+          if (settings.name == '/personVisits') {
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(
+              builder: (context) => PersonVisitsView(
+                faceId: args['faceId'],
+                personName: args['personName'],
+              ),
+            );
+          }
+          return null;
         },
       ),
     );
