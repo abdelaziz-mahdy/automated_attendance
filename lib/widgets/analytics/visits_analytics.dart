@@ -103,12 +103,12 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context),
-        const SizedBox(height: 16),
+        _buildVisitsHeader(context),
+        const SizedBox(height: 20),
         _buildFilterOptions(),
-        const SizedBox(height: 16),
-        _buildVisitsCalendar(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
+        _buildVisitsCalendarCard(),
+        const SizedBox(height: 20),
         _buildSelectedDayVisits(),
         const SizedBox(height: 24),
         _buildRecentVisitsTable(filteredVisits),
@@ -116,17 +116,35 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildVisitsHeader(BuildContext context) {
+    // Count stats for header section
+    final allVisits = widget.visitData.length;
+    final activeVisits = widget.visitData.where((v) => v['isActive'] == true).length;
+    final completedVisits = allVisits - activeVisits;
+    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Visits Analytics',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Visits Log & Calendar',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$allVisits total visits • $activeVisits active • $completedVisits completed',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
         ),
         Row(
           children: [
@@ -136,7 +154,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Export functionality not implemented')),
+                    content: Text('Export functionality not implemented'),
+                  ),
                 );
               },
             ),
@@ -161,7 +180,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     final providersList = ['All Providers', ...providers];
 
     return Card(
-      elevation: 1,
+      elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -170,40 +189,48 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Filter Visits',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+            Row(
+              children: [
+                Icon(Icons.filter_list, 
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Filter Visits',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const Divider(height: 24),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Provider',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    value: _selectedProviderId.isEmpty
-                        ? null
-                        : _selectedProviderId,
+                    value: _selectedProviderId.isEmpty ? null : _selectedProviderId,
                     hint: const Text('All Providers'),
                     isExpanded: true,
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedProviderId = newValue ?? '';
+                      });
+                    },
                     items: providersList.map((provider) {
                       return DropdownMenuItem<String>(
                         value: provider == 'All Providers' ? '' : provider,
                         child: Text(provider),
                       );
                     }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedProviderId = value ?? '';
-                      });
-                    },
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -212,34 +239,45 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                   children: [
                     Row(
                       children: [
-                        Checkbox(
-                          value: _showOnlyActive,
-                          onChanged: (value) {
-                            setState(() {
-                              _showOnlyActive = value ?? false;
-                              if (_showOnlyActive) {
-                                _showOnlyCompleted = false;
-                              }
-                            });
-                          },
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _showOnlyActive,
+                            onChanged: (value) {
+                              setState(() {
+                                _showOnlyActive = value ?? false;
+                                if (_showOnlyActive) {
+                                  _showOnlyCompleted = false;
+                                }
+                              });
+                            },
+                          ),
                         ),
-                        const Text('Active Only'),
+                        const SizedBox(width: 8),
+                        const Text('Active Visits Only'),
                       ],
                     ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        Checkbox(
-                          value: _showOnlyCompleted,
-                          onChanged: (value) {
-                            setState(() {
-                              _showOnlyCompleted = value ?? false;
-                              if (_showOnlyCompleted) {
-                                _showOnlyActive = false;
-                              }
-                            });
-                          },
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _showOnlyCompleted,
+                            onChanged: (value) {
+                              setState(() {
+                                _showOnlyCompleted = value ?? false;
+                                if (_showOnlyCompleted) {
+                                  _showOnlyActive = false;
+                                }
+                              });
+                            },
+                          ),
                         ),
-                        const Text('Completed Only'),
+                        const SizedBox(width: 8),
+                        const Text('Completed Visits Only'),
                       ],
                     ),
                   ],
@@ -252,7 +290,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     );
   }
 
-  Widget _buildVisitsCalendar() {
+  Widget _buildVisitsCalendarCard() {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -263,14 +301,24 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Visit Calendar',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_month,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Visit Calendar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
             TableCalendar(
               firstDay: DateTime.utc(2020, 1, 1),
               lastDay: DateTime.utc(2030, 12, 31),
@@ -326,15 +374,25 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
             ),
             const SizedBox(height: 8),
             Center(
-              child: Text(
-                _eventsMap.isEmpty
-                    ? 'No visits recorded in the calendar'
-                    : 'Dot indicates visits on that day',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontStyle: FontStyle.italic,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _eventsMap.isEmpty
+                        ? 'No visits recorded in the calendar'
+                        : 'Dots indicate visits on that day',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -345,6 +403,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
 
   Widget _buildSelectedDayVisits() {
     final events = _getEventsForDay(_selectedDay);
+    final formattedDate = DateFormat('EEEE, MMMM d, yyyy').format(_selectedDay);
 
     return Card(
       elevation: 2,
@@ -362,43 +421,48 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Visits on ${DateFormat('MMMM d, yyyy').format(_selectedDay)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.event,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Visits on $formattedDate',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      events.isEmpty
-                          ? 'No visits on this day'
-                          : '${events.length} visits',
+                      events.isEmpty ? 'No visits' : '${events.length} visits',
                       style: TextStyle(
                         color: Colors.grey[600],
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
                 if (events.isNotEmpty)
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.share, size: 16),
-                    label: const Text('Share'),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.filter_list),
+                    label: const Text('Sort'),
                     onPressed: () {
+                      // Sort options would be added here
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content:
-                                Text('Share functionality not implemented')),
+                          content: Text('Sorting not implemented'),
+                        ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.primaryContainer,
-                      foregroundColor:
-                          Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
                   ),
               ],
             ),
+            const Divider(height: 24),
             if (events.isEmpty)
               SizedBox(
                 height: 100,
@@ -427,9 +491,9 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                 height: 250,
                 child: ListView.builder(
                   itemCount: events.length,
-                  padding: const EdgeInsets.only(top: 16),
                   itemBuilder: (context, index) {
-                    return _buildVisitItem(events[index]);
+                    final visit = events[index];
+                    return _buildVisitItem(visit);
                   },
                 ),
               ),
@@ -461,96 +525,134 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Recent Visits',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.history,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Recent Visits',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Most recent ${recentVisits.length} of ${visits.length} visits',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Showing ${recentVisits.length} of ${visits.length} visits',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () {
+                    // Table options would be added here
+                  },
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
 
-            // Header row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+            // Header row with styled containers
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Row(
                 children: [
                   Expanded(
                     flex: 2,
                     child: Text(
-                      'Person',
+                      'PERSON',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
                         fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
                   Expanded(
                     flex: 2,
                     child: Text(
-                      'Entry Time',
+                      'ENTRY TIME',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
                         fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
                   Expanded(
                     flex: 2,
                     child: Text(
-                      'Exit / Duration',
+                      'EXIT / DURATION',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
                         fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ),
                   Expanded(
                     flex: 1,
                     child: Text(
-                      'Status',
+                      'STATUS',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
                         fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],
               ),
             ),
 
-            const Divider(height: 24),
+            const SizedBox(height: 8),
 
             // Visit rows
             recentVisits.isEmpty
                 ? SizedBox(
                     height: 100,
                     child: Center(
-                      child: Text(
-                        'No visits matched the filter criteria',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_off,
+                            size: 32,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No visit data available',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   )
-                : ListView.builder(
+                : ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: recentVisits.length,
+                    separatorBuilder: (context, index) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final visit = recentVisits[index];
                       return _buildVisitTableRow(visit);
@@ -570,7 +672,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     final personName = visit['personName'] as String? ?? 'Unknown';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
           // Person column
@@ -579,13 +681,13 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 14,
-                  backgroundColor: Colors.blue.shade100,
+                  radius: 16,
+                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                   child: Text(
                     personName.isNotEmpty ? personName[0].toUpperCase() : '?',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue.shade800,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ),
@@ -593,8 +695,10 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                 Expanded(
                   child: Text(
                     personName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
               ],
@@ -608,7 +712,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  DateFormat('MMM d').format(entryTime),
+                  DateFormat('MMM d, yyyy').format(entryTime),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(
@@ -630,23 +734,45 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        DateFormat('h:mm a').format(exitTime),
+                        DateFormat('MMM d, yyyy').format(exitTime),
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
-                      Text(
-                        _formatDuration(duration ?? Duration.zero),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            DateFormat('h:mm a').format(exitTime),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          if (duration != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _formatDuration(duration),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   )
-                : const Text(
+                : Text(
                     'Still Active',
                     style: TextStyle(
+                      color: Colors.green[700],
                       fontWeight: FontWeight.w500,
-                      color: Colors.green,
                     ),
                   ),
           ),
@@ -666,9 +792,9 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                 isActive ? 'Active' : 'Complete',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 12,
-                  color: isActive ? Colors.green : Colors.blue,
+                  color: isActive ? Colors.green[700] : Colors.blue[700],
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
             ),
@@ -690,6 +816,9 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -699,13 +828,14 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 18,
-                  backgroundColor: isActive
-                      ? Colors.green.withOpacity(0.2)
-                      : Colors.blue.withOpacity(0.2),
-                  child: Icon(
-                    isActive ? Icons.person : Icons.how_to_reg,
-                    color: isActive ? Colors.green : Colors.blue,
+                  radius: 20,
+                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                  child: Text(
+                    personName.isNotEmpty ? personName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -720,44 +850,42 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                           fontSize: 16,
                         ),
                       ),
-                      if (personId.isNotEmpty)
-                        Text(
-                          'ID: $personId',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
+                      Text(
+                        'ID: $personId',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
                         ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: isActive
                         ? Colors.green.withOpacity(0.2)
                         : Colors.blue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     isActive ? 'ACTIVE' : 'COMPLETED',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: isActive ? Colors.green : Colors.blue,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: isActive ? Colors.green[700] : Colors.blue[700],
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
             Row(
               children: [
                 Expanded(
                   child: _buildVisitDetail(
                     'Entry Time',
-                    DateFormat('h:mm a').format(entryTime),
+                    '${DateFormat('MMM d, yyyy').format(entryTime)} at ${DateFormat('h:mm a').format(entryTime)}',
                     Icons.login,
                   ),
                 ),
@@ -765,7 +893,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                   Expanded(
                     child: _buildVisitDetail(
                       'Exit Time',
-                      DateFormat('h:mm a').format(exitTime),
+                      '${DateFormat('MMM d, yyyy').format(exitTime)} at ${DateFormat('h:mm a').format(exitTime)}',
                       Icons.logout,
                     ),
                   ),
@@ -784,16 +912,16 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               children: [
                 Expanded(
                   child: _buildVisitDetail(
-                    'Provider',
+                    'Camera Provider',
                     providerId,
-                    Icons.videocam,
+                    Icons.camera_alt,
                   ),
                 ),
                 Expanded(
                   child: _buildVisitDetail(
-                    'Date',
-                    DateFormat('MMM d, yyyy').format(entryTime),
-                    Icons.calendar_today,
+                    'Status',
+                    isActive ? 'Still Present' : 'Visit Completed',
+                    isActive ? Icons.person : Icons.check_circle,
                   ),
                 ),
               ],
@@ -807,10 +935,17 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
   Widget _buildVisitDetail(String label, String value, IconData icon) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: Colors.grey[600],
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: Colors.grey[700],
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -820,7 +955,8 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
                   color: Colors.grey[600],
                 ),
               ),
@@ -828,6 +964,7 @@ class _VisitsAnalyticsState extends State<VisitsAnalytics> {
                 value,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
+                  fontSize: 13,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),

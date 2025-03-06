@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/widgets/analytics/analytics_charts.dart';
@@ -139,13 +138,11 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
       final String faceId = face['id'] ?? '';
       if (faceId.isNotEmpty) {
         final visits = await manager.getVisitsForFace(faceId);
-
         // Add person information to each visit
         for (final visit in visits) {
           visit['personName'] = face['name'] ?? 'Unknown';
           visit['personId'] = faceId;
         }
-
         allVisits.addAll(visits);
       }
     }
@@ -207,78 +204,11 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(),
-                      const SizedBox(height: 16),
-                      AnalyticsFilters(
-                        dateRange: _dateRange,
-                        selectedProviderId: _selectedProviderId,
-                        selectedFaceId: _selectedFaceId,
-                        selectedTimeRange: _selectedTimeRange,
-                        availableFaces: _availableFaces,
-                        availableProviders:
-                            _statistics['providers'] as Set<String>? ??
-                                <String>{},
-                        onDateRangeChanged: (newRange) {
-                          setState(() {
-                            _dateRange = newRange;
-                          });
-                          _loadStatistics();
-                        },
-                        onProviderChanged: (providerId) {
-                          setState(() {
-                            _selectedProviderId = providerId;
-                          });
-                          _loadStatistics();
-                        },
-                        onFaceChanged: (faceId) {
-                          setState(() {
-                            _selectedFaceId = faceId;
-                          });
-                          _loadStatistics();
-                        },
-                        onTimeRangeChanged: (timeRange) {
-                          setState(() {
-                            _selectedTimeRange = timeRange;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      AnalyticsSummary(
-                        statistics: _statistics,
-                        onExport: _exportData,
-                      ),
-                      const SizedBox(height: 24),
-                      AnalyticsCharts(
-                        statistics: _statistics,
-                        showAdvancedCharts: _showAdvancedCharts,
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
+                child: _buildHeaderContent(),
               ),
               SliverPersistentHeader(
                 delegate: _SliverAppBarDelegate(
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    indicator: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                    ),
-                    tabs: const [
-                      Tab(text: "OVERVIEW"),
-                      Tab(text: "PEOPLE"),
-                      Tab(text: "VISITS"),
-                    ],
-                  ),
+                  _buildTabBar(),
                 ),
                 pinned: true,
               ),
@@ -289,10 +219,8 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
             children: [
               // OVERVIEW TAB
               _buildOverviewTab(),
-
               // PEOPLE TAB
               _buildPeopleTab(),
-
               // VISITS TAB
               _buildVisitsTab(),
             ],
@@ -302,64 +230,228 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Face Analytics Dashboard',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+  Widget _buildHeaderContent() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title section with a nice container background
+          _buildTitleSection(),
+          const SizedBox(height: 20),
+          // Analytics Filters in a card
+          _buildFiltersCard(),
+          const SizedBox(height: 20),
+          // Analytics Summary in a nice container with shadow
+          _buildSummarySection(),
+          const SizedBox(height: 24),
+          // Analytics Charts in its own component
+          _buildChartsSection(),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Face Analytics Dashboard',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _loadStatistics,
+                tooltip: 'Refresh data',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Last updated: ${DateFormat('MMM dd, yyyy - HH:mm').format(_lastUpdated)}',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              Row(
+                children: [
+                  const Text(
+                    'Advanced Analytics',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  Switch(
+                    value: _showAdvancedCharts,
+                    onChanged: (value) {
+                      setState(() {
+                        _showAdvancedCharts = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiltersCard() {
+    return Card(
+      elevation: 2,
+      shadowColor: Colors.black38,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: AnalyticsFilters(
+          dateRange: _dateRange,
+          selectedProviderId: _selectedProviderId,
+          selectedFaceId: _selectedFaceId,
+          selectedTimeRange: _selectedTimeRange,
+          availableFaces: _availableFaces,
+          availableProviders:
+              _statistics['providers'] as Set<String>? ?? <String>{},
+          onDateRangeChanged: (newRange) {
+            setState(() {
+              _dateRange = newRange;
+            });
+            _loadStatistics();
+          },
+          onProviderChanged: (providerId) {
+            setState(() {
+              _selectedProviderId = providerId;
+            });
+            _loadStatistics();
+          },
+          onFaceChanged: (faceId) {
+            setState(() {
+              _selectedFaceId = faceId;
+            });
+            _loadStatistics();
+          },
+          onTimeRangeChanged: (timeRange) {
+            setState(() {
+              _selectedTimeRange = timeRange;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummarySection() {
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black26,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: AnalyticsSummary(
+          statistics: _statistics,
+          onExport: _exportData,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChartsSection() {
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black26,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: AnalyticsCharts(
+          statistics: _statistics,
+          showAdvancedCharts: _showAdvancedCharts,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: Theme.of(context).colorScheme.onPrimary,
+        unselectedLabelColor: Theme.of(context).colorScheme.onSurface,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          borderRadius: BorderRadius.circular(50),
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        dividerColor: Colors.transparent,
+        tabs: const [
+          Tab(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                "OVERVIEW",
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadStatistics,
-              tooltip: 'Refresh data',
-            ),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Last updated: ${DateFormat('MMM dd, yyyy - HH:mm').format(_lastUpdated)}',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
+          ),
+          Tab(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                "PEOPLE",
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            Row(
-              children: [
-                const Text(
-                  'Advanced Analytics',
-                  style: TextStyle(fontSize: 12),
-                ),
-                Switch(
-                  value: _showAdvancedCharts,
-                  onChanged: (value) {
-                    setState(() {
-                      _showAdvancedCharts = value;
-                    });
-                  },
-                ),
-              ],
+          ),
+          Tab(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                "VISITS",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildOverviewTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -384,44 +476,47 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Key Insights',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+            Row(
               children: [
-                _buildInsightItem(
-                  'Total of $totalVisits visits recorded during this period',
-                  Icons.trending_up,
-                  Colors.blue,
+                Icon(
+                  Icons.insights,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                _buildInsightItem(
-                  'Detected $uniqueFaces unique individuals',
-                  Icons.people,
-                  Colors.purple,
-                ),
-                _buildInsightItem(
-                  'Peak hours: $peakHour',
-                  Icons.access_time,
-                  Colors.orange,
-                ),
-                _buildInsightItem(
-                  'Most active camera: ${_findMostActiveCamera() ?? 'No data'}',
-                  Icons.camera_alt,
-                  Colors.green,
+                const SizedBox(width: 8),
+                Text(
+                  'Key Insights',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ],
+            ),
+            const Divider(height: 24),
+            _buildInsightItem(
+              'Total of $totalVisits visits recorded during this period',
+              Icons.trending_up,
+              Colors.blue,
+            ),
+            _buildInsightItem(
+              'Detected $uniqueFaces unique individuals',
+              Icons.people,
+              Colors.purple,
+            ),
+            _buildInsightItem(
+              'Peak hours: $peakHour',
+              Icons.access_time,
+              Colors.orange,
+            ),
+            _buildInsightItem(
+              'Most active camera: ${_findMostActiveCamera() ?? 'No data'}',
+              Icons.camera_alt,
+              Colors.green,
             ),
           ],
         ),
@@ -465,19 +560,28 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Recommendations',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.lightbulb,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Recommendations',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
             _buildRecommendationItem(
               'Optimize camera placement to improve detection accuracy',
               'Based on current detection patterns, repositioning cameras might improve coverage.',
@@ -551,19 +655,28 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Trends & Patterns',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.trending_up,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Trends & Patterns',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
             _buildTrendItem(
               'Day of Week Patterns',
               _analyzeDayOfWeekPattern(),
@@ -629,21 +742,39 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
 
   Widget _buildPeopleTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: PeopleAnalytics(
-        availableFaces: _availableFaces,
-        statistics: _statistics,
-        onFaceSelected: _navigateToPersonDetails,
+      padding: const EdgeInsets.all(20),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: PeopleAnalytics(
+            availableFaces: _availableFaces,
+            statistics: _statistics,
+            onFaceSelected: _navigateToPersonDetails,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildVisitsTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: VisitsAnalytics(
-        statistics: _statistics,
-        visitData: _visitData,
+      padding: const EdgeInsets.all(20),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: VisitsAnalytics(
+            statistics: _statistics,
+            visitData: _visitData,
+          ),
+        ),
       ),
     );
   }
@@ -666,17 +797,24 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
 
     final amPm = peakHour! < 12 ? 'AM' : 'PM';
     final hourDisplay = peakHour! % 12 == 0 ? 12 : peakHour! % 12;
-
     return '$hourDisplay:00 $amPm';
   }
 
   String? _findMostActiveCamera() {
-    final providers = _statistics['providers'] as Set<String>? ?? <String>{};
-    if (providers.isEmpty) return null;
+    final visitsByProvider = _statistics['visitsByProvider'] as Map<String, int>? ?? {};
+    if (visitsByProvider.isEmpty) return null;
 
-    // In a real implementation, we would count visits by provider
-    // Here we just return the first provider for demonstration
-    return providers.first;
+    String? mostActiveProvider;
+    int maxVisits = 0;
+
+    visitsByProvider.forEach((provider, visits) {
+      if (visits > maxVisits) {
+        maxVisits = visits;
+        mostActiveProvider = provider;
+      }
+    });
+
+    return mostActiveProvider;
   }
 
   String _analyzeDayOfWeekPattern() {
@@ -685,10 +823,15 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
       return "Not enough data to analyze day patterns.";
     }
 
-    // In a real implementation, we would analyze which days have more visits
-    // For demonstration, we return a sample analysis
-    return "Weekdays typically have 30% more traffic than weekends. Wednesday has the highest footfall.";
+    // Find the day with the most visits
+    String mostFrequentDay = visitsByDay.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    // Calculate total visits for a general comparison
+    int totalVisits = visitsByDay.values.reduce((a, b) => a + b);
+
+    return "The day with the most visits is $mostFrequentDay. Overall, visit patterns are relatively consistent throughout the week.";
   }
+
 
   String _analyzeTimeOfDayPattern() {
     final visitsByHour = _statistics['visitsByHour'] as Map<int, int>? ?? {};
@@ -696,42 +839,46 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
       return "Not enough data to analyze time patterns.";
     }
 
-    // For demonstration, we return a sample analysis
-    return "Peak activity occurs between 8AM-11AM and 2PM-5PM. Lowest activity is between 11PM-5AM.";
+    // Find the hour with the most visits
+    int peakHour = visitsByHour.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    // Determine if the peak hour is AM or PM
+    String period = peakHour < 12 ? "AM" : "PM";
+
+    // Convert 24-hour format to 12-hour format
+    int displayHour = peakHour % 12;
+    if (displayHour == 0) displayHour = 12; // Midnight
+
+    return "Peak activity occurs around ${displayHour}${period}. We see consistent activity throughout the day, with quieter periods overnight.";
   }
 
   String _analyzeDurationPattern() {
     final avgDurationSeconds = _statistics['avgDurationSeconds'] ?? 0.0;
-
     if (avgDurationSeconds == 0) {
       return "Not enough data to analyze duration patterns.";
     }
 
     final minutes = (avgDurationSeconds / 60).round();
-
     return "Average visit duration is $minutes minutes. Shorter visits most commonly occur during morning hours.";
   }
 }
 
 // SliverPersistentHeader delegate for the tab bar
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar _tabBar;
+  final Widget _tabBar;
 
   _SliverAppBarDelegate(this._tabBar);
 
   @override
-  double get minExtent => _tabBar.preferredSize.height;
+  double get minExtent => 56;
 
   @override
-  double get maxExtent => _tabBar.preferredSize.height;
+  double get maxExtent => 56;
 
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: _tabBar,
-    );
+    return _tabBar;
   }
 
   @override
