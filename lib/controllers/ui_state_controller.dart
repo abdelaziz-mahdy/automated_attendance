@@ -19,14 +19,6 @@ class UIStateController with ChangeNotifier {
   Function(int)? onAnalyticsIntervalChanged;
 
   UIStateController() {
-    _initializeServices();
-  }
-
-  Future<void> _initializeServices() async {
-    // Initialize settings service first
-    _settingsService = SettingsService();
-    await _settingsService.initialize();
-
     // Initialize face management service
     _faceManagementService = FaceManagementService()
       ..onStateChanged = _onFaceManagementStateChanged;
@@ -38,6 +30,13 @@ class UIStateController with ChangeNotifier {
         _faceManagementService.processFace(
             features, providerAddress, thumbnail);
       };
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    // Initialize settings service first
+    _settingsService = SettingsService();
+    await _settingsService.initialize();
 
     // Apply settings to camera manager
     await _cameraManager.updateSettings(_settingsService.maxFaces);

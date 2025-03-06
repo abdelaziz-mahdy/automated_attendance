@@ -68,7 +68,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     _tabController.dispose();
     
     // Remove callback when disposed
-    if (mounted) {
+    if (mounted && context.mounted) {
       final controller = Provider.of<UIStateController>(context, listen: false);
       controller.onAnalyticsIntervalChanged = null;
     }

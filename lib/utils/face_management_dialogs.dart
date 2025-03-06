@@ -94,53 +94,70 @@ class FaceManagementDialogs {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Choose merge direction:',
+              'Choose which face to keep:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Source face thumbnail
-                Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.blue.shade300,
-                          width: 2,
+                // Source face column with keep button
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Source face thumbnail
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.blue.shade300,
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: sourceFace.allThumbnails.isNotEmpty
+                              ? Image.memory(
+                                  sourceFace.allThumbnails.first,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  color: Colors.grey.shade200,
+                                  child: Icon(
+                                    Icons.person,
+                                    size: 50,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
                         ),
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: sourceFace.allThumbnails.isNotEmpty
-                            ? Image.memory(
-                                sourceFace.allThumbnails.first,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
+                      const SizedBox(height: 8),
+                      Text(
+                        sourceFace.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      sourceFace.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      // Keep this face button
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade50,
+                          foregroundColor: Colors.blue.shade800,
+                          side: BorderSide(color: Colors.blue.shade300),
+                        ),
+                        onPressed: () => Navigator.pop(context, sourceFace.id),
+                        icon: Icon(Icons.check_circle_outline,
+                            color: Colors.blue.shade700),
+                        label: const Text('KEEP THIS'),
+                      ),
+                    ],
+                  ),
                 ),
-                // Arrow
+
+                // Arrow and similarity score
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Column(
                     children: [
                       Icon(
@@ -175,122 +192,74 @@ class FaceManagementDialogs {
                     ],
                   ),
                 ),
-                // Target face thumbnail
-                Column(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.green.shade300,
-                          width: 2,
+
+                // Target face column with keep button
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Target face thumbnail
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.green.shade300,
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: targetFace.allThumbnails.isNotEmpty
+                              ? Image.memory(
+                                  targetFace.allThumbnails.first,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  color: Colors.grey.shade200,
+                                  child: Icon(
+                                    Icons.person,
+                                    size: 50,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
                         ),
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: targetFace.allThumbnails.isNotEmpty
-                            ? Image.memory(
-                                targetFace.allThumbnails.first,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: Colors.grey.shade200,
-                                child: Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
+                      const SizedBox(height: 8),
+                      Text(
+                        targetFace.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      targetFace.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      // Keep this face button
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade50,
+                          foregroundColor: Colors.green.shade800,
+                          side: BorderSide(color: Colors.green.shade300),
+                        ),
+                        onPressed: () => Navigator.pop(context, targetFace.id),
+                        icon: Icon(Icons.check_circle_outline,
+                            color: Colors.green.shade700),
+                        label: const Text('KEEP THIS'),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Select direction:',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 12),
-            // Option 1: Source → Target (keep target)
-            InkWell(
-              onTap: () => Navigator.pop(context, targetFace.id),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade300),
-                  color: Colors.green.shade50,
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.arrow_forward, color: Colors.green.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "KEEP \"${targetFace.name}\"",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade800,
-                            ),
-                          ),
-                          Text(
-                            "Move all data from \"${sourceFace.name}\" to \"${targetFace.name}\", then delete \"${sourceFace.name}\"",
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
               ),
-            ),
-            const SizedBox(height: 12),
-            // Option 2: Target → Source (keep source)
-            InkWell(
-              onTap: () => Navigator.pop(context, sourceFace.id),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade300),
-                  color: Colors.blue.shade50,
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.arrow_back, color: Colors.blue.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "KEEP \"${sourceFace.name}\"",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                          Text(
-                            "Move all data from \"${targetFace.name}\" to \"${sourceFace.name}\", then delete \"${targetFace.name}\"",
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              child: const Text(
+                'The selected face will be kept, and the other face will be merged into it.',
+                style: TextStyle(fontSize: 12, color: Colors.black87),
+                textAlign: TextAlign.center,
               ),
             ),
           ],
