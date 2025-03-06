@@ -48,14 +48,31 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadStatistics();
-    _startPeriodicUpdates();
     _loadAvailableFaces();
+
+    // Register for analytics update interval callback after widget is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupUpdateTimer();
+    });
+  }
+
+  void _setupUpdateTimer() {
+    final controller = Provider.of<UIStateController>(context, listen: false);
+    controller.onAnalyticsIntervalChanged = _handleIntervalChange;
+    _startPeriodicUpdates(controller.analyticsUpdateInterval);
   }
 
   @override
   void dispose() {
     _updateTimer?.cancel();
     _tabController.dispose();
+    
+    // Remove callback when disposed
+    if (mounted) {
+      final controller = Provider.of<UIStateController>(context, listen: false);
+      controller.onAnalyticsIntervalChanged = null;
+    }
+    
     super.dispose();
   }
 
@@ -68,9 +85,18 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
     });
   }
 
-  void _startPeriodicUpdates() {
-    // Update every 3 minutes
-    _updateTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
+  // Callback handler for when update interval changes
+  void _handleIntervalChange(int newInterval) {
+    if (mounted) {
+      _startPeriodicUpdates(newInterval);
+    }
+  }
+
+  void _startPeriodicUpdates(int intervalMinutes) {
+    _updateTimer?.cancel();
+    
+    // Setup timer with the configured interval
+    _updateTimer = Timer.periodic(Duration(minutes: intervalMinutes), (timer) {
       if (mounted) {
         _loadStatistics();
       }
@@ -113,12 +139,14 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
         ? await manager.getVisitsForFace(_selectedFaceId!)
         : await _fetchAllVisits(manager);
 
-    setState(() {
-      _statistics = stats;
-      _visitData = visits;
-      _isLoading = false;
-      _lastUpdated = DateTime.now();
-    });
+    if (mounted) {
+      setState(() {
+        _statistics = stats;
+        _visitData = visits;
+        _isLoading = false;
+        _lastUpdated = DateTime.now();
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchAllVisits(

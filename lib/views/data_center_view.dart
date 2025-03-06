@@ -6,7 +6,6 @@ import 'package:automated_attendance/views/data_center_pages/face_analytics_page
 import 'package:automated_attendance/views/data_center_pages/recognized_people_list.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class DataCenterView extends StatefulWidget {
   const DataCenterView({super.key});
@@ -17,93 +16,6 @@ class DataCenterView extends StatefulWidget {
 
 class _DataCenterViewState extends State<DataCenterView> {
   int _selectedIndex = 0; // Track selected index for NavigationRail
-
-  // Settings variables
-  int? _currentMaxFaces;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  // Load settings from SharedPreferences
-  Future<void> _loadSettings() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _currentMaxFaces = prefs.getInt('maxFaces') ?? 10;
-    });
-  }
-
-  // Function to show the settings dialog
-  void _showSettingsDialog(BuildContext context) {
-    final controller = Provider.of<UIStateController>(context, listen: false);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            bool useIsolates = controller.useIsolates;
-
-            return AlertDialog(
-              title: const Text("Settings"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Max Faces Slider
-                  Row(
-                    children: [
-                      const Text("Max Faces:"),
-                      Expanded(
-                        child: Slider(
-                          min: 1,
-                          max: 100,
-                          divisions: 99,
-                          value: _currentMaxFaces?.toDouble() ?? 10,
-                          label: _currentMaxFaces?.toString() ?? "10",
-                          onChanged: (value) {
-                            final newMax = value.round();
-                            setState(() {
-                              _currentMaxFaces = newMax;
-                            });
-                            controller.updateSettings(newMax);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    "Max Faces in Memory: $_currentMaxFaces",
-                    style: const TextStyle(fontSize: 12),
-                  ),
-
-                  SwitchListTile(
-                    title: const Text('Use Isolates'),
-                    value: useIsolates,
-                    onChanged: (bool value) {
-                      setState(() {
-                        useIsolates = value;
-                      });
-                      controller.updateUseIsolates(value);
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close the dialog
-                  },
-                  child: const Text("Close"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +103,97 @@ class _DataCenterViewState extends State<DataCenterView> {
           ],
         ),
       ),
+    );
+  }
+
+  // Function to show the settings dialog
+  void _showSettingsDialog(BuildContext context) {
+    final controller = Provider.of<UIStateController>(context, listen: false);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: const Text("Settings"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Max Faces Slider
+                  Row(
+                    children: [
+                      const Text("Max Faces:"),
+                      Expanded(
+                        child: Slider(
+                          min: 1,
+                          max: 100,
+                          divisions: 99,
+                          value: controller.maxFaces.toDouble(),
+                          label: controller.maxFaces.toString(),
+                          onChanged: (value) {
+                            final newMax = value.round();
+                            setState(() {});
+                            controller.updateSettings(newMax);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    "Max Faces in Memory: ${controller.maxFaces}",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Analytics Update Interval Slider
+                  Row(
+                    children: [
+                      const Text("Update Interval:"),
+                      Expanded(
+                        child: Slider(
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          value: controller.analyticsUpdateInterval.toDouble(),
+                          label: controller.analyticsUpdateInterval.toString(),
+                          onChanged: (value) {
+                            final newInterval = value.round();
+                            setState(() {});
+                            controller.updateAnalyticsInterval(newInterval);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    "Analytics Update Interval: ${controller.analyticsUpdateInterval} minutes",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+
+                  SwitchListTile(
+                    title: const Text('Use Isolates'),
+                    value: controller.useIsolates,
+                    onChanged: (bool value) {
+                      setState(() {});
+                      controller.updateUseIsolates(value);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close the dialog
+                  },
+                  child: const Text("Close"),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

@@ -6,30 +6,42 @@ import 'package:automated_attendance/models/face_match.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/services/face_management_service.dart';
+import 'package:automated_attendance/services/settings_service.dart';
 
 /// The main provider that coordinates all UI state and service interactions
 class UIStateController with ChangeNotifier {
   late final FaceManagementService _faceManagementService;
   late final CameraManager _cameraManager;
+  late final SettingsService _settingsService;
   Timer? _inactiveVisitsTimer;
+
+  // Callback for analytics update interval changes
+  Function(int)? onAnalyticsIntervalChanged;
 
   UIStateController() {
     _initializeServices();
   }
 
-  void _initializeServices() {
-    // Initialize face management service first
+  Future<void> _initializeServices() async {
+    // Initialize settings service first
+    _settingsService = SettingsService();
+    await _settingsService.initialize();
+
+    // Initialize face management service
     _faceManagementService = FaceManagementService()
       ..onStateChanged = _onFaceManagementStateChanged;
 
     // Initialize camera manager with face management service
     _cameraManager = CameraManager(_faceManagementService)
       ..onStateChanged = _onCameraStateChanged
-      // Connect face features detection to face management
       ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) {
         _faceManagementService.processFace(
             features, providerAddress, thumbnail);
       };
+
+    // Apply settings to camera manager
+    await _cameraManager.updateSettings(_settingsService.maxFaces);
+    await _cameraManager.updateUseIsolates(_settingsService.useIsolates);
   }
 
   void _onCameraStateChanged() {
@@ -46,7 +58,11 @@ class UIStateController with ChangeNotifier {
   List<Uint8List> get capturedFaces => _cameraManager.capturedFaces;
   Map<String, ICameraProvider> get activeProviders =>
       _cameraManager.activeProviders;
-  bool get useIsolates => _cameraManager.useIsolates;
+
+  // Settings getters
+  bool get useIsolates => _settingsService.useIsolates;
+  int get analyticsUpdateInterval => _settingsService.analyticsUpdateInterval;
+  int get maxFaces => _settingsService.maxFaces;
 
   // Start all necessary services and monitoring
   Future<void> start() async {
@@ -111,12 +127,30 @@ class UIStateController with ChangeNotifier {
   Future<List<Map<String, dynamic>>> getAvailableFaces() =>
       _faceManagementService.getAvailableFaces();
 
-  // Settings operations delegating to CameraManager
-  Future<void> updateSettings(int maxFaces) =>
-      _cameraManager.updateSettings(maxFaces);
+  // Settings operations using SettingsService and updating components
+  Future<void> updateSettings(int maxFaces) async {
+    await _settingsService.setMaxFaces(maxFaces);
+    await _cameraManager.updateSettings(maxFaces);
+    notifyListeners();
+  }
 
-  Future<void> updateUseIsolates(bool value) =>
-      _cameraManager.updateUseIsolates(value);
+  Future<void> updateUseIsolates(bool value) async {
+    await _settingsService.setUseIsolates(value);
+    await _cameraManager.updateUseIsolates(value);
+    notifyListeners();
+  }
+
+  // Update analytics interval
+  Future<void> updateAnalyticsInterval(int interval) async {
+    await _settingsService.setAnalyticsUpdateInterval(interval);
+
+    // Call the callback if it exists
+    if (onAnalyticsIntervalChanged != null) {
+      onAnalyticsIntervalChanged!(interval);
+    }
+
+    notifyListeners();
+  }
 
   // Maintenance operations
   void startInactiveVisitsCleanup() {
