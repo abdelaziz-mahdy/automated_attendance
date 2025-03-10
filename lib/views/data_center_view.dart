@@ -4,6 +4,7 @@ import 'package:automated_attendance/views/data_center_pages/active_providers_gr
 import 'package:automated_attendance/views/data_center_pages/captured_faces_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/face_analytics_page.dart';
 import 'package:automated_attendance/views/data_center_pages/recognized_people_list.dart';
+import 'package:automated_attendance/views/data_center_pages/attendance_tracker_page.dart'; // Add this import
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -64,6 +65,12 @@ class _DataCenterViewState extends State<DataCenterView> {
                             icon: Icon(Icons.analytics_outlined),
                             selectedIcon: Icon(Icons.analytics),
                             label: Text('Analytics'),
+                          ),
+                          // Add the new attendance navigation item
+                          NavigationRailDestination(
+                            icon: Icon(Icons.event_note_outlined),
+                            selectedIcon: Icon(Icons.event_note),
+                            label: Text('Attendance'),
                           ),
                         ],
                         trailing: Expanded(
@@ -207,6 +214,8 @@ class _DataCenterViewState extends State<DataCenterView> {
         return const RecognizedPeopleList();
       case 3:
         return const FaceAnalyticsPage();
+      case 4:
+        return const AttendanceTrackerPage(); // Add the new attendance page
       default:
         return const Center(child: Text("Unknown view"));
     }

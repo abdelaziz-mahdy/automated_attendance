@@ -15,8 +15,13 @@ class UIStateController with ChangeNotifier {
   late final SettingsService _settingsService;
   Timer? _inactiveVisitsTimer;
 
-  // Callback for analytics update interval changes
+  // Callbacks
   Function(int)? onAnalyticsIntervalChanged;
+  Function()? onAttendanceUpdated;
+
+  // Expected attendance list
+  final List<String> _expectedAttendees = [];
+  bool _attendanceLoaded = false;
 
   UIStateController() {
     // Initialize face management service
@@ -41,6 +46,22 @@ class UIStateController with ChangeNotifier {
     // Apply settings to camera manager
     await _cameraManager.updateSettings(_settingsService.maxFaces);
     await _cameraManager.updateUseIsolates(_settingsService.useIsolates);
+
+    // Load expected attendees
+    await _loadExpectedAttendees();
+  }
+
+  // Load expected attendees from storage
+  Future<void> _loadExpectedAttendees() async {
+    final expectedList = _settingsService.expectedAttendees;
+    _expectedAttendees.clear();
+    _expectedAttendees.addAll(expectedList);
+    _attendanceLoaded = true;
+  }
+
+  // Save expected attendees to storage
+  Future<void> _saveExpectedAttendees() async {
+    await _settingsService.setExpectedAttendees(_expectedAttendees);
   }
 
   void _onCameraStateChanged() {
@@ -159,6 +180,96 @@ class UIStateController with ChangeNotifier {
       (_) => _faceManagementService.cleanupInactiveVisits(5),
     );
   }
+
+  // Attendance tracking methods
+
+  // Get today's attendance data
+  Future<Map<String, dynamic>> getTodayAttendance() async {
+    final today = DateTime.now();
+    final startOfDay = DateTime(today.year, today.month, today.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    // Get all available faces
+    final availableFaces = await getAvailableFaces();
+
+    // Get visit statistics for today
+    final stats = await getVisitStatistics(
+      startDate: startOfDay,
+      endDate: endOfDay,
+    );
+
+    // Process attendance data
+    final presentFaces = <Map<String, dynamic>>[];
+    final absentFaces = <Map<String, dynamic>>[];
+
+    for (var face in availableFaces) {
+      // Get detailed visit info for this face today
+      final visits = await _faceManagementService.getVisitsForFace(face['id']);
+      final todayVisits = visits.where((visit) {
+        final entryTime = visit['entryTime'] as DateTime?;
+        return entryTime != null &&
+            entryTime.isAfter(startOfDay) &&
+            entryTime.isBefore(endOfDay);
+      }).toList();
+
+      // Add arrival time to face data
+      if (todayVisits.isNotEmpty) {
+        // Sort by entry time to get earliest
+        todayVisits.sort((a, b) {
+          return (a['entryTime'] as DateTime)
+              .compareTo(b['entryTime'] as DateTime);
+        });
+        face['arrivalTime'] = todayVisits.first['entryTime'];
+        face['visits'] = todayVisits;
+        presentFaces.add(face);
+      } else if (_expectedAttendees.contains(face['id'])) {
+        absentFaces.add(face);
+      }
+    }
+
+    // Sort present faces by arrival time
+    presentFaces.sort((a, b) =>
+        (a['arrivalTime'] as DateTime).compareTo(b['arrivalTime'] as DateTime));
+
+    return {
+      'present': presentFaces,
+      'absent': absentFaces,
+      'expectedCount': _expectedAttendees.length,
+      'presentCount': presentFaces.length,
+      'attendance_rate': _expectedAttendees.isEmpty
+          ? 0
+          : (presentFaces.length / _expectedAttendees.length * 100)
+              .toStringAsFixed(1),
+    };
+  }
+
+  // Mark a person as expected for attendance
+  Future<void> markPersonAsExpected(String faceId) async {
+    if (!_expectedAttendees.contains(faceId)) {
+      _expectedAttendees.add(faceId);
+      await _saveExpectedAttendees();
+      onAttendanceUpdated?.call();
+      notifyListeners();
+    }
+  }
+
+  // Remove a person from expected attendance
+  Future<void> unmarkPersonAsExpected(String faceId) async {
+    if (_expectedAttendees.contains(faceId)) {
+      _expectedAttendees.remove(faceId);
+      await _saveExpectedAttendees();
+      onAttendanceUpdated?.call();
+      notifyListeners();
+    }
+  }
+
+  // Check if a person is expected for attendance
+  bool isPersonExpected(String faceId) {
+    return _expectedAttendees.contains(faceId);
+  }
+
+  // Get list of expected attendees
+  List<String> get expectedAttendees => List.from(_expectedAttendees);
 
   @override
   void dispose() {
