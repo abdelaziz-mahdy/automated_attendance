@@ -97,7 +97,8 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(today, attendanceRate.toString(), presentCount, expectedCount),
+            _buildHeader(
+                today, attendanceRate.toString(), presentCount, expectedCount),
             const SizedBox(height: 24),
             _buildAttendanceSummaryCards(present.length, absent.length),
             const SizedBox(height: 24),
