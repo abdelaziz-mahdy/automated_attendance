@@ -20,6 +20,7 @@ class TrackedFace {
     this.lastSeen,
     this.lastSeenProvider,
     this.thumbnail,
+    this.mergedFaces = const [],
   });
 
   void setName(String newName) {

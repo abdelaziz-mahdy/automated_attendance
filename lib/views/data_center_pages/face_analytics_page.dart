@@ -66,13 +66,13 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
   void dispose() {
     _updateTimer?.cancel();
     _tabController.dispose();
-    
+
     // Remove callback when disposed
     if (mounted && context.mounted) {
       final controller = Provider.of<UIStateController>(context, listen: false);
       controller.onAnalyticsIntervalChanged = null;
     }
-    
+
     super.dispose();
   }
 
@@ -94,7 +94,7 @@ class _FaceAnalyticsPageState extends State<FaceAnalyticsPage>
 
   void _startPeriodicUpdates(int intervalMinutes) {
     _updateTimer?.cancel();
-    
+
     // Setup timer with the configured interval
     _updateTimer = Timer.periodic(Duration(minutes: intervalMinutes), (timer) {
       if (mounted) {
