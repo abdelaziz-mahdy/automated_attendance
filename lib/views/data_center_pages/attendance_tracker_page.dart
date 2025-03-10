@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
+import 'package:automated_attendance/widgets/dialogs/expected_attendees_dialog.dart';
 
 class AttendanceTrackerPage extends StatefulWidget {
   const AttendanceTrackerPage({super.key});
@@ -85,7 +86,7 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
     final today = DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now());
     final present = _attendanceData['present'] as List<Map<String, dynamic>>;
     final absent = _attendanceData['absent'] as List<Map<String, dynamic>>;
-    final attendanceRate = _attendanceData['attendance_rate'] as int;
+    final attendanceRate = _attendanceData['attendance_rate'] as String;
     final presentCount = _attendanceData['presentCount'] as int;
     final expectedCount = _attendanceData['expectedCount'] as int;
 
@@ -151,6 +152,17 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
                     ],
                   ),
                 ),
+                FilledButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const ExpectedAttendeesDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Manage Expected'),
+                ),
+                const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: _loadAttendanceData,

@@ -15,7 +15,6 @@ class SettingsService {
   static const String keyMaxFaces = 'maxFaces';
   static const String keyAnalyticsUpdateInterval = 'analyticsUpdateInterval';
   static const String keyUseIsolates = 'useIsolates';
-  static const String keyExpectedAttendees = 'expectedAttendees';
 
   // Default values
   static const int defaultMaxFaces = 10;
@@ -54,16 +53,6 @@ class SettingsService {
   /// Set use isolates setting
   Future<void> setUseIsolates(bool value) async {
     await _prefs.setBool(keyUseIsolates, value);
-  }
-
-  /// Get expected attendees list
-  List<String> get expectedAttendees {
-    return _prefs.getStringList(keyExpectedAttendees) ?? [];
-  }
-
-  /// Set expected attendees list
-  Future<void> setExpectedAttendees(List<String> attendees) async {
-    await _prefs.setStringList(keyExpectedAttendees, attendees);
   }
 
   /// Reset all settings to default values

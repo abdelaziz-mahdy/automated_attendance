@@ -1155,12 +1155,174 @@ class DBVisitsCompanion extends UpdateCompanion<DBVisit> {
   }
 }
 
+class $DBExpectedAttendeesTable extends DBExpectedAttendees
+    with TableInfo<$DBExpectedAttendeesTable, DBExpectedAttendee> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DBExpectedAttendeesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _faceIdMeta = const VerificationMeta('faceId');
+  @override
+  late final GeneratedColumn<String> faceId = GeneratedColumn<String>(
+      'face_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES d_b_tracked_faces (id)'));
+  @override
+  List<GeneratedColumn> get $columns => [faceId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'd_b_expected_attendees';
+  @override
+  VerificationContext validateIntegrity(Insertable<DBExpectedAttendee> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('face_id')) {
+      context.handle(_faceIdMeta,
+          faceId.isAcceptableOrUnknown(data['face_id']!, _faceIdMeta));
+    } else if (isInserting) {
+      context.missing(_faceIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {faceId};
+  @override
+  DBExpectedAttendee map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DBExpectedAttendee(
+      faceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}face_id'])!,
+    );
+  }
+
+  @override
+  $DBExpectedAttendeesTable createAlias(String alias) {
+    return $DBExpectedAttendeesTable(attachedDatabase, alias);
+  }
+}
+
+class DBExpectedAttendee extends DataClass
+    implements Insertable<DBExpectedAttendee> {
+  final String faceId;
+  const DBExpectedAttendee({required this.faceId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['face_id'] = Variable<String>(faceId);
+    return map;
+  }
+
+  DBExpectedAttendeesCompanion toCompanion(bool nullToAbsent) {
+    return DBExpectedAttendeesCompanion(
+      faceId: Value(faceId),
+    );
+  }
+
+  factory DBExpectedAttendee.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DBExpectedAttendee(
+      faceId: serializer.fromJson<String>(json['faceId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'faceId': serializer.toJson<String>(faceId),
+    };
+  }
+
+  DBExpectedAttendee copyWith({String? faceId}) => DBExpectedAttendee(
+        faceId: faceId ?? this.faceId,
+      );
+  DBExpectedAttendee copyWithCompanion(DBExpectedAttendeesCompanion data) {
+    return DBExpectedAttendee(
+      faceId: data.faceId.present ? data.faceId.value : this.faceId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DBExpectedAttendee(')
+          ..write('faceId: $faceId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => faceId.hashCode;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DBExpectedAttendee && other.faceId == this.faceId);
+}
+
+class DBExpectedAttendeesCompanion extends UpdateCompanion<DBExpectedAttendee> {
+  final Value<String> faceId;
+  final Value<int> rowid;
+  const DBExpectedAttendeesCompanion({
+    this.faceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DBExpectedAttendeesCompanion.insert({
+    required String faceId,
+    this.rowid = const Value.absent(),
+  }) : faceId = Value(faceId);
+  static Insertable<DBExpectedAttendee> custom({
+    Expression<String>? faceId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (faceId != null) 'face_id': faceId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DBExpectedAttendeesCompanion copyWith(
+      {Value<String>? faceId, Value<int>? rowid}) {
+    return DBExpectedAttendeesCompanion(
+      faceId: faceId ?? this.faceId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (faceId.present) {
+      map['face_id'] = Variable<String>(faceId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DBExpectedAttendeesCompanion(')
+          ..write('faceId: $faceId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$FacesDatabase extends GeneratedDatabase {
   _$FacesDatabase(QueryExecutor e) : super(e);
   $FacesDatabaseManager get managers => $FacesDatabaseManager(this);
   late final $DBTrackedFacesTable dBTrackedFaces = $DBTrackedFacesTable(this);
   late final $DBMergedFacesTable dBMergedFaces = $DBMergedFacesTable(this);
   late final $DBVisitsTable dBVisits = $DBVisitsTable(this);
+  late final $DBExpectedAttendeesTable dBExpectedAttendees =
+      $DBExpectedAttendeesTable(this);
   late final Index faceNameIdx = Index('face_name_idx',
       'CREATE INDEX face_name_idx ON d_b_tracked_faces (name)');
   late final Index targetIdIdx = Index('target_id_idx',
@@ -1175,6 +1337,7 @@ abstract class _$FacesDatabase extends GeneratedDatabase {
         dBTrackedFaces,
         dBMergedFaces,
         dBVisits,
+        dBExpectedAttendees,
         faceNameIdx,
         targetIdIdx,
         sourceIdIdx
@@ -1220,6 +1383,24 @@ final class $$DBTrackedFacesTableReferences extends BaseReferences<
         .filter((f) => f.targetId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_dBMergedFacesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$DBExpectedAttendeesTable,
+      List<DBExpectedAttendee>> _dBExpectedAttendeesRefsTable(
+          _$FacesDatabase db) =>
+      MultiTypedResultKey.fromTable(db.dBExpectedAttendees,
+          aliasName: $_aliasNameGenerator(
+              db.dBTrackedFaces.id, db.dBExpectedAttendees.faceId));
+
+  $$DBExpectedAttendeesTableProcessedTableManager get dBExpectedAttendeesRefs {
+    final manager =
+        $$DBExpectedAttendeesTableTableManager($_db, $_db.dBExpectedAttendees)
+            .filter((f) => f.faceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_dBExpectedAttendeesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -1269,6 +1450,27 @@ class $$DBTrackedFacesTableFilterComposer
             $$DBMergedFacesTableFilterComposer(
               $db: $db,
               $table: $db.dBMergedFaces,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> dBExpectedAttendeesRefs(
+      Expression<bool> Function($$DBExpectedAttendeesTableFilterComposer f) f) {
+    final $$DBExpectedAttendeesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.dBExpectedAttendees,
+        getReferencedColumn: (t) => t.faceId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DBExpectedAttendeesTableFilterComposer(
+              $db: $db,
+              $table: $db.dBExpectedAttendees,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -1360,6 +1562,29 @@ class $$DBTrackedFacesTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> dBExpectedAttendeesRefs<T extends Object>(
+      Expression<T> Function($$DBExpectedAttendeesTableAnnotationComposer a)
+          f) {
+    final $$DBExpectedAttendeesTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.dBExpectedAttendees,
+            getReferencedColumn: (t) => t.faceId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$DBExpectedAttendeesTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.dBExpectedAttendees,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$DBTrackedFacesTableTableManager extends RootTableManager<
@@ -1373,7 +1598,8 @@ class $$DBTrackedFacesTableTableManager extends RootTableManager<
     $$DBTrackedFacesTableUpdateCompanionBuilder,
     (DBTrackedFace, $$DBTrackedFacesTableReferences),
     DBTrackedFace,
-    PrefetchHooks Function({bool dBMergedFacesRefs})> {
+    PrefetchHooks Function(
+        {bool dBMergedFacesRefs, bool dBExpectedAttendeesRefs})> {
   $$DBTrackedFacesTableTableManager(
       _$FacesDatabase db, $DBTrackedFacesTable table)
       : super(TableManagerState(
@@ -1431,11 +1657,13 @@ class $$DBTrackedFacesTableTableManager extends RootTableManager<
                     $$DBTrackedFacesTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: ({dBMergedFacesRefs = false}) {
+          prefetchHooksCallback: (
+              {dBMergedFacesRefs = false, dBExpectedAttendeesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
-                if (dBMergedFacesRefs) db.dBMergedFaces
+                if (dBMergedFacesRefs) db.dBMergedFaces,
+                if (dBExpectedAttendeesRefs) db.dBExpectedAttendees
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -1452,6 +1680,19 @@ class $$DBTrackedFacesTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem: (item,
                                 referencedItems) =>
                             referencedItems.where((e) => e.targetId == item.id),
+                        typedResults: items),
+                  if (dBExpectedAttendeesRefs)
+                    await $_getPrefetchedData<DBTrackedFace,
+                            $DBTrackedFacesTable, DBExpectedAttendee>(
+                        currentTable: table,
+                        referencedTable: $$DBTrackedFacesTableReferences
+                            ._dBExpectedAttendeesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$DBTrackedFacesTableReferences(db, table, p0)
+                                .dBExpectedAttendeesRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.faceId == item.id),
                         typedResults: items)
                 ];
               },
@@ -1471,7 +1712,8 @@ typedef $$DBTrackedFacesTableProcessedTableManager = ProcessedTableManager<
     $$DBTrackedFacesTableUpdateCompanionBuilder,
     (DBTrackedFace, $$DBTrackedFacesTableReferences),
     DBTrackedFace,
-    PrefetchHooks Function({bool dBMergedFacesRefs})>;
+    PrefetchHooks Function(
+        {bool dBMergedFacesRefs, bool dBExpectedAttendeesRefs})>;
 typedef $$DBMergedFacesTableCreateCompanionBuilder = DBMergedFacesCompanion
     Function({
   required String id,
@@ -1961,6 +2203,226 @@ typedef $$DBVisitsTableProcessedTableManager = ProcessedTableManager<
     (DBVisit, BaseReferences<_$FacesDatabase, $DBVisitsTable, DBVisit>),
     DBVisit,
     PrefetchHooks Function()>;
+typedef $$DBExpectedAttendeesTableCreateCompanionBuilder
+    = DBExpectedAttendeesCompanion Function({
+  required String faceId,
+  Value<int> rowid,
+});
+typedef $$DBExpectedAttendeesTableUpdateCompanionBuilder
+    = DBExpectedAttendeesCompanion Function({
+  Value<String> faceId,
+  Value<int> rowid,
+});
+
+final class $$DBExpectedAttendeesTableReferences extends BaseReferences<
+    _$FacesDatabase, $DBExpectedAttendeesTable, DBExpectedAttendee> {
+  $$DBExpectedAttendeesTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $DBTrackedFacesTable _faceIdTable(_$FacesDatabase db) =>
+      db.dBTrackedFaces.createAlias($_aliasNameGenerator(
+          db.dBExpectedAttendees.faceId, db.dBTrackedFaces.id));
+
+  $$DBTrackedFacesTableProcessedTableManager get faceId {
+    final $_column = $_itemColumn<String>('face_id')!;
+
+    final manager = $$DBTrackedFacesTableTableManager($_db, $_db.dBTrackedFaces)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_faceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$DBExpectedAttendeesTableFilterComposer
+    extends Composer<_$FacesDatabase, $DBExpectedAttendeesTable> {
+  $$DBExpectedAttendeesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$DBTrackedFacesTableFilterComposer get faceId {
+    final $$DBTrackedFacesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.faceId,
+        referencedTable: $db.dBTrackedFaces,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DBTrackedFacesTableFilterComposer(
+              $db: $db,
+              $table: $db.dBTrackedFaces,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$DBExpectedAttendeesTableOrderingComposer
+    extends Composer<_$FacesDatabase, $DBExpectedAttendeesTable> {
+  $$DBExpectedAttendeesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$DBTrackedFacesTableOrderingComposer get faceId {
+    final $$DBTrackedFacesTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.faceId,
+        referencedTable: $db.dBTrackedFaces,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DBTrackedFacesTableOrderingComposer(
+              $db: $db,
+              $table: $db.dBTrackedFaces,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$DBExpectedAttendeesTableAnnotationComposer
+    extends Composer<_$FacesDatabase, $DBExpectedAttendeesTable> {
+  $$DBExpectedAttendeesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$DBTrackedFacesTableAnnotationComposer get faceId {
+    final $$DBTrackedFacesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.faceId,
+        referencedTable: $db.dBTrackedFaces,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$DBTrackedFacesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.dBTrackedFaces,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$DBExpectedAttendeesTableTableManager extends RootTableManager<
+    _$FacesDatabase,
+    $DBExpectedAttendeesTable,
+    DBExpectedAttendee,
+    $$DBExpectedAttendeesTableFilterComposer,
+    $$DBExpectedAttendeesTableOrderingComposer,
+    $$DBExpectedAttendeesTableAnnotationComposer,
+    $$DBExpectedAttendeesTableCreateCompanionBuilder,
+    $$DBExpectedAttendeesTableUpdateCompanionBuilder,
+    (DBExpectedAttendee, $$DBExpectedAttendeesTableReferences),
+    DBExpectedAttendee,
+    PrefetchHooks Function({bool faceId})> {
+  $$DBExpectedAttendeesTableTableManager(
+      _$FacesDatabase db, $DBExpectedAttendeesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DBExpectedAttendeesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DBExpectedAttendeesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DBExpectedAttendeesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> faceId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DBExpectedAttendeesCompanion(
+            faceId: faceId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String faceId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DBExpectedAttendeesCompanion.insert(
+            faceId: faceId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$DBExpectedAttendeesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({faceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (faceId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.faceId,
+                    referencedTable:
+                        $$DBExpectedAttendeesTableReferences._faceIdTable(db),
+                    referencedColumn: $$DBExpectedAttendeesTableReferences
+                        ._faceIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$DBExpectedAttendeesTableProcessedTableManager = ProcessedTableManager<
+    _$FacesDatabase,
+    $DBExpectedAttendeesTable,
+    DBExpectedAttendee,
+    $$DBExpectedAttendeesTableFilterComposer,
+    $$DBExpectedAttendeesTableOrderingComposer,
+    $$DBExpectedAttendeesTableAnnotationComposer,
+    $$DBExpectedAttendeesTableCreateCompanionBuilder,
+    $$DBExpectedAttendeesTableUpdateCompanionBuilder,
+    (DBExpectedAttendee, $$DBExpectedAttendeesTableReferences),
+    DBExpectedAttendee,
+    PrefetchHooks Function({bool faceId})>;
 
 class $FacesDatabaseManager {
   final _$FacesDatabase _db;
@@ -1971,4 +2433,6 @@ class $FacesDatabaseManager {
       $$DBMergedFacesTableTableManager(_db, _db.dBMergedFaces);
   $$DBVisitsTableTableManager get dBVisits =>
       $$DBVisitsTableTableManager(_db, _db.dBVisits);
+  $$DBExpectedAttendeesTableTableManager get dBExpectedAttendees =>
+      $$DBExpectedAttendeesTableTableManager(_db, _db.dBExpectedAttendees);
 }

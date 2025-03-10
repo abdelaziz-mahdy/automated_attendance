@@ -2,14 +2,15 @@ import 'package:drift/drift.dart';
 part 'database.g.dart';
 
 // This annotation tells drift to prepare a database class that uses both tables
-@DriftDatabase(tables: [DBTrackedFaces, DBMergedFaces, DBVisits])
+@DriftDatabase(
+    tables: [DBTrackedFaces, DBMergedFaces, DBVisits, DBExpectedAttendees])
 class FacesDatabase extends _$FacesDatabase {
   // We tell the database where to store the data with this constructor
   FacesDatabase(super.e);
 
   // You should bump this number whenever you change or add a table definition
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -21,6 +22,9 @@ class FacesDatabase extends _$FacesDatabase {
         if (from < 2) {
           // Add the new visits table
           await m.createTable(dBVisits);
+        }
+        if (from < 3) {
+          await m.createTable(dBExpectedAttendees);
         }
       },
     );
@@ -89,6 +93,24 @@ class FacesDatabase extends _$FacesDatabase {
   Future<List<DBVisit>> getVisitsByProvider(String providerId) =>
       (select(dBVisits)..where((tbl) => tbl.providerId.equals(providerId)))
           .get();
+
+  // Methods for expected attendees
+  Future<List<String>> getExpectedAttendees() {
+    return select(dBExpectedAttendees).map((row) => row.faceId).get();
+  }
+
+  Future<void> addExpectedAttendee(String faceId) {
+    return into(dBExpectedAttendees).insert(
+      DBExpectedAttendeesCompanion.insert(faceId: faceId),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
+
+  Future<void> removeExpectedAttendee(String faceId) {
+    return (delete(dBExpectedAttendees)
+          ..where((tbl) => tbl.faceId.equals(faceId)))
+        .go();
+  }
 }
 
 // The TrackedFaces table definition
@@ -138,4 +160,13 @@ class DBVisits extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+// New table to track expected attendees
+@DataClassName('DBExpectedAttendee')
+class DBExpectedAttendees extends Table {
+  TextColumn get faceId => text().references(DBTrackedFaces, #id)();
+
+  @override
+  Set<Column> get primaryKey => {faceId};
 }

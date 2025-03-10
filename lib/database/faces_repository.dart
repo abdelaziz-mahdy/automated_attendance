@@ -400,7 +400,9 @@ class FacesRepository {
     // Count only valid visits
     final validVisits = visits
         .where((v) =>
-            v.faceId != null && (v.faceId?.isNotEmpty??false) && v.providerId.isNotEmpty)
+            v.faceId != null &&
+            (v.faceId?.isNotEmpty ?? false) &&
+            v.providerId.isNotEmpty)
         .toList();
 
     stats['totalVisits'] = validVisits.length;
@@ -545,5 +547,23 @@ class FacesRepository {
 
     final visits = await query.get();
     return visits.length;
+  }
+
+  /// Get list of expected attendees
+  Future<List<String>> getExpectedAttendees() async {
+    final database = await _databaseProvider.database;
+    return await database.getExpectedAttendees();
+  }
+
+  /// Add a face to expected attendees
+  Future<void> addExpectedAttendee(String faceId) async {
+    final database = await _databaseProvider.database;
+    await database.addExpectedAttendee(faceId);
+  }
+
+  /// Remove a face from expected attendees
+  Future<void> removeExpectedAttendee(String faceId) async {
+    final database = await _databaseProvider.database;
+    await database.removeExpectedAttendee(faceId);
   }
 }

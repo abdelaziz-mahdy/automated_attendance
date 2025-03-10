@@ -19,7 +19,7 @@ class UIStateController with ChangeNotifier {
   Function(int)? onAnalyticsIntervalChanged;
   Function()? onAttendanceUpdated;
 
-  // Expected attendance list
+  // Expected attendance list (cached from database)
   final List<String> _expectedAttendees = [];
   bool _attendanceLoaded = false;
 
@@ -51,17 +51,17 @@ class UIStateController with ChangeNotifier {
     await _loadExpectedAttendees();
   }
 
-  // Load expected attendees from storage
+  // Load expected attendees from database
   Future<void> _loadExpectedAttendees() async {
-    final expectedList = _settingsService.expectedAttendees;
+    final expectedList = await _faceManagementService.getExpectedAttendees();
     _expectedAttendees.clear();
     _expectedAttendees.addAll(expectedList);
     _attendanceLoaded = true;
   }
 
-  // Save expected attendees to storage
+  // Save expected attendees using database
   Future<void> _saveExpectedAttendees() async {
-    await _settingsService.setExpectedAttendees(_expectedAttendees);
+    // No need to save all attendees at once - the database handles individual additions/removals
   }
 
   void _onCameraStateChanged() {
@@ -202,6 +202,10 @@ class UIStateController with ChangeNotifier {
     final presentFaces = <Map<String, dynamic>>[];
     final absentFaces = <Map<String, dynamic>>[];
 
+    // Track unique faces for attendance calculation
+    final Set<String> uniqueExpectedFaceIds = Set.from(_expectedAttendees);
+    final Set<String> uniquePresentExpectedFaceIds = {};
+
     for (var face in availableFaces) {
       // Get detailed visit info for this face today
       final visits = await _faceManagementService.getVisitsForFace(face['id']);
@@ -222,6 +226,11 @@ class UIStateController with ChangeNotifier {
         face['arrivalTime'] = todayVisits.first['entryTime'];
         face['visits'] = todayVisits;
         presentFaces.add(face);
+
+        // Track if this present face was an expected face
+        if (uniqueExpectedFaceIds.contains(face['id'])) {
+          uniquePresentExpectedFaceIds.add(face['id']);
+        }
       } else if (_expectedAttendees.contains(face['id'])) {
         absentFaces.add(face);
       }
@@ -231,23 +240,27 @@ class UIStateController with ChangeNotifier {
     presentFaces.sort((a, b) =>
         (a['arrivalTime'] as DateTime).compareTo(b['arrivalTime'] as DateTime));
 
+    // Calculate attendance based on unique faces
+    final uniqueExpectedCount = uniqueExpectedFaceIds.length;
+    final uniquePresentCount = uniquePresentExpectedFaceIds.length;
+    final attendanceRate = uniqueExpectedCount > 0
+        ? (uniquePresentCount / uniqueExpectedCount * 100).toStringAsFixed(1)
+        : '0';
+
     return {
       'present': presentFaces,
       'absent': absentFaces,
-      'expectedCount': _expectedAttendees.length,
-      'presentCount': presentFaces.length,
-      'attendance_rate': _expectedAttendees.isEmpty
-          ? 0
-          : (presentFaces.length / _expectedAttendees.length * 100)
-              .toStringAsFixed(1),
+      'expectedCount': uniqueExpectedCount,
+      'presentCount': uniquePresentCount,
+      'attendance_rate': attendanceRate,
     };
   }
 
   // Mark a person as expected for attendance
   Future<void> markPersonAsExpected(String faceId) async {
     if (!_expectedAttendees.contains(faceId)) {
+      await _faceManagementService.addExpectedAttendee(faceId);
       _expectedAttendees.add(faceId);
-      await _saveExpectedAttendees();
       onAttendanceUpdated?.call();
       notifyListeners();
     }
@@ -256,8 +269,8 @@ class UIStateController with ChangeNotifier {
   // Remove a person from expected attendance
   Future<void> unmarkPersonAsExpected(String faceId) async {
     if (_expectedAttendees.contains(faceId)) {
+      await _faceManagementService.removeExpectedAttendee(faceId);
       _expectedAttendees.remove(faceId);
-      await _saveExpectedAttendees();
       onAttendanceUpdated?.call();
       notifyListeners();
     }

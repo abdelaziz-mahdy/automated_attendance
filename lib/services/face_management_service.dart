@@ -547,6 +547,19 @@ class FaceManagementService {
     return facesList;
   }
 
+  // Expected attendees methods
+  Future<List<String>> getExpectedAttendees() async {
+    return await _facesRepository.getExpectedAttendees();
+  }
+
+  Future<void> addExpectedAttendee(String faceId) async {
+    await _facesRepository.addExpectedAttendee(faceId);
+  }
+
+  Future<void> removeExpectedAttendee(String faceId) async {
+    await _facesRepository.removeExpectedAttendee(faceId);
+  }
+
   void _notifyStateChanged() {
     onStateChanged?.call();
   }
