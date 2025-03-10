@@ -21,9 +21,9 @@ class TrackedFace {
     this.lastSeenProvider,
     this.thumbnail,
     List<TrackedFace>? mergedFaces,
-  })
-      : assert(features.length == 128, 'Features must be a list of 128 doubles'),
-      mergedFaces = mergedFaces ?? [];
+  })  : assert(
+            features.length == 128, 'Features must be a list of 128 doubles'),
+        mergedFaces = mergedFaces ?? [];
 
   void setName(String newName) {
     name = newName;

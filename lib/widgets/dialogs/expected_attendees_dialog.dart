@@ -10,14 +10,15 @@ class ExpectedAttendeesDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: Provider.of<UIStateController>(context, listen: false).getAvailableFaces(),
+        future: Provider.of<UIStateController>(context, listen: false)
+            .getAvailableFaces(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final faces = snapshot.data!;
-          
+
           return Container(
             width: 600,
             padding: const EdgeInsets.all(24),
@@ -86,14 +87,16 @@ class _ExpectedAttendeesList extends StatelessWidget {
           separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (context, index) {
             final face = faces[index];
-            final isExpected = controller.isPersonExpected(face['id'] as String);
-            
+            final isExpected =
+                controller.isPersonExpected(face['id'] as String);
+
             return ListTile(
               leading: CircleAvatar(
                 backgroundImage: face['thumbnail'] != null
                     ? MemoryImage(face['thumbnail'])
                     : null,
-                child: face['thumbnail'] == null ? const Icon(Icons.person) : null,
+                child:
+                    face['thumbnail'] == null ? const Icon(Icons.person) : null,
               ),
               title: Text(face['name'] as String),
               trailing: Switch(
@@ -102,7 +105,8 @@ class _ExpectedAttendeesList extends StatelessWidget {
                   if (value) {
                     await controller.markPersonAsExpected(face['id'] as String);
                   } else {
-                    await controller.unmarkPersonAsExpected(face['id'] as String);
+                    await controller
+                        .unmarkPersonAsExpected(face['id'] as String);
                   }
                 },
               ),
