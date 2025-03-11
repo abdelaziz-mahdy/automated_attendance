@@ -1,187 +1,108 @@
-
 # Automated Attendance System
 
-Welcome to the Automated Attendance System! This application allows you to either share your device’s camera as a **Camera Provider** or run a **Data Center** that discovers and uses these camera feeds to detect and recognize faces for attendance tracking.
+A real-time face recognition system that uses networked cameras for automated attendance tracking.
 
-Additionally, if you prefer not to run the full interface on your device, you can run a lightweight Python server as your image provider.
-
----
-
-## Overview
-
-The system works in two main modes:
-
-- **Camera Provider Mode:**  
-  Your device’s camera captures video frames. The app processes these frames (using face detection techniques) and then broadcasts your camera service over your local network. Other devices (Data Centers) can discover your device and request a snapshot (JPEG image) when needed.
-
-- **Data Center Mode:**  
-  This mode automatically discovers available Camera Providers on your network. It polls these providers to get the latest image frames, processes them to detect faces, and then displays recognized faces and attendance logs.
-
-**Alternate Option:**  
-If you prefer a simpler setup, you can run a dedicated Python server as your Camera Provider. This server exposes the same `/get_image` HTTP endpoint to serve camera images without the full application interface.
-
-All communication between devices is done over your local network via simple HTTP requests.
-
----
-
-## How It Works (Simplified)
-
-1. **Camera Provider Mode:**
-   - **Capture & Process:** The app accesses your camera, captures frames, and (if needed) processes them into JPEG images.
-   - **Broadcast:** It then “announces” itself on the network so that other devices can find it.
-   - **Serve Frames:** When a Data Center sends an HTTP request (to `/get_image`), your device sends back the latest image frame.
-
-2. **Data Center Mode:**
-   - **Discover Providers:** The system uses a discovery service to find all available Camera Providers.
-   - **Poll & Process:** It periodically sends an HTTP request to each provider’s `/get_image` endpoint. When a frame is received, it is processed (using isolates if enabled) to detect faces.
-   - **Track Attendance:** Detected faces are compared, tracked over time, and the recognized faces are displayed in the app.
-
-3. **Python Server Option:**
-   - **Lightweight Provider:** If you prefer not to run the full Camera Provider interface, you can run a dedicated Python server. This server serves JPEG images via the `/get_image` endpoint.
-   - **Same Endpoint:** The Data Center interacts with the Python server exactly as it does with the full Camera Provider—no additional configuration is needed.
-
----
-
-## Diagram of the System
-
-Below is a simplified diagram that illustrates the overall communication:
-
-```mermaid
-graph LR
-    A[Camera Provider Device / Python Server]
-    B[Network Discovery Service]
-    C[Data Center Device]
-    D[Face Processing & Attendance Tracking]
-
-    A -- "Broadcasts service" --> B
-    B -- "Discovered by" --> C
-    C -- "HTTP Request (/get_image)" --> A
-    A -- "Sends JPEG Frame" --> C
-    C -- "Processes frame for faces" --> D
-```
-
-*Note: Whether you use the full Camera Provider app or the Python server option, the Data Center interacts with them using the same HTTP endpoint.*
-
----
-
-## Installation
+## Quick Start
 
 ### For the Flutter App
 
 1. **Prerequisites:**
-   - Install [Flutter](https://flutter.dev/docs/get-started/install) on your system.
-   - Ensure you have a working device or emulator.
+   - [Flutter](https://flutter.dev/docs/get-started/install) installed on your system
+   - A connected device or emulator
 
-2. **Clone the Repository:**
+2. **Installation:**
    ```bash
-   git clone https://github.com/abdelaziz-mahdy/automated-attendance.git
-   cd automated-attendance
-   ```
-
-3. **Install Dependencies:**
-   ```bash
+   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
+   cd automated_attendance
    flutter pub get
+   flutter run
    ```
 
-4. **Run the App:**
-   - **On a Device/Emulator:**
-     ```bash
-     flutter run
-     ```
-
-### For the Python Server
+### For the Python Server (Standard)
 
 1. **Prerequisites:**
-   - Make sure you have Python 3 installed on your system.
-   - Install any required dependencies (listed in requirements file).
+   - Python 3 installed on your system
 
-2. **Run the Setup Script:**
-   - In the Python server directory, execute the setup script:
-     ```bash
-     ./setup.sh
-     ```
-   - This script will install the necessary Python packages and 'uv' and run the server.
+2. **Installation:**
+   ```bash
+   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
+   cd automated_attendance/python_server
+   chmod +x setup.sh
+   ./setup.sh
+   ```
 
+### For Raspberry Pi (Including Raspberry Pi Zero)
 
----
+1. **Prerequisites:**
+   - A Raspberry Pi with camera module connected
+   - Raspbian/Raspberry Pi OS installed
 
-## User Instructions
+2. **Installation Options:**
 
-### Launching the App
+   **Option 1: Simple Installation**
+   ```bash
+   # Clone the repository
+   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
+   cd automated_attendance/python_server
+   
+   # Make the script executable and run it
+   chmod +x rpi_setup.sh
+   ./rpi_setup.sh
+   ```
 
-When you start the Flutter application, you will be greeted with a **Mode Selection Screen**:
+   **Option 2: Auto-start on Boot**
+   ```bash
+   # Clone the repository
+   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
+   cd automated_attendance/python_server
+   
+   # Make the script executable and run it
+   chmod +x rpi_cron_setup.sh
+   ./rpi_cron_setup.sh
+   ```
 
-- **Start as Camera Provider:**  
-  Choose this option if you want your device’s camera to broadcast its feed on the network.
+## Usage Guide
 
-- **Start as Data Center:**  
-  Choose this option if you want to discover available camera feeds and see real-time face recognition and attendance information.
+### App Modes
+
+- **Camera Provider Mode**: Broadcasts your device camera over the network
+- **Data Center Mode**: Receives camera feeds and processes faces for attendance tracking
+
+### Basic Usage Steps
+
+1. **Start at least one device as a Camera Provider** (or use the Python server)
+2. **Start another device as a Data Center**
+3. The Data Center will automatically discover and connect to the Camera Provider
+4. View real-time face recognition and attendance tracking in the Data Center interface
+
+For detailed instructions, see the [User Guide](#user-guide) section below.
+
+## System Architecture
+
+For detailed information about how the system works, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## User Guide
 
 ### Using Camera Provider Mode
 
-- **Permissions:**  
-  The app will request permission to access your camera. Please allow it.
-  
-- **Broadcasting:**  
-  Once activated, your device will automatically broadcast its service on your local network. Data Centers will be able to discover your camera feed.
-
-- **Status:**  
-  On-screen logs or messages will indicate that the server is running and frames are being captured.
+- **Permissions:** Allow camera access when prompted
+- **Broadcasting:** Your device automatically announces itself on the local network
+- **Status:** The app displays the server status and logging information
 
 ### Using Data Center Mode
 
-- **Discovery:**  
-  The Data Center mode searches your local network for available Camera Providers. When one is found, it is listed on the screen.
-  
-- **Live Feed & Processing:**  
-  The Data Center polls each discovered provider for the latest frame. It displays the frame along with current frame rate (FPS) and face detection results.
-  
-- **Recognized Faces:**  
-  Detected faces are processed and compared. Recognized faces are shown in the “People” section, where you can also assign names to tracked faces.
+- **Discovery:** The app automatically finds Camera Providers on your network
+- **Live Feed:** Shows camera feeds with face detection overlays
+- **People Tab:** Shows recognized individuals and allows name assignment
+- **Settings:** Configure processing options like face memory and isolate usage
 
-- **Settings:**  
-  In Data Center mode, you can adjust settings such as:
-  - **Max Faces in Memory:** The number of face thumbnails to store.
-  - **Use Isolates:** Enable background isolates for frame processing to improve performance.
+### Troubleshooting
 
-### Using the Python Server Option
+- **No Camera Feed?** Check camera permissions and network connectivity
+- **Discovery Issues?** Ensure devices are on the same network
+- **Performance Problems?** Try enabling isolates in Settings
 
-If you prefer a simpler setup without running the full Flutter interface:
+## License
 
-- **Setup:**  
-  Follow the Python server installation steps above.
-  
-- **Run the Server:**  
-  Start the Python server, which will expose the `/get_image` HTTP endpoint.
-  
-- **Integration:**  
-  The Data Center mode will automatically discover and interact with the Python server just as it does with the full Camera Provider app.
-
----
-
-## Troubleshooting
-
-- **No Camera Feed?**
-  - Ensure your device has a working camera.
-  - Verify that camera permissions are granted.
-  - Check that your device is connected to the same local network as the Data Center device.
-
-- **Data Center Not Discovering Providers?**
-  - Confirm that either the Camera Provider mode or Python server is active.
-  - Ensure both devices are on the same network.
-  - Restart the discovery service if necessary.
-
-- **Performance Issues?**
-  - Try toggling the “Use Isolates” setting in Data Center mode.
-  - Review the logs for error messages.
-
----
-
-## Summary
-
-- **Camera Provider Mode:** Your device captures and serves camera frames.
-- **Data Center Mode:** Your device discovers camera feeds, processes frames to detect faces, and tracks attendance.
-- **Python Server Option:** Run a lightweight Python server as a simple image provider if you prefer not to run the full interface.
-
-We hope this guide helps you understand and use the Automated Attendance System with ease. Enjoy a smarter way to manage attendance with real-time face recognition!
+[LICENSE](LICENSE)
 
