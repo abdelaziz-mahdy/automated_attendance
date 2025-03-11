@@ -1,12 +1,21 @@
 import 'dart:io';
-import 'dart:async'; // Added for Completer
+import 'dart:async';
 import 'package:automated_attendance/database/database.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+/// Interface for database providers
+abstract class IDatabaseProvider {
+  /// Get database instance
+  Future<FacesDatabase> get database;
+
+  /// Close database instance
+  Future<void> closeDatabase();
+}
+
 /// Provides access to the database instance
-class DatabaseProvider {
+class DatabaseProvider implements IDatabaseProvider {
   // Singleton instance
   static final DatabaseProvider _instance = DatabaseProvider._internal();
   factory DatabaseProvider() => _instance;
@@ -18,7 +27,7 @@ class DatabaseProvider {
   // Completer to handle concurrent initialization requests
   Completer<FacesDatabase>? _dbCompleter;
 
-  // Get database instance
+  @override
   Future<FacesDatabase> get database async {
     if (_database != null) return _database!;
 
@@ -47,7 +56,7 @@ class DatabaseProvider {
     return FacesDatabase(NativeDatabase(file));
   }
 
-  // Close database
+  @override
   Future<void> closeDatabase() async {
     final db = _database;
     if (db != null) {

@@ -1,7 +1,7 @@
 // lib/views/data_center_view.dart
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/widgets/similar_faces_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +65,7 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             onPressed: () {
               Navigator.pop(context);
               final manager =
-                  Provider.of<CameraManager>(context, listen: false);
+                  Provider.of<UIStateController>(context, listen: false);
               manager.deleteTrackedFace(widget.trackedFace.id);
             },
             child: const Text('Delete'),
@@ -79,7 +79,7 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
     setState(() {
       _isEditing = false;
     });
-    Provider.of<CameraManager>(context, listen: false)
+    Provider.of<UIStateController>(context, listen: false)
         .updateTrackedFaceName(widget.trackedFace.id, _nameController.text);
   }
 
@@ -99,7 +99,7 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             onPressed: () {
               Navigator.pop(context);
               final manager =
-                  Provider.of<CameraManager>(context, listen: false);
+                  Provider.of<UIStateController>(context, listen: false);
               manager.splitMergedFace(
                   widget.trackedFace.id, mergedFace.id, index);
             },

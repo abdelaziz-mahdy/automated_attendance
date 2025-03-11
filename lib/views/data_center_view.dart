@@ -1,12 +1,12 @@
 // lib/views/data_center_view.dart
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/views/data_center_pages/active_providers_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/captured_faces_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/face_analytics_page.dart';
 import 'package:automated_attendance/views/data_center_pages/recognized_people_list.dart';
+import 'package:automated_attendance/views/data_center_pages/attendance_tracker_page.dart'; // Add this import
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class DataCenterView extends StatefulWidget {
   const DataCenterView({super.key});
@@ -18,35 +18,110 @@ class DataCenterView extends StatefulWidget {
 class _DataCenterViewState extends State<DataCenterView> {
   int _selectedIndex = 0; // Track selected index for NavigationRail
 
-  // Settings variables
-  int? _currentMaxFaces;
-
   @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Data Center"),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Navigation Rail on the left
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
+                    child: IntrinsicHeight(
+                      child: NavigationRail(
+                        selectedIndex: _selectedIndex,
+                        onDestinationSelected: (index) {
+                          setState(() {
+                            _selectedIndex = index;
+                          });
+                        },
+                        labelType: NavigationRailLabelType.all,
+                        destinations: const [
+                          NavigationRailDestination(
+                            icon: Icon(Icons.videocam_outlined),
+                            selectedIcon: Icon(Icons.videocam),
+                            label: Text('Cameras'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.face_outlined),
+                            selectedIcon: Icon(Icons.face),
+                            label: Text('Captured'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.people_outlined),
+                            selectedIcon: Icon(Icons.people),
+                            label: Text('People'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.analytics_outlined),
+                            selectedIcon: Icon(Icons.analytics),
+                            label: Text('Analytics'),
+                          ),
+                          // Add the new attendance navigation item
+                          NavigationRailDestination(
+                            icon: Icon(Icons.event_note_outlined),
+                            selectedIcon: Icon(Icons.event_note),
+                            label: Text('Attendance'),
+                          ),
+                        ],
+                        trailing: Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: IconButton(
+                                icon: const Icon(Icons.settings),
+                                onPressed: () {
+                                  _showSettingsDialog(context);
+                                },
+                                tooltip: 'Settings',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
 
-  // Load settings from SharedPreferences
-  Future<void> _loadSettings() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _currentMaxFaces = prefs.getInt('maxFaces') ?? 10;
-    });
+            // Vertical divider
+            const VerticalDivider(
+              width: 24,
+              thickness: 1,
+              indent: 8,
+              endIndent: 8,
+            ),
+
+            // Content area - Expanded to take remaining width
+            Expanded(
+              child: _buildSelectedView(_selectedIndex),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Function to show the settings dialog
   void _showSettingsDialog(BuildContext context) {
-    final cameraManager =
-        Provider.of<CameraManager>(context, listen: false); // Get it here
+    final controller = Provider.of<UIStateController>(context, listen: false);
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
-            bool useIsolates = cameraManager.useIsolates;
-
             return AlertDialog(
               title: const Text("Settings"),
               content: Column(
@@ -61,32 +136,55 @@ class _DataCenterViewState extends State<DataCenterView> {
                           min: 1,
                           max: 100,
                           divisions: 99,
-                          value: _currentMaxFaces?.toDouble() ?? 10,
-                          label: _currentMaxFaces?.toString() ?? "10",
+                          value: controller.maxFaces.toDouble(),
+                          label: controller.maxFaces.toString(),
                           onChanged: (value) {
                             final newMax = value.round();
-                            setState(() {
-                              _currentMaxFaces = newMax;
-                            });
-                            cameraManager.updateSettings(newMax);
+                            setState(() {});
+                            controller.updateSettings(newMax);
                           },
                         ),
                       ),
                     ],
                   ),
                   Text(
-                    "Max Faces in Memory: $_currentMaxFaces",
+                    "Max Faces in Memory: ${controller.maxFaces}",
+                    style: const TextStyle(fontSize: 12),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Analytics Update Interval Slider
+                  Row(
+                    children: [
+                      const Text("Update Interval:"),
+                      Expanded(
+                        child: Slider(
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          value: controller.analyticsUpdateInterval.toDouble(),
+                          label: controller.analyticsUpdateInterval.toString(),
+                          onChanged: (value) {
+                            final newInterval = value.round();
+                            setState(() {});
+                            controller.updateAnalyticsInterval(newInterval);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    "Analytics Update Interval: ${controller.analyticsUpdateInterval} minutes",
                     style: const TextStyle(fontSize: 12),
                   ),
 
                   SwitchListTile(
                     title: const Text('Use Isolates'),
-                    value: useIsolates,
+                    value: controller.useIsolates,
                     onChanged: (bool value) {
-                      setState(() {
-                        useIsolates = value;
-                      });
-                      cameraManager.updateUseIsolates(value);
+                      setState(() {});
+                      controller.updateUseIsolates(value);
                     },
                   ),
                 ],
@@ -96,7 +194,7 @@ class _DataCenterViewState extends State<DataCenterView> {
                   onPressed: () {
                     Navigator.of(context).pop(); // Close the dialog
                   },
-                  child: const Text("Cancel"),
+                  child: const Text("Close"),
                 ),
               ],
             );
@@ -106,107 +204,20 @@ class _DataCenterViewState extends State<DataCenterView> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Data Center"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // LEFT SIDE: NAVIGATION RAIL
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              labelType: NavigationRailLabelType.all, // Show all labels
-              groupAlignment: -0.9, // Align items towards the top
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.videocam_outlined),
-                  selectedIcon: Icon(Icons.videocam),
-                  label: Text('Providers'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.face_outlined),
-                  selectedIcon: Icon(Icons.face),
-                  label: Text('Faces'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.people_outlined),
-                  selectedIcon: Icon(Icons.people),
-                  label: Text('People'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.analytics_outlined),
-                  selectedIcon: Icon(Icons.analytics),
-                  label: Text('Analytics'),
-                ),
-              ],
-              trailing: Expanded(
-                // Add extra buttons at the bottom of the rail
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    const Divider(thickness: 1),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0, top: 12.0),
-                      child: IconButton(
-                        icon: const Icon(Icons.settings_outlined),
-                        tooltip: 'Settings',
-                        onPressed: () {
-                          _showSettingsDialog(context); // Show settings dialog
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24.0),
-                      child: IconButton(
-                        icon: const Icon(Icons.info_outlined),
-                        tooltip: 'About',
-                        onPressed: () {
-                          // Handle about action
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 20),
-            // RIGHT SIDE: MAIN CONTENT AREA - Now directly using IndexedStack
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3, // Main content takes more space
-                    child: IndexedStack(
-                      // Using IndexedStack instead of TabBarView
-                      index: _selectedIndex,
-                      children: const [
-                        // Tab 1: Active Providers
-                        ActiveProvidersGrid(),
-                        // Tab 2: Captured Faces
-                        CapturedFacesGrid(),
-                        // Tab 3: Recognized People
-                        RecognizedPeopleList(onPersonSelected: null),
-                        // Tab 4: Analytics (NEW)
-                        FaceAnalyticsPage(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _buildSelectedView(int index) {
+    switch (index) {
+      case 0:
+        return const ActiveProvidersGrid();
+      case 1:
+        return const CapturedFacesGrid();
+      case 2:
+        return const RecognizedPeopleList();
+      case 3:
+        return const FaceAnalyticsPage();
+      case 4:
+        return const AttendanceTrackerPage(); // Add the new attendance page
+      default:
+        return const Center(child: Text("Unknown view"));
+    }
   }
 }

@@ -1,7 +1,7 @@
 // lib/views/data_center_view.dart
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
 import 'package:automated_attendance/utils/face_management_dialogs.dart';
 import 'package:automated_attendance/widgets/recognized_person_grid_card.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 class RecognizedPeopleList extends StatefulWidget {
   final Function(TrackedFace)? onPersonSelected;
 
-  const RecognizedPeopleList({super.key, required this.onPersonSelected});
+  const RecognizedPeopleList({super.key, this.onPersonSelected});
 
   @override
   State<RecognizedPeopleList> createState() => _RecognizedPeopleListState();
@@ -30,7 +30,7 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CameraManager>(
+    return Consumer<UIStateController>(
       builder: (context, manager, child) {
         return CustomScrollView(
           slivers: [
@@ -89,7 +89,7 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
     );
   }
 
-  Widget _buildContent(BuildContext context, CameraManager manager) {
+  Widget _buildContent(BuildContext context, UIStateController manager) {
     // Get tracked faces from manager - always from the latest state
     final trackedFaces = manager.trackedFaces;
 

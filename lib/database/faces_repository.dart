@@ -8,8 +8,12 @@ import 'package:uuid/uuid.dart';
 
 /// Repository to handle tracked faces persistence using Drift database
 class FacesRepository {
-  final DatabaseProvider _databaseProvider = DatabaseProvider();
+  final IDatabaseProvider _databaseProvider;
   final Uuid _uuid = Uuid();
+
+  /// Constructor that allows dependency injection of database provider
+  FacesRepository({IDatabaseProvider? databaseProvider})
+      : _databaseProvider = databaseProvider ?? DatabaseProvider();
 
   /// Loads all tracked faces from the database
   Future<Map<String, TrackedFace>> loadAllTrackedFaces() async {
@@ -132,6 +136,10 @@ class FacesRepository {
     final sourceFace = await database.getTrackedFaceById(sourceId);
     if (sourceFace == null) return;
 
+    // Update visits for the merged face to point to the target face FIRST
+    // This ensures visits are properly attributed before we delete the source face
+    await updateVisitsForMergedFace(sourceId, targetId);
+
     // Get all merged faces of the source face
     final sourceMergedFaces = await database.getMergedFacesForTarget(sourceId);
 
@@ -169,9 +177,6 @@ class FacesRepository {
 
     // Delete the source face from tracked faces
     await database.deleteTrackedFace(sourceId);
-
-    // Update visits for the merged face to point to the target face
-    await updateVisitsForMergedFace(sourceId, targetId);
   }
 
   /// Update the name of a face
@@ -266,25 +271,21 @@ class FacesRepository {
   /// Update the last seen time of an active visit
   Future<void> updateVisitLastSeen(String visitId, DateTime timestamp) async {
     final database = await _databaseProvider.database;
-
     // Get the current visit
     final visits = await (database.select(database.dBVisits)
           ..where((tbl) => tbl.id.equals(visitId)))
         .get();
-
     if (visits.isEmpty) return;
-
     final visit = visits.first;
+
     final companion = DBVisitsCompanion(
       id: Value(visitId),
       faceId: Value(visit.faceId),
       providerId: Value(visit.providerId),
       entryTime: Value(visit.entryTime),
-      // Update exitTime to be the last seen time (but still active)
-      exitTime: Value(timestamp),
-      // durationSeconds is still null as the visit is ongoing
+      exitTime: Value(
+          timestamp), // Set exitTime but leave durationSeconds null to keep visit active
     );
-
     await database.updateVisit(companion);
   }
 
@@ -352,17 +353,25 @@ class FacesRepository {
   }
 
   /// Get visit statistics for analytics
-  Future<Map<String, dynamic>> getVisitStatistics(
-      {DateTime? startDate,
-      DateTime? endDate,
-      String? providerId,
-      String? faceId}) async {
+  Future<Map<String, dynamic>> getVisitStatistics({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? providerId,
+    String? faceId,
+  }) async {
     final database = await _databaseProvider.database;
 
-    // Start with all visits
+    // Build base query with all filters
     var query = database.select(database.dBVisits);
 
-    // Apply filters
+    if (providerId != null) {
+      query = query..where((tbl) => tbl.providerId.equals(providerId));
+    }
+
+    if (faceId != null) {
+      query = query..where((tbl) => tbl.faceId.equals(faceId));
+    }
+
     if (startDate != null) {
       query = query
         ..where((tbl) => tbl.entryTime.isBiggerOrEqualValue(startDate));
@@ -373,53 +382,57 @@ class FacesRepository {
         ..where((tbl) => tbl.entryTime.isSmallerOrEqualValue(endDate));
     }
 
-    if (providerId != null) {
-      query = query..where((tbl) => tbl.providerId.equals(providerId));
-    }
-
-    if (faceId != null) {
-      query = query..where((tbl) => tbl.faceId.equals(faceId));
-    }
-
+    // Get filtered visits
     final visits = await query.get();
 
-    // Calculate statistics
+    // Initialize statistics map
     final Map<String, dynamic> stats = {
-      'totalVisits': visits.length,
-      'activeVisits': visits.where((v) => v.exitTime == null).length,
-      'completedVisits': visits.where((v) => v.exitTime != null).length,
+      'totalVisits': 0,
+      'activeVisits': 0,
+      'completedVisits': 0,
       'avgDurationSeconds': 0.0,
       'providers': <String>{},
-      'uniqueFaces': <String?>{},
+      'uniqueFaces': <String>{},
       'visitsByDay': <String, int>{},
       'visitsByHour': <int, int>{},
     };
 
+    // Count only valid visits
+    final validVisits = visits
+        .where((v) =>
+            v.faceId != null &&
+            (v.faceId?.isNotEmpty ?? false) &&
+            v.providerId.isNotEmpty)
+        .toList();
+
+    stats['totalVisits'] = validVisits.length;
+    stats['activeVisits'] =
+        validVisits.where((v) => v.durationSeconds == null).length;
+    stats['completedVisits'] =
+        validVisits.where((v) => v.durationSeconds != null).length;
+
+    // Collect unique providers and faces
+    for (var visit in validVisits) {
+      stats['providers'].add(visit.providerId);
+      stats['uniqueFaces'].add(visit.faceId!);
+
+      // Track by day and hour
+      final day = formatDate(visit.entryTime);
+      stats['visitsByDay'][day] = (stats['visitsByDay'][day] ?? 0) + 1;
+      stats['visitsByHour'][visit.entryTime.hour] =
+          (stats['visitsByHour'][visit.entryTime.hour] ?? 0) + 1;
+    }
+
     // Calculate average duration for completed visits
-    final completedVisits =
-        visits.where((v) => v.durationSeconds != null).toList();
+    final completedVisits = validVisits.where((v) => v.durationSeconds != null);
     if (completedVisits.isNotEmpty) {
       final totalDuration = completedVisits.fold<int>(
           0, (sum, visit) => sum + (visit.durationSeconds ?? 0));
       stats['avgDurationSeconds'] = totalDuration / completedVisits.length;
     }
 
-    // Collect unique providers
-    for (var visit in visits) {
-      stats['providers'].add(visit.providerId);
-      stats['uniqueFaces'].add(visit.faceId);
-
-      // Track visits by day
-      final day = _formatDate(visit.entryTime);
-      stats['visitsByDay'][day] = (stats['visitsByDay'][day] ?? 0) + 1;
-
-      // Track visits by hour
-      final hour = visit.entryTime.hour;
-      stats['visitsByHour'][hour] = (stats['visitsByHour'][hour] ?? 0) + 1;
-    }
-
     stats['providerCount'] = (stats['providers'] as Set<String>).length;
-    stats['uniqueFacesCount'] = (stats['uniqueFaces'] as Set<String?>).length;
+    stats['uniqueFacesCount'] = (stats['uniqueFaces'] as Set<String>).length;
 
     return stats;
   }
@@ -438,6 +451,7 @@ class FacesRepository {
     return visits.map((visit) {
       return {
         'id': visit.id,
+        'faceId': visit.faceId, // Add faceId to the result for debugging
         'providerId': visit.providerId,
         'entryTime': visit.entryTime,
         'exitTime': visit.exitTime,
@@ -445,7 +459,7 @@ class FacesRepository {
             ? Duration(seconds: visit.durationSeconds!)
             : null,
         'isActive': visit.exitTime == null,
-        'date': _formatDate(visit.entryTime),
+        'date': formatDate(visit.entryTime),
         'entryHour': visit.entryTime.hour,
         'exitHour': visit.exitTime?.hour,
       };
@@ -453,7 +467,7 @@ class FacesRepository {
   }
 
   // Helper to format date as YYYY-MM-DD
-  String _formatDate(DateTime date) {
+  String formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
@@ -533,5 +547,23 @@ class FacesRepository {
 
     final visits = await query.get();
     return visits.length;
+  }
+
+  /// Get list of expected attendees
+  Future<List<String>> getExpectedAttendees() async {
+    final database = await _databaseProvider.database;
+    return await database.getExpectedAttendees();
+  }
+
+  /// Add a face to expected attendees
+  Future<void> addExpectedAttendee(String faceId) async {
+    final database = await _databaseProvider.database;
+    await database.addExpectedAttendee(faceId);
+  }
+
+  /// Remove a face from expected attendees
+  Future<void> removeExpectedAttendee(String faceId) async {
+    final database = await _databaseProvider.database;
+    await database.removeExpectedAttendee(faceId);
   }
 }

@@ -1,4 +1,4 @@
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -40,7 +40,7 @@ class _PersonVisitsViewState extends State<PersonVisitsView> {
       _isLoading = true;
     });
 
-    final manager = Provider.of<CameraManager>(context, listen: false);
+    final manager = Provider.of<UIStateController>(context, listen: false);
     final visits = await manager.getVisitsForFace(widget.faceId);
 
     setState(() {
