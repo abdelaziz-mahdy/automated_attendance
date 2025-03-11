@@ -19,6 +19,13 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "📥 Update mode detected - will upgrade existing installation"
 fi
 
+# Check if python-venv is installed
+if ! python3 -c "import venv" &> /dev/null; then
+    echo "📦 Installing python3-venv..."
+    sudo apt-get update
+    sudo apt-get install -y python3-venv
+fi
+
 # First ensure the camera setup is done
 if [ -f "$SCRIPT_DIR/rpi_setup.sh" ]; then
     echo "📋 Running camera setup script first..."
@@ -47,8 +54,14 @@ cat > "$INSTALL_DIR/start_camera_server.sh" << 'EOL'
 cd "$(dirname "$0")"
 
 # Activate virtual environment if it exists
-if [ -d ".venv" ]; then
+if [ -d ".venv" ] && [ -f ".venv/bin/activate" ]; then
   source .venv/bin/activate
+else
+  echo "Virtual environment missing or corrupted. Recreating..."
+  rm -rf .venv
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
 fi
 
 # Get current IP for logging
@@ -70,11 +83,18 @@ chmod +x "$INSTALL_DIR/start_camera_server.sh"
 # Set up the virtual environment in the install directory
 echo "🔧 Setting up virtual environment in installation directory..."
 cd "$INSTALL_DIR"
-if [ ! -d ".venv" ]; then
+if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
+    echo "Creating virtual environment..."
+    rm -rf .venv
     python3 -m venv .venv
+    if [ ! -f ".venv/bin/activate" ]; then
+        echo "❌ Failed to create virtual environment. Something went wrong."
+        exit 1
+    fi
     source .venv/bin/activate
     pip install -r requirements.txt
 else
+    echo "Updating existing virtual environment..."
     source .venv/bin/activate
     pip install --upgrade -r requirements.txt
 fi
