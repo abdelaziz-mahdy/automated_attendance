@@ -19,11 +19,31 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "📥 Update mode detected - will upgrade existing installation"
 fi
 
-# Check if python-venv is installed
-if ! python3 -c "import venv" &> /dev/null; then
-    echo "📦 Installing python3-venv..."
-    sudo apt-get update
-    sudo apt-get install -y python3-venv
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo "⚠️ uv is not installed"
+    echo "📦 Installing uv..."
+    
+    # Check if pip is installed
+    if command -v pip3 &> /dev/null; then
+        pip3 install uv
+    else
+        # First install pip if needed
+        echo "📦 Installing pip first..."
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+        pip3 install uv
+    fi
+    
+    # If installation failed, provide manual instructions
+    if ! command -v uv &> /dev/null; then
+        echo "❌ Failed to install uv automatically."
+        echo "Please install uv manually using one of these methods:"
+        echo "  - Using pip: pip install uv"
+        echo "  - Using curl: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        echo "  - For more options visit: https://github.com/astral-sh/uv"
+        exit 1
+    fi
 fi
 
 # First ensure the camera setup is done
@@ -59,9 +79,25 @@ if [ -d ".venv" ] && [ -f ".venv/bin/activate" ]; then
 else
   echo "Virtual environment missing or corrupted. Recreating..."
   rm -rf .venv
-  python3 -m venv .venv
-  source .venv/bin/activate
-  pip install -r requirements.txt
+  
+  # Check if uv is installed
+  if command -v uv &> /dev/null; then
+    echo "Creating virtual environment with uv..."
+    uv venv .venv
+    source .venv/bin/activate
+    uv pip install -r requirements.txt
+  else
+    echo "uv not found, installing it..."
+    pip3 install uv
+    if command -v uv &> /dev/null; then
+      uv venv .venv
+      source .venv/bin/activate
+      uv pip install -r requirements.txt
+    else
+      echo "Failed to install uv. Exiting."
+      exit 1
+    fi
+  fi
 fi
 
 # Get current IP for logging
@@ -86,17 +122,17 @@ cd "$INSTALL_DIR"
 if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
     echo "Creating virtual environment..."
     rm -rf .venv
-    python3 -m venv .venv
+    uv venv .venv
     if [ ! -f ".venv/bin/activate" ]; then
         echo "❌ Failed to create virtual environment. Something went wrong."
         exit 1
     fi
     source .venv/bin/activate
-    pip install -r requirements.txt
+    uv pip install -r requirements.txt
 else
     echo "Updating existing virtual environment..."
     source .venv/bin/activate
-    pip install --upgrade -r requirements.txt
+    uv pip install --upgrade -r requirements.txt
 fi
 
 # Create or update cron job

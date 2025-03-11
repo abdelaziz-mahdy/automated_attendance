@@ -34,6 +34,16 @@ else
     echo "git clone https://github.com/abdelaziz-mahdy/automated_attendance.git"
 fi
 
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo "⚠️ uv is not installed"
+    echo "📦 Please install uv using one of the following methods:"
+    echo "  - Using pip: pip install uv"
+    echo "  - Using curl (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo "  - For more options visit: https://github.com/astral-sh/uv"
+    exit 1
+fi
+
 # Run the setup script to handle dependency updates
 echo "🔄 Updating dependencies..."
 bash "$SCRIPT_DIR/setup.sh"
