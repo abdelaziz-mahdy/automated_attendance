@@ -22,12 +22,18 @@ A real-time face recognition system that uses networked cameras for automated at
 
 1. **Prerequisites:**
    - Python 3 installed on your system
+   - uv package manager (install using: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
 2. **Installation:**
    ```bash
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
-   bash setup.sh
+   
+   # For systems with standard webcams (using OpenCV)
+   bash setup.sh --camera opencv
+   
+   # For Raspberry Pi with PiCamera
+   bash setup.sh --camera picamera
    ```
 
 ### For Raspberry Pi (Including Raspberry Pi Zero)
@@ -35,6 +41,7 @@ A real-time face recognition system that uses networked cameras for automated at
 1. **Prerequisites:**
    - A Raspberry Pi with camera module connected
    - Raspbian/Raspberry Pi OS installed
+   - Internet connection for installing dependencies
 
 2. **Installation Options:**
 
@@ -44,9 +51,14 @@ A real-time face recognition system that uses networked cameras for automated at
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
    
-   # Run the setup script
+   # Run the setup script (automatically uses PiCamera)
    bash rpi_setup.sh
    ```
+   This script will automatically:
+   - Install required system dependencies
+   - Set up PiCamera without unnecessary OpenCV dependencies
+   - Configure camera permissions
+   - Create a Python virtual environment using uv
 
    **Option 2: Auto-start on Boot**
    ```bash
@@ -57,6 +69,7 @@ A real-time face recognition system that uses networked cameras for automated at
    # Run the cron setup script
    bash rpi_cron_setup.sh
    ```
+   This option includes everything from Option 1 plus sets up the server to start automatically on boot.
 
 ### Updating the System
 
@@ -64,7 +77,12 @@ To update your installation with the latest changes:
 
 ```bash
 cd automated_attendance/python_server
-bash update.sh
+
+# For systems with standard webcams (using OpenCV)
+bash update.sh --camera opencv
+
+# For Raspberry Pi with PiCamera
+bash update.sh --camera picamera
 ```
 
 ## Usage Guide
