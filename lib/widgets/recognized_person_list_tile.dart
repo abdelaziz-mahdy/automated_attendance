@@ -1,10 +1,12 @@
 // lib/views/data_center_view.dart
 
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/widgets/similar_faces_view.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:automated_attendance/views/data_center_pages/person_visits_view.dart';
 
 class RecognizedPersonListTile extends StatefulWidget {
   final TrackedFace trackedFace;
@@ -32,6 +34,7 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
   final _dateFormat = DateFormat('MMM d, y HH:mm:ss.SSS');
   bool _isHovered = false;
   bool _isExpanded = false;
+  bool _isEditing = false;
 
   @override
   void initState() {
@@ -43,6 +46,124 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Face'),
+        content: Text(
+            'Are you sure you want to delete ${widget.trackedFace.name}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              final manager =
+                  Provider.of<UIStateController>(context, listen: false);
+              manager.deleteTrackedFace(widget.trackedFace.id);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveNameChanges() {
+    setState(() {
+      _isEditing = false;
+    });
+    Provider.of<UIStateController>(context, listen: false)
+        .updateTrackedFaceName(widget.trackedFace.id, _nameController.text);
+  }
+
+  void _splitMergedFace(TrackedFace mergedFace, int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Split Face'),
+        content: const Text(
+            'Are you sure you want to split this face? It will be removed from the merged group and restored as a separate face.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              final manager =
+                  Provider.of<UIStateController>(context, listen: false);
+              manager.splitMergedFace(
+                  widget.trackedFace.id, mergedFace.id, index);
+            },
+            child: const Text('Split'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openVisitHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PersonVisitsView(
+          faceId: widget.trackedFace.id,
+          personName: widget.trackedFace.name,
+        ),
+      ),
+    );
+  }
+
+  void _showSimilarFaces() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Content
+                Expanded(
+                  child: SimilarFacesView(
+                    faceId: widget.trackedFace.id,
+                    onMergeComplete: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildQuickActions() {
@@ -69,12 +190,53 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             ),
           ),
           const SizedBox(width: 8),
-        ] else if (widget.onMergePressed != null) ...[
+        ] else ...[
+          // Edit button
+          if (_isEditing) ...[
+            IconButton(
+              onPressed: _saveNameChanges,
+              icon: const Icon(Icons.save),
+              tooltip: 'Save name changes',
+            ),
+          ] else ...[
+            IconButton(
+              onPressed: () => setState(() => _isEditing = true),
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit name',
+            ),
+          ],
+
+          // Visit history button
           IconButton(
-            onPressed: widget.onMergePressed,
-            icon: const Icon(Icons.merge),
-            tooltip: 'Merge with another face',
+            onPressed: _openVisitHistory,
+            icon: const Icon(Icons.history),
+            tooltip: 'View visit history',
           ),
+
+          // Find similar faces button
+          IconButton(
+            onPressed: _showSimilarFaces,
+            icon: const Icon(Icons.face),
+            tooltip: 'Find similar faces',
+          ),
+
+          // Delete button
+          IconButton(
+            onPressed: _showDeleteConfirmation,
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete face',
+            color: Colors.red.shade300,
+          ),
+
+          // Merge button
+          if (widget.onMergePressed != null) ...[
+            IconButton(
+              onPressed: widget.onMergePressed,
+              icon: const Icon(Icons.merge),
+              tooltip: 'Merge with another face',
+            ),
+          ],
+
           const SizedBox(width: 8),
         ],
         if (widget.onTap != null) _buildNavigationIcon(),
@@ -212,21 +374,40 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         isDense: true,
         filled: true,
-        fillColor: _isHovered ? Colors.grey.shade100 : Colors.transparent,
+        fillColor: _isEditing
+            ? Colors.blue.shade50
+            : (_isHovered ? Colors.grey.shade100 : Colors.transparent),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide.none,
+          borderSide: _isEditing
+              ? BorderSide(color: Colors.blue.shade300)
+              : BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: _isEditing
+              ? BorderSide(color: Colors.blue.shade300)
+              : BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.blue.shade500),
         ),
         hintText: 'Enter name',
+        suffixIcon: _isEditing
+            ? IconButton(
+                icon: const Icon(Icons.check, size: 18),
+                onPressed: _saveNameChanges,
+                color: Colors.green,
+              )
+            : null,
       ),
       style: const TextStyle(
         fontWeight: FontWeight.bold,
         fontSize: 16,
       ),
-      onChanged: (newValue) {
-        Provider.of<CameraManager>(context, listen: false)
-            .updateTrackedFaceName(widget.trackedFace.id, newValue);
-      },
+      enabled: _isEditing,
+      onSubmitted: (_) => _saveNameChanges(),
     );
   }
 
@@ -249,6 +430,29 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
             Icons.camera,
             'Provider: ${widget.trackedFace.lastSeenProvider!}',
           ),
+        // Add visit history button as part of the info section
+        InkWell(
+          onTap: _openVisitHistory,
+          child: Row(
+            children: [
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.blue.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'View detailed visit history',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.w500,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -320,45 +524,68 @@ class _RecognizedPersonListTileState extends State<RecognizedPersonListTile> {
           itemCount: widget.trackedFace.mergedFaces.length,
           itemBuilder: (context, index) {
             final mergedFace = widget.trackedFace.mergedFaces[index];
-            return Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.memory(
-                      mergedFace.allThumbnails.first,
-                      fit: BoxFit.cover,
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 2,
-                          horizontal: 4,
+            return Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.memory(
+                          mergedFace.allThumbnails.first,
+                          fit: BoxFit.cover,
                         ),
-                        color: Colors.black54,
-                        child: Text(
-                          DateFormat('HH:mm:ss').format(
-                            mergedFace.lastSeen?.toLocal() ?? DateTime.now(),
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 2,
+                              horizontal: 4,
+                            ),
+                            color: Colors.black54,
+                            child: Text(
+                              DateFormat('HH:mm:ss').format(
+                                mergedFace.lastSeen?.toLocal() ??
+                                    DateTime.now(),
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                          textAlign: TextAlign.center,
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.call_split, size: 16),
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                      color: Colors.blue.shade700,
+                      onPressed: () => _splitMergedFace(mergedFace, index),
+                      tooltip: 'Split this face',
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
