@@ -27,8 +27,7 @@ A real-time face recognition system that uses networked cameras for automated at
    ```bash
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
-   chmod +x setup.sh
-   ./setup.sh
+   bash setup.sh
    ```
 
 ### For Raspberry Pi (Including Raspberry Pi Zero)
@@ -45,9 +44,8 @@ A real-time face recognition system that uses networked cameras for automated at
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
    
-   # Make the script executable and run it
-   chmod +x rpi_setup.sh
-   ./rpi_setup.sh
+   # Run the setup script
+   bash rpi_setup.sh
    ```
 
    **Option 2: Auto-start on Boot**
@@ -56,10 +54,18 @@ A real-time face recognition system that uses networked cameras for automated at
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
    
-   # Make the script executable and run it
-   chmod +x rpi_cron_setup.sh
-   ./rpi_cron_setup.sh
+   # Run the cron setup script
+   bash rpi_cron_setup.sh
    ```
+
+### Updating the System
+
+To update your installation with the latest changes:
+
+```bash
+cd automated_attendance/python_server
+bash update.sh
+```
 
 ## Usage Guide
 
