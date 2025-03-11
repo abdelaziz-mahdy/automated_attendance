@@ -1,6 +1,6 @@
 // lib/views/data_center_view.dart
 
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/widgets/provider_card.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,9 +10,9 @@ class ActiveProvidersGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CameraManager>(
-      builder: (context, manager, child) {
-        final providers = manager.activeProviders.keys.toList();
+    return Consumer<UIStateController>(
+      builder: (context, controller, child) {
+        final providers = controller.activeProviders.keys.toList();
 
         if (providers.isEmpty) {
           return const Center(child: Text("No active services found."));
@@ -28,10 +28,10 @@ class ActiveProvidersGrid extends StatelessWidget {
           itemCount: providers.length,
           itemBuilder: (context, index) {
             final address = providers[index];
-            final frame = manager.getLastFrame(address);
+            final frame = controller.getLastFrame(address);
             String providerStatus =
                 "Online"; // Replace with actual status logic.
-            final fps = manager.getProviderFps(address);
+            final fps = controller.getProviderFps(address);
 
             return ProviderCard(
               address: address,

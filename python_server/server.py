@@ -3,9 +3,10 @@ from aiohttp import web
 from zeroconf.asyncio import AsyncZeroconf
 import socket
 import logging
-from camera_provider import LocalCameraProvider
+from camera_provider import create_camera_provider
 from zeroconf import ServiceInfo
 import datetime
+import argparse
 
 # Configure logging with more detail
 logging.basicConfig(
@@ -16,11 +17,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class CameraProviderServer:
-    def __init__(self):
+    def __init__(self, camera_type='auto', camera_index=0):
         self._server = None
         self._zeroconf = None
         self._service_info = None
-        self.camera_provider = LocalCameraProvider(0)
+        self._camera_type = camera_type
+        self._camera_index = camera_index
+        self.camera_provider = None  # Will be initialized in start()
         self._request_count = 0
         
     async def _handle_test(self, request):
@@ -55,8 +58,13 @@ class CameraProviderServer:
         try:
             logger.info("Starting Camera Provider Server...")
             
-            # Initialize camera
-            logger.info("Initializing camera...")
+            # Initialize camera using factory function
+            logger.info(f"Initializing camera (type: {self._camera_type}, index: {self._camera_index})...")
+            self.camera_provider = create_camera_provider(
+                camera_type=self._camera_type,
+                camera_index=self._camera_index
+            )
+            
             success = await self.camera_provider.open_camera()
             if not success:
                 raise Exception("Failed to open camera")
@@ -89,6 +97,7 @@ class CameraProviderServer:
                 properties={
                     "server_type": "python",
                     "version": "1.0",
+                    "camera_type": self._camera_type,
                 },
             )
             

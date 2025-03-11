@@ -1,6 +1,6 @@
 // lib/views/data_center_view.dart
 
-import 'package:automated_attendance/services/camera_manager.dart';
+import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,9 +9,9 @@ class CapturedFacesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CameraManager>(
-      builder: (context, manager, child) {
-        final faces = manager.capturedFaces;
+    return Consumer<UIStateController>(
+      builder: (context, controller, child) {
+        final faces = controller.capturedFaces;
         if (faces.isEmpty) {
           return const Center(child: Text("No faces captured yet."));
         }
