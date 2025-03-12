@@ -44,38 +44,37 @@ echo "===================================="
 select_camera_type() {
     if [ "$NON_INTERACTIVE" -eq 1 ] && [ -n "$CAMERA_TYPE" ]; then
         if [ "$CAMERA_TYPE" = "opencv" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
-            echo "$CAMERA_TYPE"
+            printf "%s\n" "$CAMERA_TYPE"
             return
-        else
-            echo "Invalid camera type: $CAMERA_TYPE. Using default." >&2
         fi
     fi
     
     if [ "$NON_INTERACTIVE" -eq 1 ]; then
-        # Default to opencv in non-interactive mode if not specified
-        echo "opencv"
+        printf "opencv\n"
         return
     fi
     
-    local choice
-    echo "Please select your camera type:"
-    echo "1) OpenCV (for standard webcams)"
-    echo "2) PiCamera (for Raspberry Pi camera module)"
-    echo -n "Enter your choice (1 or 2): "
-    read -r choice
-    
-    case $choice in
-        1)
-            echo "opencv"
-            ;;
-        2)
-            echo "picamera"
-            ;;
-        *)
-            echo "Invalid choice. Please select 1 or 2." >&2
-            exit 1
-            ;;
-    esac
+    while true; do
+        printf "\nPlease select your camera type:\n"
+        printf "1) OpenCV (for standard webcams)\n"
+        printf "2) PiCamera (for Raspberry Pi camera module)\n"
+        printf "Enter your choice (1 or 2): "
+        read -r choice
+        
+        case $choice in
+            1)
+                printf "opencv\n"
+                return
+                ;;
+            2)
+                printf "picamera\n"
+                return
+                ;;
+            *)
+                printf "Invalid choice. Please select 1 or 2.\n" >&2
+                ;;
+        esac
+    done
 }
 
 # Get camera type and capture it properly
