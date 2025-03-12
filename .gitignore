@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ignore venv directory
+*/.venv/
+#ignore python cache
+*/__pycache__/
