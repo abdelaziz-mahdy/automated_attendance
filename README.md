@@ -18,95 +18,103 @@ A real-time face recognition system that uses networked cameras for automated at
    flutter run
    ```
 
-### For the Python Server (Standard)
+### For the Python Server
 
 1. **Prerequisites:**
    - Python 3 installed on your system
+   - uv package manager (install using: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+   - For Raspberry Pi: A connected camera module
+   - For other systems: A connected webcam
 
-2. **Installation:**
+2. **Available Scripts:**
+
+   The Python server comes with three specialized scripts:
+
+   a) **Git Update Script** (`git_update.sh`):
+   - Updates the repository with the latest changes
+   - Maintains your local modifications
+   - Use this when you want to update to the latest version
    ```bash
-   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
-   cd automated_attendance/python_server
-   bash setup.sh
+   cd python_server
+   bash git_update.sh
    ```
 
-### For Raspberry Pi (Including Raspberry Pi Zero)
+   b) **Setup and Run Script** (`setup_and_run.sh`):
+   - Interactive camera type selection
+   - Installs all required dependencies
+   - Sets up the Python environment
+   - Starts the camera server
+   ```bash
+   cd python_server
+   bash setup_and_run.sh
+   ```
 
-1. **Prerequisites:**
-   - A Raspberry Pi with camera module connected
-   - Raspbian/Raspberry Pi OS installed
+   c) **Cron Setup Script** (`cron_setup.sh`):
+   - Interactive camera type selection
+   - Configures automatic startup on boot
+   - Sets up system service
+   - Manages log rotation
+   ```bash
+   cd python_server
+   bash cron_setup.sh
+   ```
 
-2. **Installation Options:**
+3. **Camera Types:**
+   When running setup scripts, you'll be prompted to choose your camera type:
+   - **OpenCV** (Option 1): For standard webcams on any system
+   - **PiCamera** (Option 2): Specifically for Raspberry Pi camera module
 
-   **Option 1: Simple Installation**
+4. **First-Time Setup:**
    ```bash
    # Clone the repository
    git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
    
    # Run the setup script
-   bash rpi_setup.sh
+   bash setup_and_run.sh
    ```
 
-   **Option 2: Auto-start on Boot**
+5. **Automatic Startup Setup (Optional):**
    ```bash
-   # Clone the repository
-   git clone https://github.com/abdelaziz-mahdy/automated_attendance.git
    cd automated_attendance/python_server
-   
-   # Run the cron setup script
-   bash rpi_cron_setup.sh
+   bash cron_setup.sh
    ```
 
-### Updating the System
+6. **Updating the System:**
+   ```bash
+   cd automated_attendance/python_server
+   # First update the repository
+   bash git_update.sh
+   # Then run setup again
+   bash setup_and_run.sh
+   ```
 
-To update your installation with the latest changes:
+### Server Locations and Logs
 
-```bash
-cd automated_attendance/python_server
-bash update.sh
-```
+- **Installation Directory:** `$HOME/camera_server`
+- **Log File:** `$HOME/camera_server.log`
+- **Default Port:** 12345
+- **Web Interface:** `http://<your-ip>:12345`
 
-## Usage Guide
+### Troubleshooting
 
-### App Modes
+1. **Camera Issues:**
+   - For PiCamera: Ensure the camera module is enabled in raspi-config
+   - For OpenCV: Check if your webcam is recognized by the system
 
-- **Camera Provider Mode**: Broadcasts your device camera over the network
-- **Data Center Mode**: Receives camera feeds and processes faces for attendance tracking
+2. **Startup Issues:**
+   - Check the logs: `cat $HOME/camera_server.log`
+   - Verify camera permissions
+   - Ensure the selected camera type matches your hardware
 
-### Basic Usage Steps
-
-1. **Start at least one device as a Camera Provider** (or use the Python server)
-2. **Start another device as a Data Center**
-3. The Data Center will automatically discover and connect to the Camera Provider
-4. View real-time face recognition and attendance tracking in the Data Center interface
-
-For detailed instructions, see the [User Guide](#user-guide) section below.
+3. **Network Issues:**
+   - Confirm the server is running: `http://localhost:12345/test`
+   - Check firewall settings
+   - Ensure all devices are on the same network
 
 ## System Architecture
 
 For detailed information about how the system works, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## User Guide
-
-### Using Camera Provider Mode
-
-- **Permissions:** Allow camera access when prompted
-- **Broadcasting:** Your device automatically announces itself on the local network
-- **Status:** The app displays the server status and logging information
-
-### Using Data Center Mode
-
-- **Discovery:** The app automatically finds Camera Providers on your network
-- **Live Feed:** Shows camera feeds with face detection overlays
-- **People Tab:** Shows recognized individuals and allows name assignment
-- **Settings:** Configure processing options like face memory and isolate usage
-
-### Troubleshooting
-
-- **No Camera Feed?** Check camera permissions and network connectivity
-- **Discovery Issues?** Ensure devices are on the same network
-- **Performance Problems?** Try enabling isolates in Settings
 
 ## License
 
