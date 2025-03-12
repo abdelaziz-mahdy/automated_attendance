@@ -1,3 +1,2 @@
 aiohttp>=3.8.0
 zeroconf>=0.70.0
-numpy>=1.21.0
