@@ -192,7 +192,7 @@ else
     echo "Creating virtual environment with uv..."
     uv venv .venv
     source .venv/bin/activate
-    uv pip install -r requirements-picamera.txt
+    uv pip install -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
 fi
 
 # Ensure camera module is enabled
@@ -242,7 +242,7 @@ else
     [ "$VERBOSE" -eq 1 ] && echo "Updating existing virtual environment..."
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ]; then
-        uv pip install --upgrade -r requirements-picamera.txt
+        uv pip install --upgrade -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
     else
         uv pip install --upgrade -r requirements-opencv.txt
     fi
@@ -262,11 +262,11 @@ crontab -l 2>/dev/null | grep -v "start_camera_server.sh\|start_opencv_server.sh
 if [ "$CAMERA_TYPE" = "picamera" ]; then
     if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
         [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system dependencies..."
-        sudo apt-get update
-        sudo apt-get install -y \
-            python3-picamera \
-            python3-pip \
-            python3-numpy         
+        # sudo apt-get update
+        # sudo apt-get install -y \
+        #     python3-picamera \
+        #     python3-pip \
+        #     python3-numpy         
         # Set up camera permissions
         sudo usermod -a -G video $USER
     fi
