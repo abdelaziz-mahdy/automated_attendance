@@ -3,9 +3,50 @@
 # Exit on error
 set -e
 
+# Default values
+CAMERA_TYPE=""
+VERBOSE=1
+NON_INTERACTIVE=0
+SKIP_REBOOT=0
+INSTALL_DIR="$HOME/camera_server"
+
+# Parse command-line arguments
+while getopts "c:i:vnrh" opt; do
+  case $opt in
+    c)
+      CAMERA_TYPE="$OPTARG"
+      ;;
+    i)
+      INSTALL_DIR="$OPTARG"
+      ;;
+    v)
+      VERBOSE=1
+      ;;
+    n)
+      NON_INTERACTIVE=1
+      ;;
+    r)
+      SKIP_REBOOT=1
+      ;;
+    h)
+      echo "Usage: $0 [-c camera_type] [-i install_dir] [-v] [-n] [-r] [-h]"
+      echo "  -c camera_type   Camera type: 'opencv' or 'picamera'"
+      echo "  -i install_dir   Installation directory (default: ~/camera_server)"
+      echo "  -v               Verbose mode"
+      echo "  -n               Non-interactive mode"
+      echo "  -r               Skip reboot prompt"
+      echo "  -h               Show this help"
+      exit 0
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+
 # Get current directory (should be inside python_server in the cloned repo)
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-INSTALL_DIR="$HOME/camera_server"
 
 echo "===================================="
 echo "Camera Server - Cron Setup"
@@ -13,6 +54,21 @@ echo "===================================="
 
 # Function to select camera type
 select_camera_type() {
+    if [ "$NON_INTERACTIVE" -eq 1 ] && [ -n "$CAMERA_TYPE" ]; then
+        if [ "$CAMERA_TYPE" = "opencv" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
+            echo "$CAMERA_TYPE"
+            return
+        else
+            echo "Invalid camera type: $CAMERA_TYPE. Using default." >&2
+        fi
+    fi
+    
+    if [ "$NON_INTERACTIVE" -eq 1 ]; then
+        # Default to opencv in non-interactive mode if not specified
+        echo "opencv"
+        return
+    fi
+    
     echo "Please select your camera type:"
     echo "1) OpenCV (for standard webcams)"
     echo "2) PiCamera (for Raspberry Pi camera module)"
@@ -34,22 +90,24 @@ select_camera_type() {
 }
 
 # Get camera type
-CAMERA_TYPE=$(select_camera_type)
-echo "Using camera type: $CAMERA_TYPE"
+if [ -z "$CAMERA_TYPE" ]; then
+    CAMERA_TYPE=$(select_camera_type)
+fi
+[ "$VERBOSE" -eq 1 ] && echo "Using camera type: $CAMERA_TYPE"
 
 # Check if this is an update
 UPDATE_MODE=0
 if [ -d "$INSTALL_DIR" ]; then
     UPDATE_MODE=1
-    echo "📥 Update mode detected - will upgrade existing installation"
+    [ "$VERBOSE" -eq 1 ] && echo "📥 Update mode detected - will upgrade existing installation"
 fi
 
 # Create install directory if it doesn't exist
-echo "📁 Setting up installation directory..."
+[ "$VERBOSE" -eq 1 ] && echo "📁 Setting up installation directory..."
 mkdir -p "$INSTALL_DIR"
 
 # Copy necessary files to installation directory
-echo "📋 Copying server files..."
+[ "$VERBOSE" -eq 1 ] && echo "📋 Copying server files..."
 cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/server.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/camera_provider.py" "$INSTALL_DIR/"
@@ -58,7 +116,7 @@ cp "$SCRIPT_DIR/requirements-opencv.txt" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/requirements-picamera.txt" "$INSTALL_DIR/"
 
 # Create startup script for OpenCV
-echo "📝 Creating OpenCV startup script..."
+[ "$VERBOSE" -eq 1 ] && echo "📝 Creating OpenCV startup script..."
 cat > "$INSTALL_DIR/start_opencv_server.sh" << 'EOL'
 #!/bin/bash
 cd "$(dirname "$0")"
@@ -102,7 +160,7 @@ python main.py --camera opencv >> "$LOG_FILE" 2>&1
 EOL
 
 # Create startup script for PiCamera
-echo "📝 Creating PiCamera startup script..."
+[ "$VERBOSE" -eq 1 ] && echo "📝 Creating PiCamera startup script..."
 cat > "$INSTALL_DIR/start_picamera_server.sh" << 'EOL'
 #!/bin/bash
 cd "$(dirname "$0")"
@@ -168,10 +226,10 @@ else
 fi
 
 # Set up the virtual environment in the install directory
-echo "🔧 Setting up virtual environment in installation directory..."
+[ "$VERBOSE" -eq 1 ] && echo "🔧 Setting up virtual environment in installation directory..."
 cd "$INSTALL_DIR"
 if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
-    echo "Creating virtual environment..."
+    [ "$VERBOSE" -eq 1 ] && echo "Creating virtual environment..."
     rm -rf .venv
     uv venv .venv
     source .venv/bin/activate
@@ -181,7 +239,7 @@ if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
         uv pip install -r requirements-opencv.txt
     fi
 else
-    echo "Updating existing virtual environment..."
+    [ "$VERBOSE" -eq 1 ] && echo "Updating existing virtual environment..."
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ]; then
         uv pip install --upgrade -r requirements-picamera.txt
@@ -191,7 +249,7 @@ else
 fi
 
 # Create or update cron job
-echo "⏰ Setting up cron job for automatic startup..."
+[ "$VERBOSE" -eq 1 ] && echo "⏰ Setting up cron job for automatic startup..."
 CRON_JOB="@reboot $INSTALL_DIR/start_camera_server.sh"
 
 # Remove any existing cron jobs for this script
@@ -203,7 +261,7 @@ crontab -l 2>/dev/null | grep -v "start_camera_server.sh\|start_opencv_server.sh
 # Install system dependencies if using PiCamera
 if [ "$CAMERA_TYPE" = "picamera" ]; then
     if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
-        echo "Installing PiCamera system dependencies..."
+        [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system dependencies..."
         sudo apt-get update
         sudo apt-get install -y \
             python3-picamera \
@@ -236,11 +294,13 @@ IP_ADDRESS=$(hostname -I | awk '{print $1}')
 echo "🌐 Your current IP address: $IP_ADDRESS"
 echo "Camera server will be accessible at: http://$IP_ADDRESS:12345"
 
-read -p "Do you want to reboot now to test automatic startup? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "🔄 Rebooting system..."
-    sudo reboot
-else
-    echo "Remember to reboot later to enable automatic startup."
+if [ "$SKIP_REBOOT" -eq 0 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
+    read -p "Do you want to reboot now to test automatic startup? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "🔄 Rebooting system..."
+        sudo reboot
+    else
+        echo "Remember to reboot later to enable automatic startup."
+    fi
 fi

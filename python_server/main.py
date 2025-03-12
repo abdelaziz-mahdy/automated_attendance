@@ -10,6 +10,14 @@ async def main():
     parser = argparse.ArgumentParser(description='Camera Provider Server for Raspberry Pi and other platforms')
     parser.add_argument('--camera', choices=['auto', 'picamera', 'opencv'], default='auto',
                       help='Camera type to use (auto, picamera, or opencv). Default is auto.')
+    parser.add_argument('--debug', action='store_true',
+                      help='Enable debug logging')
+    parser.add_argument('--camera-index', type=int, default=0,
+                      help='Camera index for OpenCV (default: 0)')
+    parser.add_argument('--host', default='0.0.0.0',
+                      help='Host IP to bind to (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=12345,
+                      help='Port to listen on (default: 12345)')
     
     args = parser.parse_args()
     
@@ -17,10 +25,11 @@ async def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    logger.info(f"Starting camera provider with camera_type={args.camera}")
+    logger.info(f"Starting camera provider with camera_type={args.camera}, camera_index={args.camera_index}")
+    logger.info(f"Server will bind to {args.host}:{args.port}")
     
     # Create and start server with specified camera type
-    server = CameraProviderServer(camera_type=args.camera)
+    server = CameraProviderServer(camera_type=args.camera, camera_index=args.camera_index)
     try:
         await server.start()
         # Keep the server running

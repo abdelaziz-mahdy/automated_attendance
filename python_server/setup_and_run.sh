@@ -3,12 +3,60 @@
 # Exit on error
 set -e
 
+# Default values
+CAMERA_TYPE=""
+VERBOSE=1
+NON_INTERACTIVE=0
+
+# Parse command-line arguments
+while getopts "c:vnh" opt; do
+  case $opt in
+    c)
+      CAMERA_TYPE="$OPTARG"
+      ;;
+    v)
+      VERBOSE=1
+      ;;
+    n)
+      NON_INTERACTIVE=1
+      ;;
+    h)
+      echo "Usage: $0 [-c camera_type] [-v] [-n] [-h]"
+      echo "  -c camera_type   Camera type: 'opencv' or 'picamera'"
+      echo "  -v               Verbose mode"
+      echo "  -n               Non-interactive mode"
+      echo "  -h               Show this help"
+      exit 0
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Print banner
 echo "===================================="
 echo "Camera Server Setup and Run Script"
 echo "===================================="
 
 # Function to select camera type
 select_camera_type() {
+    if [ "$NON_INTERACTIVE" -eq 1 ] && [ -n "$CAMERA_TYPE" ]; then
+        if [ "$CAMERA_TYPE" = "opencv" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
+            echo "$CAMERA_TYPE"
+            return
+        else
+            echo "Invalid camera type: $CAMERA_TYPE. Using default." >&2
+        fi
+    fi
+    
+    if [ "$NON_INTERACTIVE" -eq 1 ]; then
+        # Default to opencv in non-interactive mode if not specified
+        echo "opencv"
+        return
+    fi
+    
     echo "Please select your camera type:"
     echo "1) OpenCV (for standard webcams)"
     echo "2) PiCamera (for Raspberry Pi camera module)"
@@ -30,8 +78,10 @@ select_camera_type() {
 }
 
 # Get camera type
-CAMERA_TYPE=$(select_camera_type)
-echo "Using camera type: $CAMERA_TYPE"
+if [ -z "$CAMERA_TYPE" ]; then
+    CAMERA_TYPE=$(select_camera_type)
+fi
+[ "$VERBOSE" -eq 1 ] && echo "Using camera type: $CAMERA_TYPE"
 
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
@@ -45,22 +95,22 @@ fi
 
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
-    echo "🔧 Creating virtual environment..."
+    [ "$VERBOSE" -eq 1 ] && echo "🔧 Creating virtual environment..."
     uv venv .venv
 else
-    echo "✅ Virtual environment already exists"
+    [ "$VERBOSE" -eq 1 ] && echo "✅ Virtual environment already exists"
 fi
 
 # Activate virtual environment
-echo "🔌 Activating virtual environment..."
+[ "$VERBOSE" -eq 1 ] && echo "🔌 Activating virtual environment..."
 source .venv/bin/activate
 
 # Install dependencies based on camera type
-echo "📦 Installing dependencies for camera type: $CAMERA_TYPE..."
+[ "$VERBOSE" -eq 1 ] && echo "📦 Installing dependencies for camera type: $CAMERA_TYPE..."
 if [ "$CAMERA_TYPE" = "picamera" ]; then
     # Install system dependencies for PiCamera if on Raspberry Pi
     if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
-        echo "Installing PiCamera system dependencies..."
+        [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system dependencies..."
         sudo apt-get update
         sudo apt-get install -y \
             python3-picamera \
@@ -71,10 +121,10 @@ if [ "$CAMERA_TYPE" = "picamera" ]; then
         sudo usermod -a -G video $USER
     fi
     
-    echo "Installing Python dependencies for PiCamera..."
+    [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for PiCamera..."
     uv pip install --upgrade -r requirements-picamera.txt
 else
-    echo "Installing Python dependencies for OpenCV..."
+    [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for OpenCV..."
     uv pip install --upgrade -r requirements-opencv.txt
 fi
 
@@ -83,7 +133,7 @@ echo "✅ Setup complete!"
 echo "===================================="
 
 # Start the server
-echo "🚀 Starting camera server..."
+[ "$VERBOSE" -eq 1 ] && echo "🚀 Starting camera server..."
 if [ "$CAMERA_TYPE" = "picamera" ]; then
     python main.py --camera picamera
 else
