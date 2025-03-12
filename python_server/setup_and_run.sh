@@ -59,8 +59,7 @@ select_camera_type() {
         echo "Please select your camera type:"
         echo "1) OpenCV (for standard webcams)"
         echo "2) PiCamera (for Raspberry Pi camera module)"
-        echo -n "Enter your choice (1 or 2): "
-        read choice
+        read -p "Enter your choice (1 or 2): " choice
         
         case $choice in
             1)
