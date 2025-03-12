@@ -2,6 +2,7 @@ import abc
 import logging
 import importlib.util
 import numpy as np
+import io
 
 # Configure logging
 logging.basicConfig(
@@ -102,7 +103,7 @@ class PiCameraProvider(BaseCameraProvider):
             self.camera = self.picamera.PiCamera()
             self.camera.resolution = (640, 480)
             self.camera.framerate = 24
-            self.stream = self.picamera.PiRGBArray(self.camera)
+            self.stream = io.BytesIO()
             self.is_open = True
             logger.info("Successfully initialized PiCamera")
             return True
@@ -115,12 +116,13 @@ class PiCameraProvider(BaseCameraProvider):
             return None
         try:
             # Clear the stream
-            self.stream.truncate(0)
             self.stream.seek(0)
+            self.stream.truncate(0)
             
             # Capture frame directly to memory stream
-            self.camera.capture(self.stream, format='jpeg', use_video_port=True)
-            return self.stream.getvalue()
+            self.camera.capture(self.stream, format='jpeg')
+            self.stream.seek(0)
+            return self.stream.read()
         except Exception as e:
             logger.error(f"Error capturing frame: {e}")
             return None
@@ -128,6 +130,8 @@ class PiCameraProvider(BaseCameraProvider):
     async def close_camera(self):
         if self.camera:
             self.camera.close()
+        if self.stream:
+            self.stream.close()
         self.is_open = False
         logger.info("PiCamera closed")
 
