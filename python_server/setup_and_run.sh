@@ -115,7 +115,8 @@ if [ "$CAMERA_TYPE" = "picamera" ]; then
         sudo apt-get update
         sudo apt-get install -y \
             python3-picamera \
-            python3-pip         
+            python3-pip \
+            python3-numpy  
         # Set up camera permissions
         sudo usermod -a -G video $USER
     fi
