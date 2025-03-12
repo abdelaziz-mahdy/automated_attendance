@@ -112,19 +112,19 @@ if [ "$CAMERA_TYPE" = "picamera" ]; then
     # Install system dependencies for PiCamera if on Raspberry Pi
     if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
         [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system dependencies..."
-        sudo apt-get update
-        sudo apt-get install -y \
-            python3-picamera \
-            python3-pip \
-            python3-numpy  \
-            python3-zeroconf
+        # sudo apt-get update
+        # sudo apt-get install -y \
+        #     python3-picamera \
+        #     python3-pip \
+        #     python3-numpy  \
+        #     python3-zeroconf
 
         # Set up camera permissions
         sudo usermod -a -G video $USER
     fi
     
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for PiCamera..."
-    uv pip install --upgrade -r requirements-picamera.txt
+    uv pip install --upgrade -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
 else
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for OpenCV..."
     uv pip install --upgrade -r requirements-opencv.txt
