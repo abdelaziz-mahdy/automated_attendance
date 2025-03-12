@@ -67,10 +67,10 @@ select_camera_type() {
     fi
     
     while true; do
-        printf "\nPlease select your camera type:\n"
-        printf "1) OpenCV (for standard webcams)\n"
-        printf "2) PiCamera (for Raspberry Pi camera module)\n"
-        printf "Enter your choice (1 or 2): "
+        >&2 printf "\nPlease select your camera type:\n"
+        >&2 printf "1) OpenCV (for standard webcams)\n"
+        >&2 printf "2) PiCamera (for Raspberry Pi camera module)\n"
+        >&2 printf "Enter your choice (1 or 2): "
         read -r choice
         
         case $choice in
@@ -83,7 +83,7 @@ select_camera_type() {
                 return
                 ;;
             *)
-                printf "Invalid choice. Please select 1 or 2.\n" >&2
+                >&2 printf "Invalid choice. Please select 1 or 2.\n"
                 ;;
         esac
     done

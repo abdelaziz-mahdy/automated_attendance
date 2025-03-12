@@ -55,11 +55,12 @@ select_camera_type() {
     fi
     
     while true; do
-        echo
-        echo "Please select your camera type:"
-        echo "1) OpenCV (for standard webcams)"
-        echo "2) PiCamera (for Raspberry Pi camera module)"
-        read -p "Enter your choice (1 or 2): " choice
+        >&2 echo ""
+        >&2 echo "Please select your camera type:"
+        >&2 echo "1) OpenCV (for standard webcams)"
+        >&2 echo "2) PiCamera (for Raspberry Pi camera module)"
+        >&2 printf "Enter your choice (1 or 2): "
+        read choice
         
         case $choice in
             1)
@@ -71,7 +72,7 @@ select_camera_type() {
                 return
                 ;;
             *)
-                echo "Invalid choice. Please select 1 or 2." >&2
+                >&2 echo "Invalid choice. Please select 1 or 2."
                 ;;
         esac
     done
