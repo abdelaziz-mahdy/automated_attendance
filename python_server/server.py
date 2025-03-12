@@ -17,12 +17,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class CameraProviderServer:
-    def __init__(self, camera_type='auto', camera_index=0):
+    def __init__(self, camera_type='auto', camera_index=0, host='0.0.0.0', port=12345):
         self._server = None
         self._zeroconf = None
         self._service_info = None
         self._camera_type = camera_type
         self._camera_index = camera_index
+        self._host = host
+        self._port = port
         self.camera_provider = None  # Will be initialized in start()
         self._request_count = 0
         
@@ -79,9 +81,9 @@ class CameraProviderServer:
             # Start server
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, '0.0.0.0', 12345)
+            site = web.TCPSite(runner, self._host, self._port)
             await site.start()
-            logger.info("HTTP server started at http://0.0.0.0:12345")
+            logger.info(f"HTTP server started at http://{self._host}:{self._port}")
             
             # Register zeroconf service
             logger.info("Registering Zeroconf service...")
@@ -89,11 +91,24 @@ class CameraProviderServer:
             service_name = "PythonCameraProvider"
             service_type = "_camera._tcp.local."
             
+            # Get local IP address if binding to all interfaces
+            local_ip = self._host
+            if local_ip == '0.0.0.0':
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    # doesn't even have to be reachable
+                    s.connect(('10.255.255.255', 1))
+                    local_ip = s.getsockname()[0]
+                except Exception:
+                    local_ip = '127.0.0.1'
+                finally:
+                    s.close()
+            
             self._service_info = ServiceInfo(
                 service_type,
                 f"{service_name}.{service_type}",
-                addresses=[socket.inet_aton("0.0.0.0")],
-                port=12345,
+                addresses=[socket.inet_aton(local_ip)],
+                port=self._port,
                 properties={
                     "server_type": "python",
                     "version": "1.0",
@@ -105,7 +120,8 @@ class CameraProviderServer:
             logger.info(f"Zeroconf service registered successfully:")
             logger.info(f"  - Service Name: {service_name}")
             logger.info(f"  - Service Type: {service_type}")
-            logger.info(f"  - Port: 12345")
+            logger.info(f"  - IP Address: {local_ip}")
+            logger.info(f"  - Port: {self._port}")
             logger.info(f"  - Properties: {self._service_info.properties}")
             logger.info("Server is now fully operational")
             
