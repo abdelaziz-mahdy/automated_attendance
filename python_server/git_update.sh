@@ -50,14 +50,14 @@ if [ "$VERBOSE" -eq 1 ]; then
     git status
 fi
 
-if [ "$NON_INTERACTIVE" -eq 0 ]; then
-    read -p "Do you want to proceed with the update? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]] && [[ ! $REPLY = "" ]]; then
-        echo "Update canceled."
-        exit 0
-    fi
-fi
+# if [ "$NON_INTERACTIVE" -eq 0 ]; then
+#     read -p "Do you want to proceed with the update? [Y/n] " -n 1 -r
+#     echo
+#     if [[ ! $REPLY =~ ^[Yy]$ ]] && [[ ! $REPLY = "" ]]; then
+#         echo "Update canceled."
+#         exit 0
+#     fi
+# fi
 
 # Stash any local changes
 [ "$VERBOSE" -eq 1 ] && echo "🔧 Saving any local changes..."
