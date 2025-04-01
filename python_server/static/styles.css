@@ -177,6 +177,56 @@ ul {
     font-size: 0.9rem;
 }
 
+/* Face Stats Container Styles */
+.face-stats-container {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.face-stats-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+#totalFacesCount {
+    font-weight: bold;
+}
+
+.face-counts-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 5px;
+}
+
+.face-count-item {
+    padding: 10px;
+    background-color: var(--light-bg);
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.face-count-item.named {
+    background-color: rgba(46, 204, 113, 0.1);
+    border-left: 3px solid var(--success-color);
+}
+
+.face-count-placeholder {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}
+
 @media (max-width: 768px) {
     .controls {
         flex-direction: column;
@@ -188,5 +238,9 @@ ul {
     
     .info-panel {
         margin-top: 20px;
+    }
+    
+    .face-counts-list {
+        grid-template-columns: 1fr;
     }
 }

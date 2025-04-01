@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,10 @@ class FaceProcessor:
         self.detection_model = None
         self.recognition_model = None
         self.known_faces = {}  # Dictionary to store known face embeddings
+        self.tracked_faces = {}  # Dictionary to track faces across frames
+        self.face_appearance_count = {}  # Dictionary to count face appearances
+        self.last_face_id = 0  # Counter for generating unique face IDs
+        self.tracking_timeout = 1.0  # Seconds to keep tracking a face without seeing it
         
     def load_models(self, detection_model_path, recognition_model_path):
         """Load the face detection and recognition models."""
@@ -43,6 +48,11 @@ class FaceProcessor:
         except Exception as e:
             logger.error(f"Error loading face models: {e}")
             return False
+    
+    def _get_next_face_id(self):
+        """Generate a unique ID for new faces."""
+        self.last_face_id += 1
+        return f"Face_{self.last_face_id}"
             
     def detect_faces(self, frame):
         """Detect faces in the frame."""
@@ -87,6 +97,32 @@ class FaceProcessor:
             })
             
         return result_frame, detected_faces
+    
+    def _find_matching_tracked_face(self, face_feature, face_box, now):
+        """Find if the current face matches any tracked face."""
+        best_match_id = None
+        best_match_score = 0.0
+        
+        # Check for best match among tracked faces
+        for face_id, tracked_data in list(self.tracked_faces.items()):
+            # Skip expired tracked faces
+            if now - tracked_data['last_seen'] > self.tracking_timeout:
+                continue
+                
+            # Compare face features
+            score = self.recognition_model.match(face_feature, tracked_data['feature'], 
+                                               cv2.FaceRecognizerSF_FR_COSINE)
+            
+            # We need a good match score
+            if score > 0.8 and score > best_match_score:
+                best_match_id = face_id
+                best_match_score = score
+        
+        return best_match_id, best_match_score
+    
+    def get_face_counts(self):
+        """Return the count of appearances for each tracked face."""
+        return self.face_appearance_count
         
     def recognize_faces(self, frame):
         """Detect and recognize faces in the frame."""
@@ -105,6 +141,12 @@ class FaceProcessor:
             
         result_frame = frame.copy()
         recognized_faces = []
+        current_time = time.time()
+        
+        # Clean up expired tracked faces
+        for face_id in list(self.tracked_faces.keys()):
+            if current_time - self.tracked_faces[face_id]['last_seen'] > self.tracking_timeout:
+                del self.tracked_faces[face_id]
         
         for face_info in faces[1]:
             # Extract face information
@@ -123,32 +165,84 @@ class FaceProcessor:
             # Get face feature
             face_feature = self.recognition_model.feature(aligned_face)
             
-            # Check if this face matches any known faces
-            face_id = "Unknown"
-            match_confidence = 0.0
+            # First, try to match with tracked faces to maintain consistent ID
+            tracked_face_id, tracked_match_score = self._find_matching_tracked_face(
+                face_feature, box, current_time)
             
-            for known_id, known_feature in self.known_faces.items():
-                cosine_score = self.recognition_model.match(face_feature, known_feature, cv2.FaceRecognizerSF_FR_COSINE)
-                if cosine_score > 0.8:  # Threshold for recognition
-                    if cosine_score > match_confidence:
+            # If we found a tracked face match, use that ID
+            if tracked_face_id:
+                face_id = tracked_face_id
+                named_person = tracked_face_id in self.known_faces
+                match_confidence = tracked_match_score
+                
+                # Update the tracked face with new data
+                self.tracked_faces[face_id] = {
+                    'feature': face_feature,
+                    'box': box,
+                    'last_seen': current_time
+                }
+                
+                # Increment appearance count
+                if face_id not in self.face_appearance_count:
+                    self.face_appearance_count[face_id] = 1
+                else:
+                    self.face_appearance_count[face_id] += 1
+            else:
+                # If no tracked face matches, check against known faces in database
+                named_person = False
+                face_id = None
+                match_confidence = 0.0
+                
+                for known_id, known_feature in self.known_faces.items():
+                    cosine_score = self.recognition_model.match(
+                        face_feature, known_feature, cv2.FaceRecognizerSF_FR_COSINE)
+                    
+                    if cosine_score > 0.8 and cosine_score > match_confidence:
                         match_confidence = cosine_score
                         face_id = known_id
+                        named_person = True
+                
+                # If still no match, assign new face ID
+                if not face_id:
+                    face_id = self._get_next_face_id()
+                    match_confidence = 0.0
+                
+                # Add or update this face in tracking
+                self.tracked_faces[face_id] = {
+                    'feature': face_feature,
+                    'box': box,
+                    'last_seen': current_time
+                }
+                
+                # Initialize appearance count
+                if face_id not in self.face_appearance_count:
+                    self.face_appearance_count[face_id] = 1
+                else:
+                    self.face_appearance_count[face_id] += 1
             
-            # Color based on recognition status (green if recognized, red if unknown)
-            color = (0, 255, 0) if face_id != "Unknown" else (0, 0, 255)
+            # Color based on recognition status
+            if named_person:
+                color = (0, 255, 0)  # Green for recognized named people
+            else:
+                color = (0, 165, 255)  # Orange for tracked but unnamed faces
             
-            # Draw rectangle and label
+            # Get appearance count
+            appearance_count = self.face_appearance_count.get(face_id, 1)
+            
+            # Draw rectangle and label with appearance count
             cv2.rectangle(result_frame, (x, y), (x + w, y + h), color, 2)
-            label = f"{face_id} ({match_confidence:.2f})" if face_id != "Unknown" else "Unknown"
+            label = f"{face_id} ({match_confidence:.2f}) - {appearance_count} times"
             cv2.putText(result_frame, label, (x, y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
-            # Store recognized face information
+            # Store recognized face information with count
             recognized_faces.append({
                 'box': box,
                 'confidence': float(confidence),
                 'id': face_id,
-                'match_score': float(match_confidence) if face_id != "Unknown" else 0.0
+                'match_score': float(match_confidence),
+                'named_person': named_person,
+                'appearance_count': appearance_count
             })
             
         return result_frame, recognized_faces

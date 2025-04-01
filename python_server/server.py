@@ -1,5 +1,6 @@
 import asyncio
 from aiohttp import web
+import json
 from zeroconf.asyncio import AsyncZeroconf
 import socket
 import logging
@@ -161,6 +162,29 @@ class CameraProviderServer:
         logger.info(f"[Request #{self._request_count}] Successfully added face '{face_id}' in {elapsed:.2f}ms")
         return web.Response(text=f"Face '{face_id}' added successfully")
     
+    async def _handle_get_face_counts(self, request):
+        """Handle requests for face appearance counts."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received GET_FACE_COUNTS request from {request.remote}")
+        
+        face_counts = self.face_processor.get_face_counts()
+        
+        # Convert to a format suitable for JSON
+        counts_data = {
+            face_id: {
+                'count': count,
+                'is_named': face_id in self.face_processor.known_faces
+            }
+            for face_id, count in face_counts.items()
+        }
+        
+        response = web.json_response(counts_data)
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled GET_FACE_COUNTS request in {elapsed:.2f}ms")
+        return response
+    
     async def _handle_static_files(self, request):
         path = request.match_info.get('path', 'index.html')
         static_path = os.path.join(os.path.dirname(__file__), 'static')
@@ -218,6 +242,7 @@ class CameraProviderServer:
             app.router.add_get('/get_image_with_detection', self._handle_get_image_with_detection)
             app.router.add_get('/get_image_with_recognition', self._handle_get_image_with_recognition)
             app.router.add_get('/add_face', self._handle_add_face)
+            app.router.add_get('/get_face_counts', self._handle_get_face_counts)  # New endpoint
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             

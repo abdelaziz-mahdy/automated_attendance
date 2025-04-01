@@ -11,12 +11,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const addFaceBtn = document.getElementById('addFace');
     const faceStatus = document.getElementById('faceStatus');
     
+    // Get DOM elements for face counts
+    const refreshFaceCountsBtn = document.getElementById('refreshFaceCounts');
+    const totalFacesCount = document.getElementById('totalFacesCount');
+    const faceCountsList = document.getElementById('faceCountsList');
+    
+    // Variables for face count updates
+    let faceCountUpdateInterval = null;
+    
     // Stream settings
     let streamType = 'regular';
     let isStreaming = false;
-    let streamInterval;
+    let frameRequestInProgress = false; // Flag to track ongoing requests
+    let streamTimeout = null;
     let frameCount = 0;
     let lastFpsUpdateTime = Date.now();
+    let pendingModeChange = false; // Flag to track mode change requests
     
     // Stream URLs
     const streamUrls = {
@@ -33,68 +43,129 @@ document.addEventListener('DOMContentLoaded', () => {
         streamImage.style.display = 'none';
         loadingIndicator.style.display = 'block';
         
-        // Clear any existing interval
-        if (streamInterval) {
-            clearInterval(streamInterval);
+        // Clear any existing timeout
+        if (streamTimeout) {
+            clearTimeout(streamTimeout);
         }
         
-        // Start streaming
-        streamInterval = setInterval(updateFrame, 40); // ~25 FPS (40ms interval)
+        // Start requesting frames
+        requestNextFrame();
+    }
+    
+    // Request the next frame
+    function requestNextFrame() {
+        // If there's already a request in progress, don't start another one
+        if (frameRequestInProgress) {
+            // Schedule the next frame request after a short delay
+            streamTimeout = setTimeout(requestNextFrame, 10);
+            return;
+        }
+        
+        frameRequestInProgress = true;
+        updateFrame().finally(() => {
+            frameRequestInProgress = false;
+            
+            // If we're still supposed to be streaming, request the next frame
+            if (isStreaming && !pendingModeChange) {
+                // Request next frame with a small delay to prevent overwhelming the server
+                streamTimeout = setTimeout(requestNextFrame, 40); // ~25fps
+            }
+        });
     }
     
     // Update the current frame
-    function updateFrame() {
+    async function updateFrame() {
         // Create a unique URL to prevent browser caching
         const url = `${streamUrls[streamType]}?t=${Date.now()}`;
         
-        // Preload the image
-        const img = new Image();
-        img.onload = function() {
-            // Once loaded, update the displayed image
-            streamImage.src = this.src;
-            
-            if (streamImage.style.display === 'none') {
-                streamImage.style.display = 'block';
-                loadingIndicator.style.display = 'none';
+        try {
+            // Fetch the image as a blob
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
             }
             
-            // Update FPS counter
-            frameCount++;
-            const now = Date.now();
-            const elapsed = now - lastFpsUpdateTime;
+            const blob = await response.blob();
+            const imgUrl = URL.createObjectURL(blob);
             
-            if (elapsed >= 1000) { // Update FPS every second
-                const fps = Math.round((frameCount / elapsed) * 1000);
-                fpsCounter.textContent = `FPS: ${fps}`;
-                frameCount = 0;
-                lastFpsUpdateTime = now;
+            // Only update if we're still in the same stream mode (no pending change)
+            if (!pendingModeChange) {
+                streamImage.onload = () => {
+                    if (streamImage.style.display === 'none') {
+                        streamImage.style.display = 'block';
+                        loadingIndicator.style.display = 'none';
+                    }
+                    
+                    // Update FPS counter
+                    frameCount++;
+                    const now = Date.now();
+                    const elapsed = now - lastFpsUpdateTime;
+                    
+                    if (elapsed >= 1000) { // Update FPS every second
+                        const fps = Math.round((frameCount / elapsed) * 1000);
+                        fpsCounter.textContent = `FPS: ${fps}`;
+                        frameCount = 0;
+                        lastFpsUpdateTime = now;
+                    }
+                    
+                    // Free the blob URL to prevent memory leaks
+                    URL.revokeObjectURL(imgUrl);
+                };
+                
+                streamImage.src = imgUrl;
+            } else {
+                // If mode changed while fetching, just free the blob URL
+                URL.revokeObjectURL(imgUrl);
             }
-        };
-        
-        img.onerror = function() {
-            console.error('Error loading stream frame');
-        };
-        
-        img.src = url;
+        } catch (err) {
+            console.error('Error fetching frame:', err);
+            // On error, pause slightly before trying again
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
     }
     
     // Change stream type
     function changeStreamType(type) {
-        streamType = type;
+        if (type === streamType) return;
         
-        // Update button active states
-        regularStreamBtn.classList.toggle('active', type === 'regular');
-        detectionStreamBtn.classList.toggle('active', type === 'detection');
-        recognitionStreamBtn.classList.toggle('active', type === 'recognition');
+        pendingModeChange = true;
         
-        // Update stream type display
-        let displayType = 'Regular';
-        if (type === 'detection') displayType = 'Face Detection';
-        if (type === 'recognition') displayType = 'Face Recognition';
-        streamTypeText.textContent = `Stream Type: ${displayType}`;
+        // Reset frame request state
+        if (streamTimeout) {
+            clearTimeout(streamTimeout);
+            streamTimeout = null;
+        }
         
-        // Restart stream to apply changes
-        startStream();
+        // Show loading indicator during switch
+        streamImage.style.display = 'none';
+        loadingIndicator.style.display = 'block';
+        
+        // Update type after a short delay to let current requests finish
+        setTimeout(() => {
+            streamType = type;
+            
+            // Update button active states
+            regularStreamBtn.classList.toggle('active', type === 'regular');
+            detectionStreamBtn.classList.toggle('active', type === 'detection');
+            recognitionStreamBtn.classList.toggle('active', type === 'recognition');
+            
+            // Update stream type display
+            let displayType = 'Regular';
+            if (type === 'detection') displayType = 'Face Detection';
+            if (type === 'recognition') displayType = 'Face Recognition';
+            streamTypeText.textContent = `Stream Type: ${displayType}`;
+            
+            // Reset flags and restart stream
+            frameRequestInProgress = false;
+            pendingModeChange = false;
+            
+            // Restart stream
+            if (isStreaming) {
+                requestNextFrame();
+            } else {
+                startStream();
+            }
+        }, 300);
     }
     
     // Add a face to the recognition database
@@ -141,6 +212,94 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 3000);
         }
     }
+    
+    // Fetch face counts from server
+    async function updateFaceCounts() {
+        try {
+            const response = await fetch('/get_face_counts');
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            const faceData = await response.json();
+            displayFaceCounts(faceData);
+        } catch (err) {
+            console.error('Error fetching face counts:', err);
+        }
+    }
+    
+    // Display face counts in the UI
+    function displayFaceCounts(faceData) {
+        // Clear previous content
+        faceCountsList.innerHTML = '';
+        
+        // Get total number of unique faces
+        const totalFaces = Object.keys(faceData).length;
+        totalFacesCount.textContent = `Total Faces: ${totalFaces}`;
+        
+        if (totalFaces === 0) {
+            // Show placeholder if no faces
+            const placeholder = document.createElement('div');
+            placeholder.className = 'face-count-placeholder';
+            placeholder.textContent = 'No faces detected yet';
+            faceCountsList.appendChild(placeholder);
+            return;
+        }
+        
+        // Sort faces by count (highest first)
+        const sortedFaces = Object.entries(faceData).sort((a, b) => b[1].count - a[1].count);
+        
+        // Create face count elements
+        sortedFaces.forEach(([faceId, data]) => {
+            const faceItem = document.createElement('div');
+            faceItem.className = 'face-count-item';
+            if (data.is_named) {
+                faceItem.classList.add('named');
+            }
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = faceId;
+            
+            const countSpan = document.createElement('span');
+            countSpan.textContent = `${data.count} times`;
+            
+            faceItem.appendChild(nameSpan);
+            faceItem.appendChild(countSpan);
+            faceCountsList.appendChild(faceItem);
+        });
+    }
+    
+    // Set up auto-refresh for face counts when in recognition mode
+    function setupFaceCountUpdates() {
+        // Initial update
+        if (streamType === 'recognition') {
+            updateFaceCounts();
+        }
+        
+        // Start interval for updates when in recognition mode
+        clearInterval(faceCountUpdateInterval);
+        faceCountUpdateInterval = setInterval(() => {
+            if (streamType === 'recognition') {
+                updateFaceCounts();
+            }
+        }, 5000); // Update every 5 seconds when in recognition mode
+    }
+    
+    // Add event listener for manual refresh of face counts
+    refreshFaceCountsBtn.addEventListener('click', updateFaceCounts);
+    
+    // Extend the changeStreamType function to update face counts when switching to recognition mode
+    const originalChangeStreamType = changeStreamType;
+    changeStreamType = function(type) {
+        originalChangeStreamType(type);
+        // When switching to recognition mode, update face counts
+        if (type === 'recognition') {
+            setTimeout(updateFaceCounts, 1000); // Slight delay to let recognition start
+        }
+    };
+    
+    // Setup face count updates
+    setupFaceCountUpdates();
     
     // Event listeners
     regularStreamBtn.addEventListener('click', () => changeStreamType('regular'));
