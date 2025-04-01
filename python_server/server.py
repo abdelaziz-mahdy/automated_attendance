@@ -4,9 +4,13 @@ from zeroconf.asyncio import AsyncZeroconf
 import socket
 import logging
 from camera_provider import create_camera_provider
+from face_processor import FaceProcessor
 from zeroconf import ServiceInfo
 import datetime
 import argparse
+import os
+import cv2
+import numpy as np
 
 # Configure logging with more detail
 logging.basicConfig(
@@ -27,6 +31,8 @@ class CameraProviderServer:
         self._port = port
         self.camera_provider = None  # Will be initialized in start()
         self._request_count = 0
+        self.face_processor = FaceProcessor()
+        self.current_frame = None  # Store the latest frame
         
     async def _handle_test(self, request):
         self._request_count += 1
@@ -47,6 +53,7 @@ class CameraProviderServer:
             return web.Response(status=500)
             
         frame = await self.camera_provider.get_frame()
+        self.current_frame = frame  # Store the latest frame
         if frame is None:
             logger.error(f"[Request #{self._request_count}] Failed to capture frame")
             return web.Response(status=500)
@@ -55,6 +62,126 @@ class CameraProviderServer:
         elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_IMAGE request in {elapsed:.2f}ms")
         return response
+    
+    async def _handle_get_image_with_detection(self, request):
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received FACE_DETECTION request from {request.remote}")
+        
+        if not self.camera_provider.is_open:
+            logger.error(f"[Request #{self._request_count}] Camera is not open")
+            return web.Response(status=500)
+            
+        # Get the raw JPEG frame
+        jpeg_data = await self.camera_provider.get_frame()
+        if jpeg_data is None:
+            logger.error(f"[Request #{self._request_count}] Failed to capture frame")
+            return web.Response(status=500)
+        
+        # Convert JPEG to numpy array for OpenCV
+        nparr = np.frombuffer(jpeg_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Detect faces
+        img_with_faces, _ = self.face_processor.detect_faces(img)
+        
+        # Convert back to JPEG
+        is_success, buffer = cv2.imencode(".jpg", img_with_faces)
+        if not is_success:
+            logger.error(f"[Request #{self._request_count}] Failed to encode processed image")
+            return web.Response(status=500)
+        
+        # Return the processed image
+        response = web.Response(body=buffer.tobytes(), content_type='image/jpeg')
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled FACE_DETECTION request in {elapsed:.2f}ms")
+        return response
+    
+    async def _handle_get_image_with_recognition(self, request):
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received FACE_RECOGNITION request from {request.remote}")
+        
+        if not self.camera_provider.is_open:
+            logger.error(f"[Request #{self._request_count}] Camera is not open")
+            return web.Response(status=500)
+            
+        # Get the raw JPEG frame
+        jpeg_data = await self.camera_provider.get_frame()
+        if jpeg_data is None:
+            logger.error(f"[Request #{self._request_count}] Failed to capture frame")
+            return web.Response(status=500)
+        
+        # Convert JPEG to numpy array for OpenCV
+        nparr = np.frombuffer(jpeg_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Recognize faces
+        img_with_faces, _ = self.face_processor.recognize_faces(img)
+        
+        # Convert back to JPEG
+        is_success, buffer = cv2.imencode(".jpg", img_with_faces)
+        if not is_success:
+            logger.error(f"[Request #{self._request_count}] Failed to encode processed image")
+            return web.Response(status=500)
+        
+        # Return the processed image
+        response = web.Response(body=buffer.tobytes(), content_type='image/jpeg')
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled FACE_RECOGNITION request in {elapsed:.2f}ms")
+        return response
+    
+    async def _handle_add_face(self, request):
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received ADD_FACE request from {request.remote}")
+        
+        # Get face ID from query parameters
+        face_id = request.query.get('id', None)
+        if face_id is None:
+            logger.error(f"[Request #{self._request_count}] No face ID provided")
+            return web.Response(status=400, text="Face ID is required")
+        
+        # Get latest frame or capture new one
+        jpeg_data = await self.camera_provider.get_frame()
+        if jpeg_data is None:
+            logger.error(f"[Request #{self._request_count}] Failed to capture frame")
+            return web.Response(status=500)
+        
+        # Convert JPEG to numpy array for OpenCV
+        nparr = np.frombuffer(jpeg_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Add the face
+        success = self.face_processor.add_face(img, face_id)
+        if not success:
+            return web.Response(status=500, text="Failed to add face")
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully added face '{face_id}' in {elapsed:.2f}ms")
+        return web.Response(text=f"Face '{face_id}' added successfully")
+    
+    async def _handle_static_files(self, request):
+        path = request.match_info.get('path', 'index.html')
+        static_path = os.path.join(os.path.dirname(__file__), 'static')
+        file_path = os.path.join(static_path, path)
+        
+        if os.path.exists(file_path):
+            # Determine content type
+            content_type = 'text/html'
+            if file_path.endswith('.css'):
+                content_type = 'text/css'
+            elif file_path.endswith('.js'):
+                content_type = 'application/javascript'
+            elif file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
+                content_type = 'image/jpeg'
+            elif file_path.endswith('.png'):
+                content_type = 'image/png'
+            
+            with open(file_path, 'rb') as f:
+                return web.Response(body=f.read(), content_type=content_type)
+        else:
+            return web.Response(status=404)
         
     async def start(self):
         try:
@@ -72,11 +199,27 @@ class CameraProviderServer:
                 raise Exception("Failed to open camera")
             logger.info("Camera initialized successfully")
             
+            # Load face processing models
+            assets_dir = os.path.join(os.path.dirname(__file__),'..', 'assets')
+            detection_model = os.path.join(assets_dir, 'face_detection_yunet_2023mar.onnx')
+            recognition_model = os.path.join(assets_dir, 'face_recognition_sface_2021dec.onnx')
+            
+            success = self.face_processor.load_models(detection_model, recognition_model)
+            if not success:
+                logger.warning("Failed to load face processing models. Face detection/recognition will not be available.")
+            else:
+                logger.info("Face processing models loaded successfully")
+            
             # Create web application
             logger.info("Setting up web application...")
             app = web.Application()
             app.router.add_get('/test', self._handle_test)
             app.router.add_get('/get_image', self._handle_get_image)
+            app.router.add_get('/get_image_with_detection', self._handle_get_image_with_detection)
+            app.router.add_get('/get_image_with_recognition', self._handle_get_image_with_recognition)
+            app.router.add_get('/add_face', self._handle_add_face)
+            app.router.add_get('/', self._handle_static_files)
+            app.router.add_get('/{path:.*}', self._handle_static_files)
             
             # Start server
             runner = web.AppRunner(app)

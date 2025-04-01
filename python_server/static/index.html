@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Stream Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Camera Stream Viewer</h1>
+        </header>
+        
+        <div class="controls">
+            <div class="control-group">
+                <h2>Stream Type</h2>
+                <div class="buttons">
+                    <button id="regularStream" class="active">Regular Stream</button>
+                    <button id="detectionStream">Face Detection</button>
+                    <button id="recognitionStream">Face Recognition</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <h2>Face Recognition</h2>
+                <div class="face-controls">
+                    <input type="text" id="faceId" placeholder="Enter name/ID">
+                    <button id="addFace">Add Current Face</button>
+                </div>
+                <div id="faceStatus" class="status-message"></div>
+            </div>
+        </div>
+        
+        <div class="stream-container">
+            <div id="loadingIndicator">Loading...</div>
+            <img id="streamImage" alt="Camera Stream">
+            <div class="stream-info">
+                <div id="streamType">Stream Type: Regular</div>
+                <div id="fpsCounter">FPS: 0</div>
+            </div>
+        </div>
+        
+        <div class="info-panel">
+            <h2>About</h2>
+            <p>This viewer provides three different camera stream modes:</p>
+            <ul>
+                <li><strong>Regular Stream:</strong> Raw camera feed without any processing</li>
+                <li><strong>Face Detection:</strong> Detects and highlights faces in the stream</li>
+                <li><strong>Face Recognition:</strong> Identifies known faces and labels them</li>
+            </ul>
+            <p class="note">To add a face to the recognition database, switch to Face Recognition mode, enter a name/ID, and click "Add Current Face"</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
