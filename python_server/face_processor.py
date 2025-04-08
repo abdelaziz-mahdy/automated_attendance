@@ -19,7 +19,7 @@ class FaceProcessor:
         self.tracked_faces = {}  # Dictionary to track faces across frames
         self.face_appearance_count = {}  # Dictionary to count face appearances
         self.last_face_id = 0  # Counter for generating unique face IDs
-        self.tracking_timeout = FR.FACE_TRACKING_TIMEOUT  # Seconds to keep tracking a face
+        # We're no longer using a tracking timeout - faces will remain in memory indefinitely
         
     def load_models(self, detection_model_path, recognition_model_path):
         """Load the face detection and recognition models."""
@@ -112,10 +112,8 @@ class FaceProcessor:
         
         # Check for best match among tracked faces
         for face_id, tracked_data in list(self.tracked_faces.items()):
-            # Skip expired tracked faces
-            if now - tracked_data['last_seen'] > self.tracking_timeout:
-                continue
-                
+            # We're no longer skipping tracked faces based on timeout
+            
             # Compare using the comparison service
             cosine_score, norm_l2_score = self.comparison_service.get_confidence(
                 face_feature, tracked_data['feature'])
@@ -179,10 +177,44 @@ class FaceProcessor:
         Returns:
             bool: True if merge was successful, False otherwise
         """
-        # Check if both faces exist
-        if source_face_id not in self.known_faces or target_face_id not in self.known_faces:
-            logger.error(f"Cannot merge: one or both face IDs don't exist in known faces")
+        # Check if both faces exist - with better error handling
+        source_exists = source_face_id in self.known_faces
+        target_exists = target_face_id in self.known_faces
+        
+        if not source_exists and not target_exists:
+            logger.error(f"Cannot merge: both face IDs don't exist in known faces")
             return False
+        
+        # If only one face exists, log but continue with available data
+        if not source_exists:
+            logger.warning(f"Source face ID '{source_face_id}' not found in known faces, attempting to find it in tracked faces")
+            # Try to find the source face in tracked faces
+            for tracked_id, tracked_data in list(self.tracked_faces.items()):
+                if tracked_id == source_face_id:
+                    # Add the tracked face to known faces so we can merge it
+                    self.known_faces[source_face_id] = tracked_data['feature']
+                    source_exists = True
+                    logger.info(f"Found source face '{source_face_id}' in tracked faces and added to known faces")
+                    break
+            
+            if not source_exists:
+                logger.error(f"Source face ID '{source_face_id}' not found in tracked faces either, cannot merge")
+                return False
+                
+        if not target_exists:
+            logger.warning(f"Target face ID '{target_face_id}' not found in known faces, attempting to find it in tracked faces")
+            # Try to find the target face in tracked faces
+            for tracked_id, tracked_data in list(self.tracked_faces.items()):
+                if tracked_id == target_face_id:
+                    # Add the tracked face to known faces so we can merge into it
+                    self.known_faces[target_face_id] = tracked_data['feature']
+                    target_exists = True
+                    logger.info(f"Found target face '{target_face_id}' in tracked faces and added to known faces")
+                    break
+            
+            if not target_exists:
+                logger.error(f"Target face ID '{target_face_id}' not found in tracked faces either, cannot merge")
+                return False
             
         # Transfer appearance count
         if source_face_id in self.face_appearance_count:
@@ -196,6 +228,10 @@ class FaceProcessor:
         
         # Remove source face from known faces
         del self.known_faces[source_face_id]
+        
+        # Also remove from tracked faces if present
+        if source_face_id in self.tracked_faces:
+            del self.tracked_faces[source_face_id]
         
         logger.info(f"Successfully merged face '{source_face_id}' into '{target_face_id}'")
         return True
@@ -219,10 +255,7 @@ class FaceProcessor:
         recognized_faces = []
         current_time = time.time()
         
-        # Clean up expired tracked faces
-        for face_id in list(self.tracked_faces.keys()):
-            if current_time - self.tracked_faces[face_id]['last_seen'] > self.tracking_timeout:
-                del self.tracked_faces[face_id]
+        # We're no longer cleaning up expired tracked faces - they remain in memory
         
         for face_info in faces[1]:
             # Extract face information
@@ -324,15 +357,20 @@ class FaceProcessor:
             cv2.putText(result_frame, sub_label, (x, y + h + 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             
-            # Store recognized face information with count
+            # Store recognized face information with count and timestamp
             recognized_faces.append({
                 'box': box,
                 'confidence': float(confidence),
                 'id': face_id,
                 'match_score': float(match_confidence),
                 'named_person': named_person,
-                'appearance_count': appearance_count
+                'appearance_count': appearance_count,
+                'last_seen': current_time  # Add timestamp to sort by recency
             })
+        
+        # Sort the recognized faces by recency (newest first)
+        # This ensures new faces appear first in the UI
+        recognized_faces.sort(key=lambda face: face['last_seen'], reverse=True)
             
         return result_frame, recognized_faces
         
