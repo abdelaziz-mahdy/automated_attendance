@@ -114,16 +114,23 @@ class FaceProcessor:
         for face_id, tracked_data in list(self.tracked_faces.items()):
             # We're no longer skipping tracked faces based on timeout
             
-            # Compare using the comparison service
-            cosine_score, norm_l2_score = self.comparison_service.get_confidence(
-                face_feature, tracked_data['feature'])
+            # Check similarity first
+            is_similar = self.comparison_service.are_features_similar(
+                face_feature, 
+                tracked_data['feature'],
+                cosine_threshold=FR.COSINE_THRESHOLD,
+                norm_l2_threshold=FR.NORM_L2_THRESHOLD
+            )
             
-            # Check if the scores exceed our thresholds and the cosine score is better than previous matches
-            if (cosine_score > FR.COSINE_THRESHOLD and 
-                norm_l2_score < FR.NORM_L2_THRESHOLD and 
-                cosine_score > best_match_score):
-                best_match_id = face_id
-                best_match_score = cosine_score
+            # Only get confidence scores if the faces are similar
+            if is_similar:
+                # Get the cosine score for ranking matches
+                cosine_score = self.comparison_service.calculate_cosine_distance(
+                    face_feature, tracked_data['feature'])
+                
+                if cosine_score > best_match_score:
+                    best_match_id = face_id
+                    best_match_score = cosine_score
         
         return best_match_id, best_match_score
     
@@ -135,17 +142,26 @@ class FaceProcessor:
         
         # Check each known face for a match
         for known_id, known_feature in self.known_faces.items():
-            # Get both confidence metrics using the comparison service
-            cosine_score, norm_l2_score = self.comparison_service.get_confidence(
-                face_feature, known_feature)
+            # Check similarity first
+            is_similar = self.comparison_service.are_features_similar(
+                face_feature, 
+                known_feature,
+                cosine_threshold=FR.COSINE_THRESHOLD,
+                norm_l2_threshold=FR.NORM_L2_THRESHOLD
+            )
             
-            # Apply thresholds based on our constants
-            if (cosine_score > FR.COSINE_THRESHOLD and 
-                norm_l2_score < FR.NORM_L2_THRESHOLD and 
-                cosine_score > best_cosine_score):
-                best_match_id = known_id
-                best_cosine_score = cosine_score
-                best_norm_l2_score = norm_l2_score
+            # Only get confidence scores if the faces are similar
+            if is_similar:
+                # Get the confidence scores for ranking matches
+                cosine_score = self.comparison_service.calculate_cosine_distance(
+                    face_feature, known_feature)
+                norm_l2_score = self.comparison_service.calculate_norm_l2_distance(
+                    face_feature, known_feature)
+                
+                if cosine_score > best_cosine_score:
+                    best_match_id = known_id
+                    best_cosine_score = cosine_score
+                    best_norm_l2_score = norm_l2_score
         
         return best_match_id, (best_cosine_score, best_norm_l2_score)
     
