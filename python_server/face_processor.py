@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import os
 import time
+import uuid
 from constants import FaceRecognition as FR
 from face_comparison_service import FaceComparisonService
 
@@ -58,8 +59,9 @@ class FaceProcessor:
     
     def _get_next_face_id(self):
         """Generate a unique ID for new faces."""
-        self.last_face_id += 1
-        return f"Face_{self.last_face_id}"
+        # Generate a UUID and use a prefix to make it more user-friendly
+        unique_id = str(uuid.uuid4())[:8]  # Use just the first 8 characters for brevity
+        return f"Face_{unique_id}"
             
     def detect_faces(self, frame):
         """Detect faces in the frame."""

@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let draggedFaceId = null;
     let faceData = {};
     let faceThumbnails = {}; // Store thumbnails for faces
+    let droppedFaces = []; // Store faces dropped into the merge area
+    let thumbnailCleanupInterval = null; // Interval for cleaning up thumbnails
     
     // Stream settings
     let streamType = 'regular';
@@ -118,12 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 streamImage.src = imgUrl;
                 
-                // If in recognition mode, we might want to capture a frame as a thumbnail
+                // If in recognition mode, capture thumbnails
                 if (streamType === 'recognition' && !document.hidden) {
-                    // We don't need to capture every frame, just occasionally
-                    if (Math.random() < 0.05) { // 5% chance per frame
-                        await captureFrameForThumbnails(blob);
-                    }
+                    // Always capture thumbnails on each frame in recognition mode
+                    await captureFrameForThumbnails(blob);
                 }
             } else {
                 // If mode changed while fetching, just free the blob URL
@@ -161,6 +161,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Process each detected face
             for (const face of data.faces) {
                 if (!face.box || !face.id) continue;
+                
+                // Check if this face is new or has less than 2 thumbnails - prioritize capturing new faces
+                const isNewFace = !faceThumbnails[face.id] || faceThumbnails[face.id].length < 2;
+                
+                // For established faces with 2+ thumbnails, only capture occasionally to avoid unnecessary processing
+                if (!isNewFace && Math.random() > 0.1) continue; // 10% chance for faces with enough thumbnails
                 
                 // Extract face rectangle
                 const [x, y, w, h] = face.box;
@@ -248,6 +254,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 thumbnailsContainer.appendChild(thumbImg);
             });
         }
+    }
+    
+    // Clean up thumbnail memory to prevent accumulation
+    function cleanupThumbnails() {
+        // Get a list of all current face IDs from the faceData object
+        const currentFaceIds = Object.keys(faceData);
+        const thumbnailsCount = Object.keys(faceThumbnails).length;
+        
+        // Step 1: Remove thumbnails for faces that no longer exist
+        let removedCount = 0;
+        for (const faceId in faceThumbnails) {
+            if (!currentFaceIds.includes(faceId)) {
+                delete faceThumbnails[faceId];
+                removedCount++;
+            }
+        }
+        
+        // Step 2: Limit the number of thumbnails per face to conserve memory
+        // For faces with many thumbnails, keep only the most recent ones
+        for (const faceId in faceThumbnails) {
+            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 5) {
+                // Keep only 5 most recent thumbnails
+                faceThumbnails[faceId] = faceThumbnails[faceId].slice(-5);
+            }
+        }
+        
+        // Step 3: Calculate and log memory cleanup stats
+        if (removedCount > 0) {
+            console.log(`Cleanup: Removed thumbnails for ${removedCount} faces that no longer exist`);
+        }
+        
+        // Return cleanup stats
+        return {
+            facesRemoved: removedCount,
+            remainingFaces: Object.keys(faceThumbnails).length,
+            initialCount: thumbnailsCount
+        };
     }
     
     // Change stream type
@@ -809,11 +852,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Toggle drag mode on/off
     function toggleDragMode() {
         inDragMode = !inDragMode;
+        droppedFaces = []; // Reset dropped faces when toggling
         
         if (inDragMode) {
             toggleDragModeBtn.textContent = 'Exit Drag Mode';
             toggleDragModeBtn.innerHTML = '<i class="fas fa-times"></i> Exit Drag Mode';
             dropzone.classList.add('active');
+            updateDropzoneContent();
             
             // Setup dropzone
             dropzone.addEventListener('dragover', (e) => {
@@ -833,47 +878,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const droppedFaceId = e.dataTransfer.getData('text/plain');
                 if (!droppedFaceId) return;
                 
-                // Show dropdown to select target face
-                const targetFaces = Object.keys(faceData).filter(id => id !== droppedFaceId);
-                if (targetFaces.length === 0) {
-                    showToast('No other faces to merge with', 'error');
+                // Check if already in the dropped faces
+                if (droppedFaces.includes(droppedFaceId)) {
+                    showToast(`Face "${droppedFaceId}" is already added to merge list`, 'info');
                     return;
                 }
                 
-                // Replace dropzone content with merge selection
-                const originalContent = dropzone.innerHTML;
-                dropzone.innerHTML = `
-                    <div style="margin-bottom: 10px;">Merge "${droppedFaceId}" into:</div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <select id="mergeTargetSelect" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                            ${targetFaces.map(id => `<option value="${id}">${id}</option>`).join('')}
-                        </select>
-                        <button id="confirmMergeBtn" style="background-color: var(--warning-color);">Merge</button>
-                        <button id="cancelMergeBtn">Cancel</button>
-                    </div>
-                `;
+                // Add to dropped faces array
+                droppedFaces.push(droppedFaceId);
+                showToast(`Added "${droppedFaceId}" to merge list`, 'info');
                 
-                // Set up event listeners for new buttons
-                document.getElementById('confirmMergeBtn').addEventListener('click', async () => {
-                    const targetFaceId = document.getElementById('mergeTargetSelect').value;
-                    
-                    showToast(`Merging ${droppedFaceId} into ${targetFaceId}...`, 'info');
-                    
-                    const success = await mergeFaces(droppedFaceId, targetFaceId);
-                    if (success) {
-                        showToast(`Successfully merged faces!`, 'success');
-                        // Update face counts after merging
-                        setTimeout(updateFaceCounts, 500);
-                    }
-                    
-                    // Restore original dropzone content
-                    dropzone.innerHTML = originalContent;
-                });
-                
-                document.getElementById('cancelMergeBtn').addEventListener('click', () => {
-                    // Restore original dropzone content
-                    dropzone.innerHTML = originalContent;
-                });
+                // Update dropzone content
+                updateDropzoneContent();
             });
             
             // Refresh face counts to enable drag and drop
@@ -885,6 +901,171 @@ document.addEventListener('DOMContentLoaded', () => {
             // Refresh face counts to disable drag and drop
             updateFaceCounts();
         }
+    }
+    
+    // Update dropzone content based on current dropped faces
+    function updateDropzoneContent() {
+        if (droppedFaces.length === 0) {
+            // Initial state - no faces dropped yet
+            dropzone.innerHTML = `
+                <div class="dropzone-message">Drop faces here to merge them</div>
+                <div class="drag-instruction">Drag and drop multiple faces to merge them together</div>
+            `;
+            return;
+        }
+        
+        // Create content with dropped faces
+        let content = `
+            <div class="dropzone-message">Selected faces to merge (${droppedFaces.length})</div>
+            <div class="dropped-faces-container" style="display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0;">
+        `;
+        
+        // Add each face as a chip/badge
+        droppedFaces.forEach(faceId => {
+            content += `
+                <div class="dropped-face" style="
+                    background-color: rgba(52, 152, 219, 0.2); 
+                    border-radius: 16px; 
+                    padding: 5px 10px;
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                ">
+                    <span>${faceId}</span>
+                    <button 
+                        class="remove-face-btn" 
+                        data-face-id="${faceId}" 
+                        style="background: none; border: none; color: #e74c3c; cursor: pointer; padding: 0; font-size: 14px;"
+                    >
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </div>
+            `;
+        });
+        
+        content += `</div>`;
+        
+        // Only show merge controls if we have at least 2 faces
+        if (droppedFaces.length >= 2) {
+            content += `
+                <div style="margin-top: 15px;">
+                    <div style="margin-bottom: 10px;">Select a target face to merge into:</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="mergeTargetSelect" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                            ${droppedFaces.map(id => `<option value="${id}">${id}</option>`).join('')}
+                        </select>
+                        <button id="confirmMergeBtn" style="background-color: var(--warning-color);">
+                            <i class="fas fa-object-group"></i> Merge All
+                        </button>
+                        <button id="clearDroppedBtn">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else {
+            content += `
+                <div class="drag-instruction">
+                    Drop at least one more face to enable merging
+                </div>
+                <div style="margin-top: 10px;">
+                    <button id="clearDroppedBtn">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Update the dropzone content
+        dropzone.innerHTML = content;
+        
+        // Add event listeners to the new buttons
+        const removeButtons = dropzone.querySelectorAll('.remove-face-btn');
+        removeButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const faceId = e.currentTarget.dataset.faceId;
+                droppedFaces = droppedFaces.filter(id => id !== faceId);
+                updateDropzoneContent();
+            });
+        });
+        
+        const clearBtn = document.getElementById('clearDroppedBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                droppedFaces = [];
+                updateDropzoneContent();
+            });
+        }
+        
+        const mergeBtn = document.getElementById('confirmMergeBtn');
+        if (mergeBtn) {
+            mergeBtn.addEventListener('click', async () => {
+                const targetFaceId = document.getElementById('mergeTargetSelect').value;
+                await mergeAllFaces(targetFaceId);
+            });
+        }
+    }
+    
+    // Merge all collected faces into a target face
+    async function mergeAllFaces(targetFaceId) {
+        if (droppedFaces.length < 2) {
+            showToast('Need at least 2 faces to merge', 'error');
+            return;
+        }
+        
+        // Get all faces except the target
+        const sourceFaces = droppedFaces.filter(id => id !== targetFaceId);
+        
+        if (sourceFaces.length === 0) {
+            showToast('No source faces to merge', 'error');
+            return;
+        }
+        
+        showToast(`Merging ${sourceFaces.length} faces into "${targetFaceId}"...`, 'info');
+        
+        // Track success count
+        let successCount = 0;
+        let errorMessages = [];
+        
+        // Create a copy of the faces array to prevent issues when elements are removed
+        const facesToMerge = [...sourceFaces];
+        
+        // Perform merges sequentially
+        for (const sourceFaceId of facesToMerge) {
+            try {
+                const success = await mergeFaces(sourceFaceId, targetFaceId);
+                if (success) {
+                    successCount++;
+                } else {
+                    errorMessages.push(`Failed to merge ${sourceFaceId}`);
+                }
+            } catch (err) {
+                console.error(`Error merging ${sourceFaceId} into ${targetFaceId}:`, err);
+                errorMessages.push(err.message || `Error merging ${sourceFaceId}`);
+            }
+        }
+        
+        // Show results
+        if (successCount === facesToMerge.length) {
+            showToast(`Successfully merged all ${successCount} faces into "${targetFaceId}"!`, 'success');
+        } else if (successCount > 0) {
+            showToast(`Merged ${successCount} out of ${facesToMerge.length} faces into "${targetFaceId}"`, 'info');
+            if (errorMessages.length > 0) {
+                console.error("Merge errors:", errorMessages);
+            }
+        } else {
+            showToast('Failed to merge any faces', 'error');
+            if (errorMessages.length > 0) {
+                console.error("Merge errors:", errorMessages);
+            }
+        }
+        
+        // Clear dropped faces and update UI
+        droppedFaces = [];
+        updateDropzoneContent();
+        
+        // Update face counts after merging
+        setTimeout(updateFaceCounts, 500);
     }
     
     // Set up auto-refresh for face counts when in recognition mode
@@ -901,6 +1082,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateFaceCounts();
             }
         }, 5000); // Update every 5 seconds when in recognition mode
+        
+        // Set up the thumbnail cleanup interval
+        clearInterval(thumbnailCleanupInterval);
+        thumbnailCleanupInterval = setInterval(() => {
+            // Run cleanup every 30 seconds to prevent memory issues
+            const stats = cleanupThumbnails();
+            if (stats.facesRemoved > 0) {
+                console.log(`Thumbnail cleanup: Removed ${stats.facesRemoved} faces, ${stats.remainingFaces} remaining`);
+            }
+        }, 30000); // Clean up every 30 seconds
     }
     
     // Event listeners
