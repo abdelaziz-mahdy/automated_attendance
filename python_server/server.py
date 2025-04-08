@@ -257,6 +257,75 @@ class CameraProviderServer:
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_FACE_DATA request in {elapsed:.2f}ms")
         return response
     
+    async def _handle_rename_face(self, request):
+        """Handle requests to rename a face."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received RENAME_FACE request from {request.remote}")
+        
+        # Get old and new face IDs from query parameters
+        old_face_id = request.query.get('old_id', None)
+        new_face_id = request.query.get('new_id', None)
+        
+        if old_face_id is None or new_face_id is None:
+            logger.error(f"[Request #{self._request_count}] Missing old or new face ID")
+            return web.Response(status=400, text="Both old and new face IDs are required")
+        
+        if old_face_id == new_face_id:
+            logger.info(f"[Request #{self._request_count}] Old and new face IDs are the same, no action needed")
+            return web.Response(text="No changes needed")
+        
+        # Check if this is actually a merge (new_id already exists)
+        if new_face_id in self.face_processor.known_faces:
+            logger.info(f"[Request #{self._request_count}] New face ID already exists, redirecting to merge operation")
+            # This is a merge operation, not a rename
+            success = self.face_processor.merge_faces(old_face_id, new_face_id)
+            if not success:
+                return web.Response(status=400, text="Failed to merge faces - one or both IDs may not exist")
+                
+            elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+            logger.info(f"[Request #{self._request_count}] Successfully merged faces in {elapsed:.2f}ms")
+            return web.Response(text=f"Successfully merged '{old_face_id}' into '{new_face_id}'")
+        
+        # Check if old_face_id exists in tracked_faces but not in known_faces
+        # This handles the case of renaming a newly detected face
+        old_face_in_known = old_face_id in self.face_processor.known_faces
+        old_face_in_tracked = old_face_id in self.face_processor.tracked_faces
+        
+        if not old_face_in_known and not old_face_in_tracked:
+            logger.error(f"[Request #{self._request_count}] Face ID '{old_face_id}' not found in known or tracked faces")
+            return web.Response(status=400, text=f"Face ID '{old_face_id}' not found")
+            
+        # If face is only in tracked_faces, we need to move it to known_faces first
+        if not old_face_in_known and old_face_in_tracked:
+            logger.info(f"[Request #{self._request_count}] Moving face from tracked to known faces before renaming")
+            self.face_processor.known_faces[old_face_id] = self.face_processor.tracked_faces[old_face_id]['feature']
+            old_face_in_known = True
+        
+        # This is a true rename operation
+        # Update the face entry directly in the processor's dictionaries
+        if old_face_in_known:
+            # Copy the face feature to the new ID
+            self.face_processor.known_faces[new_face_id] = self.face_processor.known_faces[old_face_id]
+            # Remove the old entry
+            del self.face_processor.known_faces[old_face_id]
+            
+            # Update appearance counts
+            if old_face_id in self.face_processor.face_appearance_count:
+                self.face_processor.face_appearance_count[new_face_id] = self.face_processor.face_appearance_count[old_face_id]
+                del self.face_processor.face_appearance_count[old_face_id]
+            
+            # Update tracked faces if necessary
+            if old_face_id in self.face_processor.tracked_faces:
+                self.face_processor.tracked_faces[new_face_id] = self.face_processor.tracked_faces[old_face_id]
+                del self.face_processor.tracked_faces[old_face_id]
+                
+            elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+            logger.info(f"[Request #{self._request_count}] Successfully renamed face from '{old_face_id}' to '{new_face_id}' in {elapsed:.2f}ms")
+            return web.Response(text=f"Successfully renamed '{old_face_id}' to '{new_face_id}'")
+        else:
+            return web.Response(status=400, text=f"Failed to rename face - something unexpected happened")
+    
     async def _handle_static_files(self, request):
         path = request.match_info.get('path', 'index.html')
         static_path = os.path.join(os.path.dirname(__file__), 'static')
@@ -318,6 +387,7 @@ class CameraProviderServer:
             app.router.add_get('/get_known_faces', self._handle_get_known_faces)  # New endpoint for known faces
             app.router.add_get('/merge_faces', self._handle_merge_faces)  # New endpoint for merging faces
             app.router.add_get('/get_face_data', self._handle_get_face_data)  # New endpoint for face data without image
+            app.router.add_get('/rename_face', self._handle_rename_face)  # New endpoint for renaming faces
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             

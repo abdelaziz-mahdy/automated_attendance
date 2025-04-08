@@ -443,47 +443,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oldId === newId) return true;
         
         try {
-            // First add a new face with the new ID
-            // We need to get a current frame
-            const blob = await fetchFrameAsBlob();
-            if (!blob) {
-                showToast('Failed to capture frame for renaming', 'error');
-                return false;
-            }
+            // Show a toast indicating we're renaming the face
+            showToast(`Renaming ${oldId} to ${newId}...`, 'info');
             
-            // Create temporary image element to display this frame
-            const img = new Image();
-            img.src = URL.createObjectURL(blob);
+            // Use the new dedicated rename endpoint for a more reliable rename operation
+            const response = await fetch(`/rename_face?old_id=${encodeURIComponent(oldId)}&new_id=${encodeURIComponent(newId)}`);
             
-            await new Promise(resolve => {
-                img.onload = resolve;
-            });
-            
-            // We need to update the stream image temporarily to add the new face
-            const originalSrc = streamImage.src;
-            streamImage.src = img.src;
-            
-            // Now add the new face
-            const addResponse = await fetch(`/add_face?id=${encodeURIComponent(newId)}`);
-            if (!addResponse.ok) {
-                // Restore original image
-                streamImage.src = originalSrc;
-                URL.revokeObjectURL(img.src);
-                const errorText = await addResponse.text();
-                showToast(`Error creating new face: ${errorText}`, 'error');
-                return false;
-            }
-            
-            // Merge the old face into the new one
-            const mergeResponse = await fetch(`/merge_faces?source=${encodeURIComponent(oldId)}&target=${encodeURIComponent(newId)}`);
-            
-            // Restore original image
-            streamImage.src = originalSrc;
-            URL.revokeObjectURL(img.src);
-            
-            if (!mergeResponse.ok) {
-                const errorText = await mergeResponse.text();
-                showToast(`Error merging faces: ${errorText}`, 'error');
+            if (!response.ok) {
+                const errorText = await response.text();
+                showToast(`Error renaming face: ${errorText}`, 'error');
                 return false;
             }
             
@@ -493,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete faceThumbnails[oldId];
             }
             
+            showToast(`Successfully renamed face to "${newId}"!`, 'success');
             return true;
         } catch (err) {
             console.error('Error renaming face:', err);
