@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Camera Stream Viewer</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
@@ -21,15 +22,6 @@
                     <button id="recognitionStream">Face Recognition</button>
                 </div>
             </div>
-            
-            <div class="control-group">
-                <h2>Face Recognition</h2>
-                <div class="face-controls">
-                    <input type="text" id="faceId" placeholder="Enter name/ID">
-                    <button id="addFace">Add Current Face</button>
-                </div>
-                <div id="faceStatus" class="status-message"></div>
-            </div>
         </div>
         
         <div class="stream-container">
@@ -41,13 +33,23 @@
             </div>
         </div>
         
-        <!-- Face counts section -->
+        <!-- Face counts section with drag-and-drop functionality -->
         <div class="face-stats-container">
-            <h2>Detected Faces</h2>
-            <div class="face-stats-toggle">
-                <button id="refreshFaceCounts">Refresh Counts</button>
-                <span id="totalFacesCount">Total Faces: 0</span>
+            <div class="face-stats-header">
+                <h2>Detected Faces</h2>
+                <div class="face-stats-actions">
+                    <button id="refreshFaceCounts"><i class="fas fa-sync-alt"></i> Refresh</button>
+                    <button id="toggleDragMode"><i class="fas fa-arrows-alt"></i> Drag to Merge</button>
+                </div>
             </div>
+            <span id="totalFacesCount">Total Faces: 0</span>
+            
+            <!-- Dropzone for face merging -->
+            <div id="dropzone" class="dropzone">
+                <div class="dropzone-message">Drop a face here to merge it</div>
+                <div class="drag-instruction">Drag and drop faces to merge them together</div>
+            </div>
+            
             <div id="faceCountsList" class="face-counts-list">
                 <!-- Face counts will be populated here -->
                 <div class="face-count-placeholder">No faces detected yet</div>
@@ -62,9 +64,13 @@
                 <li><strong>Face Detection:</strong> Detects and highlights faces in the stream</li>
                 <li><strong>Face Recognition:</strong> Identifies known faces and labels them</li>
             </ul>
-            <p class="note">To add a face to the recognition database, switch to Face Recognition mode, enter a name/ID, and click "Add Current Face"</p>
+            <p class="note">To add a new person, click the edit icon on an unnamed face and enter a name for that person.</p>
+            <p class="note">Click "Drag to Merge" and use drag and drop to easily merge similar faces.</p>
         </div>
     </div>
+    
+    <!-- Toast notifications container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script src="script.js"></script>
 </body>

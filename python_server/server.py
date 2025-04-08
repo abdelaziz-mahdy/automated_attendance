@@ -6,6 +6,7 @@ import socket
 import logging
 from camera_provider import create_camera_provider
 from face_processor import FaceProcessor
+from face_comparison_service import FaceComparisonService
 from zeroconf import ServiceInfo
 import datetime
 import argparse
@@ -185,6 +186,77 @@ class CameraProviderServer:
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_FACE_COUNTS request in {elapsed:.2f}ms")
         return response
     
+    async def _handle_get_known_faces(self, request):
+        """Handle requests for known face data including features."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received GET_KNOWN_FACES request from {request.remote}")
+        
+        known_faces = self.face_processor.get_known_faces()
+        
+        response = web.json_response(known_faces)
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled GET_KNOWN_FACES request in {elapsed:.2f}ms")
+        return response
+    
+    async def _handle_merge_faces(self, request):
+        """Handle requests to merge two face entries."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received MERGE_FACES request from {request.remote}")
+        
+        # Get source and target face IDs from query parameters
+        source_face_id = request.query.get('source', None)
+        target_face_id = request.query.get('target', None)
+        
+        if source_face_id is None or target_face_id is None:
+            logger.error(f"[Request #{self._request_count}] Missing source or target face ID")
+            return web.Response(status=400, text="Both source and target face IDs are required")
+        
+        # Attempt to merge the faces
+        success = self.face_processor.merge_faces(source_face_id, target_face_id)
+        
+        if not success:
+            return web.Response(status=400, text="Failed to merge faces - one or both IDs may not exist")
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully merged faces in {elapsed:.2f}ms")
+        return web.Response(text=f"Successfully merged '{source_face_id}' into '{target_face_id}'")
+    
+    async def _handle_get_face_data(self, request):
+        """Handle requests for comprehensive face data including detection and recognition results."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received GET_FACE_DATA request from {request.remote}")
+        
+        if not self.camera_provider.is_open:
+            logger.error(f"[Request #{self._request_count}] Camera is not open")
+            return web.Response(status=500)
+            
+        # Get the raw JPEG frame
+        jpeg_data = await self.camera_provider.get_frame()
+        if jpeg_data is None:
+            logger.error(f"[Request #{self._request_count}] Failed to capture frame")
+            return web.Response(status=500)
+        
+        # Convert JPEG to numpy array for OpenCV
+        nparr = np.frombuffer(jpeg_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Process with face recognition
+        _, recognized_faces = self.face_processor.recognize_faces(img)
+        
+        # Return just the face data (not the image)
+        response = web.json_response({
+            'faces': recognized_faces,
+            'timestamp': datetime.datetime.now().isoformat()
+        })
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled GET_FACE_DATA request in {elapsed:.2f}ms")
+        return response
+    
     async def _handle_static_files(self, request):
         path = request.match_info.get('path', 'index.html')
         static_path = os.path.join(os.path.dirname(__file__), 'static')
@@ -242,7 +314,10 @@ class CameraProviderServer:
             app.router.add_get('/get_image_with_detection', self._handle_get_image_with_detection)
             app.router.add_get('/get_image_with_recognition', self._handle_get_image_with_recognition)
             app.router.add_get('/add_face', self._handle_add_face)
-            app.router.add_get('/get_face_counts', self._handle_get_face_counts)  # New endpoint
+            app.router.add_get('/get_face_counts', self._handle_get_face_counts)
+            app.router.add_get('/get_known_faces', self._handle_get_known_faces)  # New endpoint for known faces
+            app.router.add_get('/merge_faces', self._handle_merge_faces)  # New endpoint for merging faces
+            app.router.add_get('/get_face_data', self._handle_get_face_data)  # New endpoint for face data without image
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             
