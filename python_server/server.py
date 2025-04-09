@@ -171,11 +171,17 @@ class CameraProviderServer:
         
         face_counts = self.face_processor.get_face_counts()
         
-        # Convert to a format suitable for JSON
+        # Get the current timestamp for reference
+        current_time = datetime.datetime.now().isoformat()
+        
+        # Convert to a format suitable for JSON with timestamp information
         counts_data = {
             face_id: {
                 'count': count,
-                'is_named': face_id in self.face_processor.known_faces
+                'is_named': face_id in self.face_processor.known_faces,
+                'first_seen': self.face_processor.get_first_seen_time(face_id),
+                'last_seen': self.face_processor.get_last_seen_time(face_id),
+                'timestamp': current_time
             }
             for face_id, count in face_counts.items()
         }

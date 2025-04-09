@@ -1,0 +1,104 @@
+<!-- Attendance section -->
+<div id="attendance-container" class="attendance-container">
+    <div class="attendance-header">
+        <h2>Attendance Analytics</h2>
+        <div class="attendance-actions">
+            <button id="refresh-attendance-btn" class="btn btn-primary">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <button id="export-attendance-btn" class="btn btn-secondary">
+                <i class="fas fa-file-export"></i> Export
+            </button>
+        </div>
+    </div>
+
+    <div class="attendance-summary">
+        <h3>Today's Summary</h3>
+        <div class="attendance-stats">
+            <div class="attendance-stat-card">
+                <i class="fas fa-users"></i>
+                <div class="stat-content">
+                    <div id="total-attendees" class="stat-value">0</div>
+                    <div class="stat-label">Total Attendees</div>
+                </div>
+            </div>
+            <div class="attendance-stat-card">
+                <i class="fas fa-user-check"></i>
+                <div class="stat-content">
+                    <div id="registered-attendees" class="stat-value">0</div>
+                    <div class="stat-label">Registered Attendees</div>
+                </div>
+            </div>
+            <div class="attendance-stat-card">
+                <i class="fas fa-user-clock"></i>
+                <div class="stat-content">
+                    <div id="current-present" class="stat-value">0</div>
+                    <div class="stat-label">Currently Present</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="attendance-progress">
+            <div class="progress-label">
+                <span>Attendance Rate</span>
+                <span id="attendance-rate-percentage">0%</span>
+            </div>
+            <div class="progress-container">
+                <div id="attendance-progress-bar" class="progress-bar" style="width: 0%"></div>
+                <div class="progress-text">
+                    <span id="attendance-fraction">0/0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="attendance-time-stats">
+            <h3>Time Statistics</h3>
+            <div class="time-stats-container">
+                <div class="time-stat">
+                    <div class="time-label">First Arrival</div>
+                    <div id="first-arrival-time" class="time-value">--:--</div>
+                </div>
+                <div class="time-stat">
+                    <div class="time-label">Latest Arrival</div>
+                    <div id="latest-arrival-time" class="time-value">--:--</div>
+                </div>
+                <div class="time-stat">
+                    <div class="time-label">Average Arrival</div>
+                    <div id="average-arrival-time" class="time-value">--:--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrival-breakdown">
+            <h3>Arrival Breakdown</h3>
+            <div class="arrival-status-grid">
+                <div class="status-box early">
+                    <div id="early-count" class="status-count">0</div>
+                    <div class="status-label">Early</div>
+                    <div class="status-desc">Before 8:30 AM</div>
+                </div>
+                <div class="status-box on-time">
+                    <div id="ontime-count" class="status-count">0</div>
+                    <div class="status-label">On Time</div>
+                    <div class="status-desc">8:30 AM - 9:00 AM</div>
+                </div>
+                <div class="status-box late">
+                    <div id="late-count" class="status-count">0</div>
+                    <div class="status-label">Late</div>
+                    <div class="status-desc">After 9:00 AM</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="attendance-list-container">
+        <h3>Attendance List</h3>
+        <div id="attendance-list" class="attendance-list">
+            <!-- Attendance items will be added here dynamically -->
+            <div class="attendance-placeholder">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading attendance data...</p>
+            </div>
+        </div>
+    </div>
+</div>

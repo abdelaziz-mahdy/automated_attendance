@@ -16,11 +16,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropzone = document.getElementById('dropzone');
     const toastContainer = document.getElementById('toastContainer');
     
+    // Get DOM elements for attendance
+    const refreshAttendanceBtn = document.getElementById('refreshAttendance');
+    const attendanceDate = document.getElementById('attendanceDate');
+    const presentCount = document.getElementById('presentCount');
+    const earliestArrival = document.getElementById('earliestArrival');
+    const latestArrival = document.getElementById('latestArrival');
+    const attendanceList = document.getElementById('attendanceList');
+    
+    // Tab navigation elements
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
     // Variables for face tracking and merging
     let faceCountUpdateInterval = null;
+    let attendanceUpdateInterval = null;
     let inDragMode = false;
     let draggedFaceId = null;
     let faceData = {};
+    let attendanceData = {};
     let faceThumbnails = {}; // Store thumbnails for faces
     let droppedFaces = []; // Store faces dropped into the merge area
     let thumbnailCleanupInterval = null; // Interval for cleaning up thumbnails
@@ -40,6 +54,34 @@ document.addEventListener('DOMContentLoaded', () => {
         detection: '/get_image_with_detection',
         recognition: '/get_image_with_recognition'
     };
+    
+    // Tab navigation functionality
+    function setupTabs() {
+        // Add click event listeners to all tab buttons
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+                
+                // Remove active class from all buttons and contents
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+                
+                // Add active class to selected button and content
+                button.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                
+                // If switching to faces tab, refresh face counts
+                if (tabId === 'faces-tab') {
+                    updateFaceCounts();
+                }
+                
+                // If switching to attendance tab, refresh attendance data
+                if (tabId === 'attendance-tab') {
+                    updateAttendance();
+                }
+            });
+        });
+    }
     
     // Initialize the stream
     function startStream() {
@@ -422,6 +464,272 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Error fetching face counts:', err);
         }
+    }
+    
+    // Fetch attendance data from server
+    async function updateAttendance() {
+        try {
+            const response = await fetch('/get_face_counts');
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            // Process face data into attendance format
+            const data = await response.json();
+            processAttendanceData(data);
+        } catch (err) {
+            console.error('Error fetching attendance data:', err);
+            showToast('Error fetching attendance data', 'error');
+        }
+    }
+    
+    // Process face data into attendance format
+    function processAttendanceData(data) {
+        // Set today's date in the header
+        const today = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        attendanceDate.textContent = today.toLocaleDateString('en-US', dateOptions);
+        
+        // Filter to get only named faces (these are considered registered people)
+        const namedFaces = Object.entries(data).filter(([_, faceData]) => faceData.is_named);
+        
+        // Create attendance metrics
+        const totalRegistered = 20; // Example number - this should come from a configuration
+        const presentCount = namedFaces.length;
+        const absentCount = Math.max(0, totalRegistered - presentCount);
+        const attendanceRate = totalRegistered > 0 ? Math.round((presentCount / totalRegistered) * 100) : 0;
+        
+        // Track arrival times
+        let earliestArrivalTime = null;
+        let latestArrivalTime = null;
+        
+        // Count people by arrival time periods
+        const earlyArrivals = []; // Before 9:00 AM
+        const onTimeArrivals = []; // 9:00 AM to 9:15 AM
+        const lateArrivals = []; // After 9:15 AM
+        const expectedArrivalHour = 9; // 9:00 AM is the expected arrival time
+        const lateThresholdMinutes = 15; // 15 minutes grace period
+        
+        // Process each face to determine arrival metrics
+        namedFaces.forEach(([faceId, data]) => {
+            // Parse the ISO timestamp into a Date object
+            let arrivalTime;
+            
+            if (data.first_seen) {
+                arrivalTime = new Date(data.first_seen);
+                
+                // Update earliest and latest arrival times
+                if (!earliestArrivalTime || arrivalTime < earliestArrivalTime) {
+                    earliestArrivalTime = arrivalTime;
+                }
+                
+                if (!latestArrivalTime || arrivalTime > latestArrivalTime) {
+                    latestArrivalTime = arrivalTime;
+                }
+                
+                // Categorize by arrival time
+                const arrivalHour = arrivalTime.getHours();
+                const arrivalMinutes = arrivalTime.getMinutes();
+                
+                if (arrivalHour < expectedArrivalHour) {
+                    // Before 9:00 AM - early
+                    earlyArrivals.push({faceId, time: arrivalTime});
+                } else if (arrivalHour === expectedArrivalHour && arrivalMinutes <= lateThresholdMinutes) {
+                    // Between 9:00 AM and 9:15 AM - on time
+                    onTimeArrivals.push({faceId, time: arrivalTime});
+                } else {
+                    // After 9:15 AM - late
+                    lateArrivals.push({faceId, time: arrivalTime});
+                }
+            }
+        });
+        
+        // Update stats display with accurate times and counts
+        document.getElementById('presentCount').textContent = presentCount.toString();
+        document.getElementById('absentCount').textContent = absentCount.toString();
+        document.getElementById('attendanceRate').textContent = `${attendanceRate}%`;
+        
+        if (earliestArrivalTime) {
+            document.getElementById('earliestArrival').textContent = earliestArrivalTime.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        } else {
+            document.getElementById('earliestArrival').textContent = '--:--';
+        }
+        
+        if (latestArrivalTime) {
+            document.getElementById('latestArrival').textContent = latestArrivalTime.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        } else {
+            document.getElementById('latestArrival').textContent = '--:--';
+        }
+        
+        // Update attendance breakdown stats
+        document.getElementById('earlyCount').textContent = earlyArrivals.length.toString();
+        document.getElementById('onTimeCount').textContent = onTimeArrivals.length.toString();
+        document.getElementById('lateCount').textContent = lateArrivals.length.toString();
+        
+        // Calculate attendance percentage and update progress bar
+        updateAttendanceChart(presentCount, absentCount);
+        
+        // Display the attendance list
+        displayAttendanceList(namedFaces);
+    }
+    
+    // Update the attendance chart
+    function updateAttendanceChart(present, absent) {
+        const total = present + absent;
+        const presentPercentage = total > 0 ? Math.round((present / total) * 100) : 0;
+        
+        // Update progress bar
+        const progressBar = document.getElementById('attendanceProgressBar');
+        const progressText = document.getElementById('attendanceProgressText');
+        
+        progressBar.style.width = `${presentPercentage}%`;
+        progressText.textContent = `${presentPercentage}%`;
+        
+        // Update color based on percentage
+        if (presentPercentage >= 75) {
+            progressBar.style.backgroundColor = 'var(--success-color)';
+        } else if (presentPercentage >= 50) {
+            progressBar.style.backgroundColor = 'var(--warning-color)';
+        } else {
+            progressBar.style.backgroundColor = 'var(--danger-color)';
+        }
+    }
+    
+    // Display the attendance list
+    function displayAttendanceList(faces) {
+        // Clear previous content
+        attendanceList.innerHTML = '';
+        
+        if (faces.length === 0) {
+            // Show placeholder if no faces
+            const placeholder = document.createElement('div');
+            placeholder.className = 'attendance-placeholder';
+            placeholder.textContent = 'No registered people detected today';
+            attendanceList.appendChild(placeholder);
+            return;
+        }
+        
+        // Sort faces by first_seen timestamp (earliest first)
+        const sortedFaces = [...faces].sort((a, b) => {
+            const timeA = a[1].first_seen ? new Date(a[1].first_seen).getTime() : Number.MAX_SAFE_INTEGER;
+            const timeB = b[1].first_seen ? new Date(b[1].first_seen).getTime() : Number.MAX_SAFE_INTEGER;
+            return timeA - timeB;
+        });
+        
+        // Create attendance items
+        sortedFaces.forEach(([faceId, data]) => {
+            // Parse arrival time from the server data
+            let arrivalTime = data.first_seen ? new Date(data.first_seen) : null;
+            
+            const attendanceItem = document.createElement('div');
+            attendanceItem.className = 'attendance-item';
+            
+            // Add class based on arrival time
+            if (arrivalTime) {
+                const arrivalHour = arrivalTime.getHours();
+                const arrivalMinutes = arrivalTime.getMinutes();
+                
+                if (arrivalHour < 9) {
+                    attendanceItem.classList.add('early-arrival');
+                } else if (arrivalHour === 9 && arrivalMinutes <= 15) {
+                    attendanceItem.classList.add('on-time-arrival');
+                } else {
+                    attendanceItem.classList.add('late-arrival');
+                }
+            }
+            
+            // Image container
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'attendance-img-container';
+            
+            // If we have thumbnails, use them, otherwise use placeholder
+            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
+                const img = document.createElement('img');
+                img.className = 'attendance-img';
+                img.src = faceThumbnails[faceId][faceThumbnails[faceId].length - 1]; // Latest thumbnail
+                img.alt = `Face ${faceId}`;
+                imgContainer.appendChild(img);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'attendance-img-placeholder';
+                placeholder.innerHTML = '<i class="fas fa-user"></i>';
+                imgContainer.appendChild(placeholder);
+            }
+            
+            attendanceItem.appendChild(imgContainer);
+            
+            // Attendance content
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'attendance-content';
+            
+            // Person name
+            const nameElement = document.createElement('div');
+            nameElement.className = 'attendance-name';
+            nameElement.textContent = faceId;
+            
+            // Appearance count
+            const countElement = document.createElement('div');
+            countElement.className = 'attendance-count';
+            countElement.textContent = `Seen ${data.count} times today`;
+            
+            // Arrival time
+            const timeContainer = document.createElement('div');
+            timeContainer.className = 'attendance-time-container';
+            
+            let statusLabel = 'Unknown';
+            let statusClass = 'unknown';
+            
+            if (arrivalTime) {
+                const arrivalHour = arrivalTime.getHours();
+                const arrivalMinutes = arrivalTime.getMinutes();
+                
+                if (arrivalHour < 9) {
+                    statusLabel = 'Early';
+                    statusClass = 'early';
+                } else if (arrivalHour === 9 && arrivalMinutes <= 15) {
+                    statusLabel = 'On Time';
+                    statusClass = 'on-time';
+                } else {
+                    statusLabel = 'Late';
+                    statusClass = 'late';
+                }
+            }
+            
+            const arrivalLabel = document.createElement('span');
+            arrivalLabel.className = `arrival-label ${statusClass}`;
+            arrivalLabel.textContent = statusLabel;
+            
+            const timeElement = document.createElement('span');
+            timeElement.className = 'attendance-time';
+            
+            if (arrivalTime) {
+                timeElement.textContent = arrivalTime.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } else {
+                timeElement.textContent = 'Time unknown';
+            }
+            
+            timeContainer.appendChild(arrivalLabel);
+            timeContainer.appendChild(timeElement);
+            
+            contentContainer.appendChild(nameElement);
+            contentContainer.appendChild(countElement);
+            contentContainer.appendChild(timeContainer);
+            attendanceItem.appendChild(contentContainer);
+            
+            attendanceList.appendChild(attendanceItem);
+        });
     }
     
     // Fetch a single frame to capture a face thumbnail
@@ -1061,6 +1369,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`Thumbnail cleanup: Removed ${stats.facesRemoved} faces, ${stats.remainingFaces} remaining`);
             }
         }, 30000); // Clean up every 30 seconds
+        
+        // Set up attendance updates
+        clearInterval(attendanceUpdateInterval);
+        attendanceUpdateInterval = setInterval(() => {
+            // Only update attendance if we're viewing the attendance tab
+            if (document.getElementById('attendance-tab').classList.contains('active')) {
+                updateAttendance();
+            }
+        }, 60000); // Update attendance every 1 minute
     }
     
     // Event listeners
@@ -1071,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Face management
     refreshFaceCountsBtn.addEventListener('click', updateFaceCounts);
+    refreshAttendanceBtn.addEventListener('click', updateAttendance);
     
     // Drag mode controls
     toggleDragModeBtn.addEventListener('click', toggleDragMode);
@@ -1087,6 +1405,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Setup face count updates
     setupFaceCountUpdates();
+    
+    // Initialize tab system
+    setupTabs();
     
     // Start with regular stream
     startStream();
