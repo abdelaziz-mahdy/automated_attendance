@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Camera Viewer</h1>
+        </header>
+        
+        <!-- Navigation tabs -->
+        <div class="tabs-container">
+            <div class="tabs">
+                <button class="tab-button active" data-tab="stream-tab">Live Stream</button>
+                <button class="tab-button" data-tab="faces-tab">Detected Faces</button>
+                <button class="tab-button" data-tab="attendance-tab">Attendance</button>
+                <button class="tab-button" data-tab="about-tab">About</button>
+            </div>
+        </div>
+        
+        <!-- Tab content sections -->
+        <div class="tab-content active" id="stream-tab">
+            <div class="controls">
+                <div class="control-group">
+                    <h2>Stream Controls</h2>
+                    <div class="buttons">
+                        <button id="regularStream" class="active">Regular Stream</button>
+                        <button id="detectionStream">Face Detection</button>
+                        <button id="recognitionStream">Face Recognition</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stream-container">
+                <div id="loadingIndicator">Loading stream...</div>
+                <img id="streamImage" alt="Camera Stream">
+                <div class="stream-info">
+                    <span id="streamType">Stream Type: Regular</span>
+                    <span id="fpsCounter">FPS: 0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Faces tab content -->
+        <div class="tab-content" id="faces-tab">
+            <div class="face-stats-container">
+                <div class="face-stats-header">
+                    <h2>Detected Faces</h2>
+                    <div class="face-stats-actions">
+                        <span id="totalFacesCount">Total Faces: 0</span>
+                        <button id="toggleDragMode"><i class="fas fa-arrows-alt"></i> Drag to Merge</button>
+                        <button id="refreshFaceCounts"><i class="fas fa-sync-alt"></i> Refresh</button>
+                    </div>
+                </div>
+                
+                <div id="dropzone" class="dropzone">
+                    <div class="dropzone-message">Drop faces here to merge them</div>
+                    <div class="drag-instruction">Drag and drop multiple faces to merge them together</div>
+                </div>
+                
+                <div id="faceCountsList" class="face-counts-list">
+                    <!-- Face count items will be added here dynamically -->
+                    <div class="face-count-placeholder">No faces detected yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Attendance tab content -->
+        <div class="tab-content" id="attendance-tab">
+            <div class="attendance-container">
+                <div class="attendance-header">
+                    <h2>Today's Attendance</h2>
+                    <div class="attendance-actions">
+                        <span id="attendanceDate">Wednesday, April 8, 2025</span>
+                        <button id="toggleAttendanceSettings"><i class="fas fa-cog"></i> Settings</button>
+                        <button id="refreshAttendance"><i class="fas fa-sync-alt"></i> Refresh</button>
+                    </div>
+                </div>
+                
+                <!-- Attendance Settings -->
+                <div id="attendanceSettings" class="attendance-settings" style="display: none;">
+                    <div class="settings-header">
+                        <h3>Attendance Settings</h3>
+                        <button id="closeAttendanceSettings" class="close-button"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="settings-group">
+                        <h4>Expected Arrival Time</h4>
+                        <div class="time-input-group">
+                            <label for="expectedHour">Hour:</label>
+                            <select id="expectedHour" class="time-select">
+                                <option value="0">12 AM</option>
+                                <option value="1">1 AM</option>
+                                <option value="2">2 AM</option>
+                                <option value="3">3 AM</option>
+                                <option value="4">4 AM</option>
+                                <option value="5">5 AM</option>
+                                <option value="6">6 AM</option>
+                                <option value="7">7 AM</option>
+                                <option value="8">8 AM</option>
+                                <option value="9" selected>9 AM</option>
+                                <option value="10">10 AM</option>
+                                <option value="11">11 AM</option>
+                                <option value="12">12 PM</option>
+                                <option value="13">1 PM</option>
+                                <option value="14">2 PM</option>
+                                <option value="15">3 PM</option>
+                                <option value="16">4 PM</option>
+                                <option value="17">5 PM</option>
+                                <option value="18">6 PM</option>
+                                <option value="19">7 PM</option>
+                                <option value="20">8 PM</option>
+                                <option value="21">9 PM</option>
+                                <option value="22">10 PM</option>
+                                <option value="23">11 PM</option>
+                            </select>
+                            <label for="expectedMinute">Minute:</label>
+                            <select id="expectedMinute" class="time-select">
+                                <option value="0" selected>00</option>
+                                <option value="15">15</option>
+                                <option value="30">30</option>
+                                <option value="45">45</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h4>Status Thresholds</h4>
+                        <div class="threshold-group">
+                            <label for="earlyThreshold">Early Arrival (minutes before expected time):</label>
+                            <input type="number" id="earlyThreshold" min="0" max="120" value="30" class="threshold-input">
+                        </div>
+                        <div class="threshold-group">
+                            <label for="lateThreshold">Late Threshold (minutes after expected time):</label>
+                            <input type="number" id="lateThreshold" min="0" max="120" value="15" class="threshold-input">
+                        </div>
+                    </div>
+                    <div class="settings-actions">
+                        <button id="saveAttendanceSettings" class="primary-button">Save Settings</button>
+                    </div>
+                </div>
+                
+                <!-- Attendance Summary -->
+                <div class="attendance-summary">
+                    <div class="attendance-progress">
+                        <h3>Attendance Rate</h3>
+                        <div class="progress-container">
+                            <div id="attendanceProgressBar" class="progress-bar" style="width: 0%;"></div>
+                            <span id="attendanceProgressText" class="progress-text">0%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="attendance-stats">
+                        <div class="attendance-stat-card">
+                            <i class="fas fa-user-check"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="presentCount">0</span>
+                                <span class="stat-label">Present</span>
+                            </div>
+                        </div>
+                        
+                        <div class="attendance-stat-card">
+                            <i class="fas fa-user-times"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="absentCount">0</span>
+                                <span class="stat-label">Absent</span>
+                            </div>
+                        </div>
+                        
+                        <div class="attendance-stat-card">
+                            <i class="fas fa-percentage"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="attendanceRate">0%</span>
+                                <span class="stat-label">Attendance Rate</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Arrival Time Stats -->
+                    <div class="attendance-time-stats">
+                        <h3>Arrival Times</h3>
+                        <div class="time-stats-container">
+                            <div class="time-stat">
+                                <span class="time-label">Earliest Arrival:</span>
+                                <span class="time-value" id="earliestArrival">--:--</span>
+                            </div>
+                            <div class="time-stat">
+                                <span class="time-label">Latest Arrival:</span>
+                                <span class="time-value" id="latestArrival">--:--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Arrival Status Breakdown -->
+                    <div class="arrival-breakdown">
+                        <h3>Arrival Status</h3>
+                        <div class="arrival-status-grid">
+                            <div class="status-box early">
+                                <div class="status-count" id="earlyCount">0</div>
+                                <div class="status-label">Early</div>
+                                <div id="earlyTimeDesc" class="status-desc">Before 8:30 AM</div>
+                            </div>
+                            <div class="status-box on-time">
+                                <div class="status-count" id="onTimeCount">0</div>
+                                <div class="status-label">On Time</div>
+                                <div id="onTimeTimeDesc" class="status-desc">8:30 AM - 9:15 AM</div>
+                            </div>
+                            <div class="status-box late">
+                                <div class="status-count" id="lateCount">0</div>
+                                <div class="status-label">Late</div>
+                                <div id="lateTimeDesc" class="status-desc">After 9:15 AM</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="attendance-list-container">
+                    <h3>People Present Today</h3>
+                    <div id="attendanceList" class="attendance-list">
+                        <!-- Attendance items will be added here dynamically -->
+                        <div class="attendance-placeholder">No registered people detected today</div>
+                    </div>
+                </div>
+                
+                <div class="attendance-list-container" style="margin-top: 20px;">
+                    <h3>Expected But Absent</h3>
+                    <div id="absenteesList" class="attendance-list">
+                        <!-- Absentee items will be added here dynamically -->
+                        <div class="attendance-placeholder">All expected people are present</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- About tab content -->
+        <div class="tab-content" id="about-tab">
+            <div class="info-panel">
+                <h2>About Camera Viewer</h2>
+                <p>This web interface allows you to view and manage camera streams with face detection and recognition capabilities.</p>
+                
+                <h3>Features:</h3>
+                <ul>
+                    <li>View real-time camera stream</li>
+                    <li>Enable face detection to identify faces in the stream</li>
+                    <li>Use face recognition to track and identify known people</li>
+                    <li>Register new faces by adding names</li>
+                    <li>Track attendance and arrival times</li>
+                    <li>Manage face database (merge, rename)</li>
+                </ul>
+                
+                <h3>Instructions:</h3>
+                <ul>
+                    <li>Switch between stream modes using the buttons in the "Stream Controls" section</li>
+                    <li>View all detected faces in the "Detected Faces" tab</li>
+                    <li>Track attendance in the "Attendance" tab</li>
+                    <li>Use the "Settings" button in the Attendance tab to customize time thresholds</li>
+                </ul>
+                
+                <p class="note">Note: Face recognition works best in good lighting conditions with the face clearly visible to the camera.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast notifications container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
