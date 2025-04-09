@@ -16,11 +16,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropzone = document.getElementById('dropzone');
     const toastContainer = document.getElementById('toastContainer');
     
+    // Get DOM elements for attendance
+    const refreshAttendanceBtn = document.getElementById('refreshAttendance');
+    const attendanceDate = document.getElementById('attendanceDate');
+    const presentCount = document.getElementById('presentCount');
+    const earliestArrival = document.getElementById('earliestArrival');
+    const latestArrival = document.getElementById('latestArrival');
+    const attendanceList = document.getElementById('attendanceList');
+    
+    // Tab navigation elements
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
     // Variables for face tracking and merging
     let faceCountUpdateInterval = null;
+    let attendanceUpdateInterval = null;
     let inDragMode = false;
     let draggedFaceId = null;
     let faceData = {};
+    let attendanceData = {};
     let faceThumbnails = {}; // Store thumbnails for faces
     let droppedFaces = []; // Store faces dropped into the merge area
     let thumbnailCleanupInterval = null; // Interval for cleaning up thumbnails
@@ -40,6 +54,43 @@ document.addEventListener('DOMContentLoaded', () => {
         detection: '/get_image_with_detection',
         recognition: '/get_image_with_recognition'
     };
+    
+    // Tab navigation functionality
+    function setupTabs() {
+        // Add click event listeners to all tab buttons
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+                
+                // Remove active class from all buttons and contents
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+                
+                // Add active class to selected button and content
+                button.addEventListener('click', () => {
+                    const tabId = button.dataset.tab;
+                    
+                    // Remove active class from all buttons and contents
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    
+                    // Add active class to selected button and content
+                    button.classList.add('active');
+                    document.getElementById(tabId).classList.add('active');
+                    
+                    // If switching to faces tab, refresh face counts
+                    if (tabId === 'faces-tab') {
+                        updateFaceCounts();
+                    }
+                    
+                    // If switching to attendance tab, refresh attendance data
+                    if (tabId === 'attendance-tab') {
+                        updateAttendance();
+                    }
+                });
+            });
+        });
+    }
     
     // Initialize the stream
     function startStream() {
@@ -1061,6 +1112,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`Thumbnail cleanup: Removed ${stats.facesRemoved} faces, ${stats.remainingFaces} remaining`);
             }
         }, 30000); // Clean up every 30 seconds
+        
+        // Set up attendance updates
+        clearInterval(attendanceUpdateInterval);
+        attendanceUpdateInterval = setInterval(() => {
+            // Only update attendance if we're viewing the attendance tab
+            if (document.getElementById('attendance-tab').classList.contains('active')) {
+                updateAttendance();
+            }
+        }, 60000); // Update attendance every 1 minute
     }
     
     // Event listeners
@@ -1071,6 +1131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Face management
     refreshFaceCountsBtn.addEventListener('click', updateFaceCounts);
+    refreshAttendanceBtn.addEventListener('click', updateAttendance);
     
     // Drag mode controls
     toggleDragModeBtn.addEventListener('click', toggleDragMode);
@@ -1088,6 +1149,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup face count updates
     setupFaceCountUpdates();
     
+    // Initialize tab system
+    setupTabs();
+    
     // Start with regular stream
     startStream();
     
@@ -1098,3 +1162,626 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Server connection error:', err);
         });
 });
+
+// Attendance Settings and Class Definitions
+class AttendanceSettings {
+    constructor() {
+        // Default values
+        this.expectedHour = 9;
+        this.expectedMinute = 0;
+        this.earlyThresholdMinutes = 30;
+        this.lateThresholdMinutes = 15;
+        
+        // Load settings from localStorage if available
+        this.loadSettings();
+    }
+    
+    loadSettings() {
+        const savedSettings = localStorage.getItem('attendanceSettings');
+        if (savedSettings) {
+            try {
+                const settings = JSON.parse(savedSettings);
+                this.expectedHour = settings.expectedHour || this.expectedHour;
+                this.expectedMinute = settings.expectedMinute || this.expectedMinute;
+                this.earlyThresholdMinutes = settings.earlyThresholdMinutes || this.earlyThresholdMinutes;
+                this.lateThresholdMinutes = settings.lateThresholdMinutes || this.lateThresholdMinutes;
+            } catch (e) {
+                console.error('Error loading attendance settings:', e);
+            }
+        }
+    }
+    
+    saveSettings() {
+        const settings = {
+            expectedHour: this.expectedHour,
+            expectedMinute: this.expectedMinute,
+            earlyThresholdMinutes: this.earlyThresholdMinutes,
+            lateThresholdMinutes: this.lateThresholdMinutes
+        };
+        localStorage.setItem('attendanceSettings', JSON.stringify(settings));
+    }
+    
+    getExpectedTimeFormatted() {
+        const hour = this.expectedHour;
+        const minute = this.expectedMinute;
+        
+        // Format in 12-hour format
+        let period = 'AM';
+        let displayHour = hour;
+        
+        if (hour >= 12) {
+            period = 'PM';
+            displayHour = hour === 12 ? 12 : hour - 12;
+        }
+        if (displayHour === 0) {
+            displayHour = 12;
+        }
+        
+        return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+    }
+    
+    getEarlyThresholdFormatted() {
+        // Calculate the early threshold time
+        const expectedDate = new Date();
+        expectedDate.setHours(this.expectedHour, this.expectedMinute, 0, 0);
+        
+        const earlyDate = new Date(expectedDate.getTime() - (this.earlyThresholdMinutes * 60 * 1000));
+        
+        // Format in 12-hour format
+        const hour = earlyDate.getHours();
+        const minute = earlyDate.getMinutes();
+        
+        let period = 'AM';
+        let displayHour = hour;
+        
+        if (hour >= 12) {
+            period = 'PM';
+            displayHour = hour === 12 ? 12 : hour - 12;
+        }
+        if (displayHour === 0) {
+            displayHour = 12;
+        }
+        
+        return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+    }
+    
+    getLateThresholdFormatted() {
+        // Calculate the late threshold time
+        const expectedDate = new Date();
+        expectedDate.setHours(this.expectedHour, this.expectedMinute, 0, 0);
+        
+        const lateDate = new Date(expectedDate.getTime() + (this.lateThresholdMinutes * 60 * 1000));
+        
+        // Format in 12-hour format
+        const hour = lateDate.getHours();
+        const minute = lateDate.getMinutes();
+        
+        let period = 'AM';
+        let displayHour = hour;
+        
+        if (hour >= 12) {
+            period = 'PM';
+            displayHour = hour === 12 ? 12 : hour - 12;
+        }
+        if (displayHour === 0) {
+            displayHour = 12;
+        }
+        
+        return `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+    }
+    
+    getExpectedDateTime() {
+        const today = new Date();
+        today.setHours(this.expectedHour, this.expectedMinute, 0, 0);
+        return today;
+    }
+    
+    getEarlyThresholdDateTime() {
+        const earlyDate = this.getExpectedDateTime();
+        earlyDate.setMinutes(earlyDate.getMinutes() - this.earlyThresholdMinutes);
+        return earlyDate;
+    }
+    
+    getLateThresholdDateTime() {
+        const lateDate = this.getExpectedDateTime();
+        lateDate.setMinutes(lateDate.getMinutes() + this.lateThresholdMinutes);
+        return lateDate;
+    }
+    
+    updateTimeDescriptions() {
+        // Update the UI elements to show the current thresholds
+        document.getElementById('earlyTimeDesc').textContent = `Before ${this.getEarlyThresholdFormatted()}`;
+        document.getElementById('onTimeTimeDesc').textContent = `${this.getEarlyThresholdFormatted()} - ${this.getLateThresholdFormatted()}`;
+        document.getElementById('lateTimeDesc').textContent = `After ${this.getLateThresholdFormatted()}`;
+    }
+}
+
+class AttendancePerson {
+    constructor(id, data) {
+        this.id = id;
+        this.name = id; // Default name is the ID
+        this.isNamed = data.is_named || false;
+        this.count = data.count || 0;
+        this.thumbnails = []; // Store thumbnail URLs
+        
+        // Arrival time data
+        this.firstSeen = data.first_seen ? new Date(data.first_seen) : null;
+        this.lastSeen = data.last_seen ? new Date(data.last_seen) : null;
+        
+        // Initialize with any thumbnails
+        if (faceThumbnails[id] && faceThumbnails[id].length > 0) {
+            this.thumbnails = [...faceThumbnails[id]];
+        }
+    }
+    
+    getLatestThumbnail() {
+        if (this.thumbnails.length > 0) {
+            return this.thumbnails[this.thumbnails.length - 1];
+        }
+        return null;
+    }
+    
+    getArrivalTime() {
+        if (this.firstSeen) {
+            return this.firstSeen.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        }
+        return 'Unknown';
+    }
+    
+    getArrivalStatus(settings) {
+        if (!this.firstSeen) return 'unknown';
+        
+        const earlyThreshold = settings.getEarlyThresholdDateTime();
+        const lateThreshold = settings.getLateThresholdDateTime();
+        
+        if (this.firstSeen < earlyThreshold) {
+            return 'early';
+        } else if (this.firstSeen <= lateThreshold) {
+            return 'on-time';
+        } else {
+            return 'late';
+        }
+    }
+    
+    getStatusLabel(settings) {
+        const status = this.getArrivalStatus(settings);
+        switch (status) {
+            case 'early': return 'Early';
+            case 'on-time': return 'On Time';
+            case 'late': return 'Late';
+            default: return 'Unknown';
+        }
+    }
+}
+
+class AttendanceManager {
+    constructor() {
+        this.settings = new AttendanceSettings();
+        this.present = []; // Stores AttendancePerson objects
+        this.absent = []; // Stores people who are known but not present
+        this.knownPeople = new Set(); // Stores all known face IDs
+        
+        // Update settings UI with current values
+        this._initSettingsUI();
+    }
+    
+    _initSettingsUI() {
+        document.getElementById('expectedHour').value = this.settings.expectedHour;
+        document.getElementById('expectedMinute').value = this.settings.expectedMinute;
+        document.getElementById('earlyThreshold').value = this.settings.earlyThresholdMinutes;
+        document.getElementById('lateThreshold').value = this.settings.lateThresholdMinutes;
+        
+        // Update time descriptions
+        this.settings.updateTimeDescriptions();
+    }
+    
+    async loadAttendanceData() {
+        try {
+            // First, get the list of all known people
+            await this.loadKnownPeople();
+            
+            // Then get current face data
+            const response = await fetch('/get_face_counts');
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Process present people
+            this.present = [];
+            const namedFaces = Object.entries(data).filter(([_, faceData]) => faceData.is_named);
+            
+            namedFaces.forEach(([faceId, faceData]) => {
+                this.present.push(new AttendancePerson(faceId, faceData));
+            });
+            
+            // Sort present people by arrival time
+            this.present.sort((a, b) => {
+                if (!a.firstSeen) return 1;
+                if (!b.firstSeen) return -1;
+                return a.firstSeen.getTime() - b.firstSeen.getTime();
+            });
+            
+            // Determine absent people (in known list but not in present list)
+            this.absent = [];
+            const presentIds = new Set(this.present.map(person => person.id));
+            
+            this.knownPeople.forEach(personId => {
+                if (!presentIds.has(personId)) {
+                    // Create a placeholder absent person
+                    const absentPerson = new AttendancePerson(personId, { is_named: true });
+                    this.absent.push(absentPerson);
+                }
+            });
+            
+            return {
+                present: this.present,
+                absent: this.absent
+            };
+        } catch (err) {
+            console.error('Error fetching attendance data:', err);
+            throw err;
+        }
+    }
+    
+    async loadKnownPeople() {
+        try {
+            // Get all known faces from the server
+            const response = await fetch('/get_known_faces');
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Add all known faces to the set
+            this.knownPeople = new Set(data.known_faces || []);
+            
+            return this.knownPeople;
+        } catch (err) {
+            console.error('Error fetching known people:', err);
+            // Fall back to using face thumbnails as a source of known people
+            this.knownPeople = new Set(Object.keys(faceThumbnails || {}).filter(id => {
+                // Consider only named faces (those without UUID-like patterns)
+                return !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(id);
+            }));
+            
+            return this.knownPeople;
+        }
+    }
+    
+    getPresentCount() {
+        return this.present.length;
+    }
+    
+    getAbsentCount() {
+        return this.absent.length;
+    }
+    
+    getTotalCount() {
+        return this.knownPeople.size;
+    }
+    
+    getAttendanceRate() {
+        if (this.knownPeople.size === 0) return 0;
+        return Math.round((this.present.length / this.knownPeople.size) * 100);
+    }
+    
+    getEarliestArrival() {
+        let earliest = null;
+        
+        for (const person of this.present) {
+            if (person.firstSeen) {
+                if (!earliest || person.firstSeen < earliest) {
+                    earliest = person.firstSeen;
+                }
+            }
+        }
+        
+        return earliest;
+    }
+    
+    getLatestArrival() {
+        let latest = null;
+        
+        for (const person of this.present) {
+            if (person.firstSeen) {
+                if (!latest || person.firstSeen > latest) {
+                    latest = person.firstSeen;
+                }
+            }
+        }
+        
+        return latest;
+    }
+    
+    getArrivalsByStatus() {
+        const early = [];
+        const onTime = [];
+        const late = [];
+        
+        for (const person of this.present) {
+            const status = person.getArrivalStatus(this.settings);
+            
+            switch (status) {
+                case 'early':
+                    early.push(person);
+                    break;
+                case 'on-time':
+                    onTime.push(person);
+                    break;
+                case 'late':
+                    late.push(person);
+                    break;
+            }
+        }
+        
+        return { early, onTime, late };
+    }
+    
+    updateAttendanceUI() {
+        // Update attendance metrics
+        document.getElementById('presentCount').textContent = this.getPresentCount();
+        document.getElementById('absentCount').textContent = this.getAbsentCount();
+        document.getElementById('attendanceRate').textContent = `${this.getAttendanceRate()}%`;
+        
+        // Update progress bar
+        updateAttendanceChart(this.getPresentCount(), this.getAbsentCount());
+        
+        // Update arrival times
+        const earliestArrival = this.getEarliestArrival();
+        const latestArrival = this.getLatestArrival();
+        
+        if (earliestArrival) {
+            document.getElementById('earliestArrival').textContent = earliestArrival.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        } else {
+            document.getElementById('earliestArrival').textContent = '--:--';
+        }
+        
+        if (latestArrival) {
+            document.getElementById('latestArrival').textContent = latestArrival.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        } else {
+            document.getElementById('latestArrival').textContent = '--:--';
+        }
+        
+        // Update arrival status counts
+        const { early, onTime, late } = this.getArrivalsByStatus();
+        document.getElementById('earlyCount').textContent = early.length;
+        document.getElementById('onTimeCount').textContent = onTime.length;
+        document.getElementById('lateCount').textContent = late.length;
+        
+        // Render attendance lists
+        this.renderAttendanceList();
+        this.renderAbsenteesList();
+    }
+    
+    renderAttendanceList() {
+        const attendanceList = document.getElementById('attendanceList');
+        attendanceList.innerHTML = '';
+        
+        if (this.present.length === 0) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'attendance-placeholder';
+            placeholder.textContent = 'No registered people detected today';
+            attendanceList.appendChild(placeholder);
+            return;
+        }
+        
+        // Create attendance items for each present person
+        this.present.forEach(person => {
+            const attendanceItem = document.createElement('div');
+            attendanceItem.className = 'attendance-item';
+            
+            // Add class based on arrival status
+            const status = person.getArrivalStatus(this.settings);
+            attendanceItem.classList.add(`${status}-arrival`);
+            
+            // Image container
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'attendance-img-container';
+            
+            // If we have thumbnails, use them, otherwise use placeholder
+            const thumbnail = person.getLatestThumbnail();
+            if (thumbnail) {
+                const img = document.createElement('img');
+                img.className = 'attendance-img';
+                img.src = thumbnail;
+                img.alt = `Face ${person.id}`;
+                imgContainer.appendChild(img);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'attendance-img-placeholder';
+                placeholder.innerHTML = '<i class="fas fa-user"></i>';
+                imgContainer.appendChild(placeholder);
+            }
+            
+            attendanceItem.appendChild(imgContainer);
+            
+            // Attendance content
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'attendance-content';
+            
+            // Person name
+            const nameElement = document.createElement('div');
+            nameElement.className = 'attendance-name';
+            nameElement.textContent = person.id;
+            
+            // Appearance count
+            const countElement = document.createElement('div');
+            countElement.className = 'attendance-count';
+            countElement.textContent = `Seen ${person.count} times today`;
+            
+            // Arrival time
+            const timeContainer = document.createElement('div');
+            timeContainer.className = 'attendance-time-container';
+            
+            const arrivalLabel = document.createElement('span');
+            arrivalLabel.className = `arrival-label ${status}`;
+            arrivalLabel.textContent = person.getStatusLabel(this.settings);
+            
+            const timeElement = document.createElement('span');
+            timeElement.className = 'attendance-time';
+            timeElement.textContent = person.getArrivalTime();
+            
+            timeContainer.appendChild(arrivalLabel);
+            timeContainer.appendChild(timeElement);
+            
+            contentContainer.appendChild(nameElement);
+            contentContainer.appendChild(countElement);
+            contentContainer.appendChild(timeContainer);
+            attendanceItem.appendChild(contentContainer);
+            
+            attendanceList.appendChild(attendanceItem);
+        });
+    }
+    
+    renderAbsenteesList() {
+        const absenteesList = document.getElementById('absenteesList');
+        absenteesList.innerHTML = '';
+        
+        if (this.absent.length === 0) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'attendance-placeholder';
+            placeholder.textContent = 'All expected people are present';
+            absenteesList.appendChild(placeholder);
+            return;
+        }
+        
+        // Create attendance items for each absent person
+        this.absent.forEach(person => {
+            const attendanceItem = document.createElement('div');
+            attendanceItem.className = 'attendance-item';
+            
+            // Image container
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'attendance-img-container';
+            
+            // If we have thumbnails, use them, otherwise use placeholder
+            const thumbnail = person.getLatestThumbnail();
+            if (thumbnail) {
+                const img = document.createElement('img');
+                img.className = 'attendance-img';
+                img.src = thumbnail;
+                img.alt = `Face ${person.id}`;
+                imgContainer.appendChild(img);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'attendance-img-placeholder';
+                placeholder.innerHTML = '<i class="fas fa-user-xmark"></i>';
+                imgContainer.appendChild(placeholder);
+            }
+            
+            attendanceItem.appendChild(imgContainer);
+            
+            // Attendance content
+            const contentContainer = document.createElement('div');
+            contentContainer.className = 'attendance-content';
+            
+            // Person name
+            const nameElement = document.createElement('div');
+            nameElement.className = 'attendance-name';
+            nameElement.textContent = person.id;
+            
+            // Absence message
+            const statusElement = document.createElement('div');
+            statusElement.className = 'attendance-count';
+            statusElement.innerHTML = '<i class="fas fa-calendar-xmark"></i> Not seen today';
+            
+            contentContainer.appendChild(nameElement);
+            contentContainer.appendChild(statusElement);
+            attendanceItem.appendChild(contentContainer);
+            
+            absenteesList.appendChild(attendanceItem);
+        });
+    }
+    
+    saveSettings() {
+        // Get values from form
+        const expectedHour = parseInt(document.getElementById('expectedHour').value);
+        const expectedMinute = parseInt(document.getElementById('expectedMinute').value);
+        const earlyThreshold = parseInt(document.getElementById('earlyThreshold').value);
+        const lateThreshold = parseInt(document.getElementById('lateThreshold').value);
+        
+        // Update settings
+        this.settings.expectedHour = expectedHour;
+        this.settings.expectedMinute = expectedMinute;
+        this.settings.earlyThresholdMinutes = earlyThreshold;
+        this.settings.lateThresholdMinutes = lateThreshold;
+        
+        // Save settings
+        this.settings.saveSettings();
+        
+        // Update UI
+        this.settings.updateTimeDescriptions();
+        
+        // Re-calculate attendance statuses
+        this.updateAttendanceUI();
+        
+        return true;
+    }
+}
+
+// Initialize the attendance manager
+let attendanceManager;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize attendance manager
+    attendanceManager = new AttendanceManager();
+    
+    // Add event listeners for attendance settings
+    const toggleSettingsBtn = document.getElementById('toggleAttendanceSettings');
+    const closeSettingsBtn = document.getElementById('closeAttendanceSettings');
+    const saveSettingsBtn = document.getElementById('saveAttendanceSettings');
+    const settingsPanel = document.getElementById('attendanceSettings');
+    
+    toggleSettingsBtn.addEventListener('click', () => {
+        settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsPanel.style.display = 'none';
+    });
+    
+    saveSettingsBtn.addEventListener('click', () => {
+        if (attendanceManager.saveSettings()) {
+            showToast('Attendance settings saved', 'success');
+            settingsPanel.style.display = 'none';
+        }
+    });
+    
+    // Add event listener for refresh attendance button
+    const refreshAttendanceBtn = document.getElementById('refreshAttendance');
+    refreshAttendanceBtn.addEventListener('click', updateAttendance);
+});
+
+// Process face data into attendance format - Modified to use the AttendanceManager
+async function updateAttendance() {
+    try {
+        // Set today's date in the header - use current date dynamically
+        const today = new Date();
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('attendanceDate').textContent = today.toLocaleDateString('en-US', dateOptions);
+        
+        // Load attendance data
+        await attendanceManager.loadAttendanceData();
+        
+        // Update the UI
+        attendanceManager.updateAttendanceUI();
+    } catch (err) {
+        console.error('Error updating attendance:', err);
+        showToast('Error updating attendance data', 'error');
+    }
+}

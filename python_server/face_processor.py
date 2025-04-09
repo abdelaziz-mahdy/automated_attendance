@@ -4,6 +4,7 @@ import logging
 import os
 import time
 import uuid
+import datetime
 from constants import FaceRecognition as FR
 from face_comparison_service import FaceComparisonService
 
@@ -20,8 +21,22 @@ class FaceProcessor:
         self.tracked_faces = {}  # Dictionary to track faces across frames
         self.face_appearance_count = {}  # Dictionary to count face appearances
         self.last_face_id = 0  # Counter for generating unique face IDs
-        # We're no longer using a tracking timeout - faces will remain in memory indefinitely
         
+        # Timestamp tracking for attendance purposes
+        self.first_seen_times = {}  # Dictionary to track when faces were first seen
+        self.last_seen_times = {}   # Dictionary to track when faces were last seen
+        self.local_timezone = self._get_local_timezone()  # Get the local timezone
+        
+    def _get_local_timezone(self):
+        """Get the local timezone for accurate timestamp tracking."""
+        try:
+            # More reliable way to get local timezone using built-in Python
+            local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+            return local_timezone
+        except Exception as e:
+            logger.warning(f"Error getting local timezone: {e}. Falling back to UTC.")
+            return datetime.timezone.utc
+    
     def load_models(self, detection_model_path, recognition_model_path):
         """Load the face detection and recognition models."""
         try:
@@ -171,6 +186,20 @@ class FaceProcessor:
         """Return the count of appearances for each tracked face."""
         return self.face_appearance_count
     
+    def get_first_seen_time(self, face_id):
+        """Get the timestamp when face was first seen, or None if not tracked."""
+        if face_id in self.first_seen_times:
+            # Return as ISO formatted string for JSON compatibility
+            return self.first_seen_times[face_id].isoformat()
+        return None
+        
+    def get_last_seen_time(self, face_id):
+        """Get the timestamp when face was last seen, or None if not tracked."""
+        if face_id in self.last_seen_times:
+            # Return as ISO formatted string for JSON compatibility
+            return self.last_seen_times[face_id].isoformat()
+        return None
+    
     def get_known_faces(self):
         """Return dictionary of known faces and their count.
         
@@ -181,7 +210,9 @@ class FaceProcessor:
         for face_id in self.known_faces:
             result[face_id] = {
                 'count': self.face_appearance_count.get(face_id, 0),
-                'feature': self.known_faces[face_id].tolist()  # Convert to list for JSON serialization
+                'feature': self.known_faces[face_id].tolist(),  # Convert to list for JSON serialization
+                'first_seen': self.get_first_seen_time(face_id),
+                'last_seen': self.get_last_seen_time(face_id)
             }
         return result
         
@@ -244,6 +275,30 @@ class FaceProcessor:
             # Remove source face count
             del self.face_appearance_count[source_face_id]
         
+        # Merge timestamp data - keep the earliest first_seen time
+        if source_face_id in self.first_seen_times and target_face_id in self.first_seen_times:
+            # Keep the earlier first seen time
+            if self.first_seen_times[source_face_id] < self.first_seen_times[target_face_id]:
+                self.first_seen_times[target_face_id] = self.first_seen_times[source_face_id]
+        elif source_face_id in self.first_seen_times:
+            # If target doesn't have a first seen time, use the source's
+            self.first_seen_times[target_face_id] = self.first_seen_times[source_face_id]
+            
+        # For last_seen, keep the latest time
+        if source_face_id in self.last_seen_times and target_face_id in self.last_seen_times:
+            # Keep the later last seen time
+            if self.last_seen_times[source_face_id] > self.last_seen_times[target_face_id]:
+                self.last_seen_times[target_face_id] = self.last_seen_times[source_face_id]
+        elif source_face_id in self.last_seen_times:
+            # If target doesn't have a last seen time, use the source's
+            self.last_seen_times[target_face_id] = self.last_seen_times[source_face_id]
+            
+        # Clean up the source timestamps
+        if source_face_id in self.first_seen_times:
+            del self.first_seen_times[source_face_id]
+        if source_face_id in self.last_seen_times:
+            del self.last_seen_times[source_face_id]
+        
         # Remove source face from known faces
         del self.known_faces[source_face_id]
         
@@ -272,6 +327,7 @@ class FaceProcessor:
         result_frame = frame.copy()
         recognized_faces = []
         current_time = time.time()
+        current_datetime = datetime.datetime.now(self.local_timezone)
         
         # We're no longer cleaning up expired tracked faces - they remain in memory
         
@@ -314,6 +370,9 @@ class FaceProcessor:
                     self.face_appearance_count[face_id] = 1
                 else:
                     self.face_appearance_count[face_id] += 1
+                    
+                # Update last seen time
+                self.last_seen_times[face_id] = current_datetime
             else:
                 # If no tracked face matches, check against known faces in database
                 named_person = False
@@ -333,6 +392,9 @@ class FaceProcessor:
                 if not face_id:
                     face_id = self._get_next_face_id()
                     match_confidence = 0.0
+                    
+                    # This is a new face, set first seen time
+                    self.first_seen_times[face_id] = current_datetime
                 
                 # Add or update this face in tracking
                 self.tracked_faces[face_id] = {
@@ -344,8 +406,14 @@ class FaceProcessor:
                 # Initialize appearance count
                 if face_id not in self.face_appearance_count:
                     self.face_appearance_count[face_id] = 1
+                    # This is the first time we're seeing this face, set first seen time
+                    if face_id not in self.first_seen_times:
+                        self.first_seen_times[face_id] = current_datetime
                 else:
                     self.face_appearance_count[face_id] += 1
+                
+                # Always update last seen time
+                self.last_seen_times[face_id] = current_datetime
             
             # Color based on recognition status
             if named_person:
@@ -383,7 +451,9 @@ class FaceProcessor:
                 'match_score': float(match_confidence),
                 'named_person': named_person,
                 'appearance_count': appearance_count,
-                'last_seen': current_time  # Add timestamp to sort by recency
+                'last_seen': current_time,  # Add timestamp to sort by recency
+                'first_seen': self.get_first_seen_time(face_id),
+                'last_seen_formatted': self.get_last_seen_time(face_id)
             })
         
         # Sort the recognized faces by recency (newest first)
@@ -431,6 +501,12 @@ class FaceProcessor:
         self.known_faces[face_id] = face_feature
         logger.info(f"Added face with ID: {face_id}")
         
+        # Set or update time tracking for this face
+        current_datetime = datetime.datetime.now(self.local_timezone)
+        if face_id not in self.first_seen_times:
+            self.first_seen_times[face_id] = current_datetime
+        self.last_seen_times[face_id] = current_datetime
+        
         # If this face is similar to a tracked face, update the tracking data
         current_time = time.time()
         for tracked_id, tracked_data in list(self.tracked_faces.items()):
@@ -447,6 +523,19 @@ class FaceProcessor:
                         else:
                             self.face_appearance_count[face_id] += self.face_appearance_count[tracked_id]
                         del self.face_appearance_count[tracked_id]
+                    
+                    # Transfer time tracking information
+                    if tracked_id in self.first_seen_times:
+                        # Only update if the tracked face was seen earlier
+                        if face_id not in self.first_seen_times or self.first_seen_times[tracked_id] < self.first_seen_times[face_id]:
+                            self.first_seen_times[face_id] = self.first_seen_times[tracked_id]
+                        del self.first_seen_times[tracked_id]
+                    
+                    if tracked_id in self.last_seen_times:
+                        # Only update if the tracked face was seen more recently
+                        if face_id not in self.last_seen_times or self.last_seen_times[tracked_id] > self.last_seen_times[face_id]:
+                            self.last_seen_times[face_id] = self.last_seen_times[tracked_id]
+                        del self.last_seen_times[tracked_id]
                     
                     # Remove the auto-generated entry
                     del self.tracked_faces[tracked_id]
