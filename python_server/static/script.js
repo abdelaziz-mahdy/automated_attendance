@@ -437,27 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Show toast notification
     function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        
-        toastContainer.appendChild(toast);
-        
-        // Trigger reflow to enable transition
-        toast.offsetHeight;
-        
-        // Show toast
-        toast.classList.add('show');
-        
-        // Auto-hide toast after 3 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            
-            // Remove toast from DOM after transition
-            setTimeout(() => {
-                toastContainer.removeChild(toast);
-            }, 300);
-        }, 3000);
+        window.showToast(message, type);
     }
     
     // Fetch face counts from server
@@ -1782,6 +1762,64 @@ async function updateAttendance() {
         attendanceManager.updateAttendanceUI();
     } catch (err) {
         console.error('Error updating attendance:', err);
-        showToast('Error updating attendance data', 'error');
+        window.showToast('Error updating attendance data', 'error');
     }
 }
+
+/**
+ * Update the attendance chart/progress bar with the given values
+ * @param {number} presentCount - Number of present attendees
+ * @param {number} absentCount - Number of absent attendees
+ */
+function updateAttendanceChart(presentCount, absentCount) {
+    const totalCount = presentCount + absentCount;
+    const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+    
+    // Update progress bar
+    const progressBar = document.getElementById('attendanceProgressBar');
+    const progressText = document.getElementById('attendanceProgressText');
+    
+    if (progressBar && progressText) {
+        progressBar.style.width = `${attendanceRate}%`;
+        progressText.textContent = `${attendanceRate}%`;
+        
+        // Change color based on attendance rate
+        if (attendanceRate < 40) {
+            progressBar.style.backgroundColor = 'var(--danger-color)';
+        } else if (attendanceRate < 70) {
+            progressBar.style.backgroundColor = 'var(--warning-color)';
+        } else {
+            progressBar.style.backgroundColor = 'var(--success-color)';
+        }
+    }
+}
+
+// Make showToast globally accessible (it might be defined inside a scope)
+window.showToast = function(message, type = 'info') {
+    const toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    toastContainer.appendChild(toast);
+    
+    // Trigger reflow to enable transition
+    toast.offsetHeight;
+    
+    // Show toast
+    toast.classList.add('show');
+    
+    // Auto-hide toast after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        
+        // Remove toast from DOM after transition
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toastContainer.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+};
