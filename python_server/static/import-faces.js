@@ -521,6 +521,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     faces_detected: batchResult.faces_detected || 0
                 });
             }
+        } else if (batchResult.person_name && !currentResults.persons_imported.some(p => p.name === batchResult.person_name)) {
+             // If the batch failed but we haven't recorded this person yet, record the attempt
+             // This helps show persons that had issues during import
+             if (!currentResults.persons_imported.find(p => p.name === batchResult.person_name)) {
+                 currentResults.persons_imported.push({
+                     name: batchResult.person_name,
+                     id: batchResult.person_name, // Use name as ID placeholder
+                     images_processed: batchResult.images_processed || 0,
+                     faces_detected: 0, // No faces successfully detected for this person yet
+                     failed: true // Mark as failed
+                 });
+             }
         }
     }
 
@@ -533,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         importResults.style.display = 'block';
         
         // Update the summary stats
-        importedPersonsCount.textContent = data.persons_imported ? data.persons_imported.length : 0;
+        importedPersonsCount.textContent = data.persons_imported ? data.persons_imported.filter(p => !p.failed).length : 0; // Count only successful
         processedImagesCount.textContent = data.total_images || 0;
         detectedFacesCount.textContent = data.total_faces_detected || 0;
         
@@ -544,35 +556,43 @@ document.addEventListener('DOMContentLoaded', () => {
             data.persons_imported.forEach(person => {
                 const personItem = document.createElement('div');
                 personItem.className = 'imported-person-item';
-                
+                if (person.failed || person.faces_detected === 0) {
+                    personItem.style.opacity = '0.6'; // Dim failed/empty imports
+                }
+
                 // Add thumbnail container
                 const thumbnailContainer = document.createElement('div');
                 thumbnailContainer.className = 'person-thumbnail';
                 thumbnailContainer.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>'; // Loading indicator
-                
+
                 // Create person details container
                 const detailsContainer = document.createElement('div');
                 detailsContainer.className = 'person-details';
-                
+
+                let statusIcon = person.faces_detected > 0 ? '<i class="fas fa-check-circle" style="color: var(--success-color);"></i>' : '<i class="fas fa-exclamation-triangle" style="color: var(--warning-color);"></i>';
+                if (person.failed) {
+                     statusIcon = '<i class="fas fa-times-circle" style="color: var(--danger-color);"></i>';
+                }
+
                 detailsContainer.innerHTML = `
-                    <div class="person-name"><strong>${person.name}</strong> ${person.id !== person.name ? `(ID: ${person.id})` : ''}</div>
+                    <div class="person-name"><strong>${person.name}</strong> ${statusIcon}</div>
                     <div class="person-stats">
-                        <span title="Total images processed"><i class="fas fa-image"></i> ${person.images_processed}</span>
+                        <span title="Images processed"><i class="fas fa-image"></i> ${person.images_processed}</span>
                         <span title="Faces detected"><i class="fas fa-user"></i> ${person.faces_detected}</span>
                     </div>
                 `;
-                
+
                 // Add both containers to person item
                 personItem.appendChild(thumbnailContainer);
                 personItem.appendChild(detailsContainer);
-                
+
                 importedPersonsList.appendChild(personItem);
-                
-                // Try to get a thumbnail for this person
-                fetchPersonThumbnail(person.id || person.name)
+
+                // Try to get a thumbnail using the person's ID (which should be their name)
+                // Use the placeholder generation if no live thumbnail exists yet
+                fetchPersonThumbnail(person.id) // Use person.id here
                     .then(thumbnailUrl => {
                         if (thumbnailUrl) {
-                            // Create image element if we have a thumbnail
                             thumbnailContainer.innerHTML = ''; // Clear loading spinner
                             const img = document.createElement('img');
                             img.src = thumbnailUrl;
@@ -580,19 +600,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             img.className = 'person-thumbnail-img';
                             thumbnailContainer.appendChild(img);
                         } else {
-                            // Use placeholder if no thumbnail
-                            thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
+                            thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>'; // Fallback icon
                         }
                     })
                     .catch(() => {
-                        // Use placeholder on error
-                        thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
+                        thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>'; // Error fallback
                     });
             });
         } else {
-            importedPersonsList.innerHTML = '<div class="import-placeholder">No persons were imported</div>';
+            importedPersonsList.innerHTML = '<div class="import-placeholder">No persons were processed or found</div>';
         }
-        
+
         // Display errors if any
         if ((data.errors && data.errors.length > 0) || (data.failed_images && data.failed_images.length > 0)) {
             importErrorsContainer.style.display = 'block';
@@ -637,55 +655,56 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             importErrorsContainer.style.display = 'none';
         }
-        
-        // Show success notification
-        if (data.persons_imported && data.persons_imported.length > 0) {
-            showToast(`Successfully imported ${data.persons_imported.length} person(s)`, 'success');
+
+        // Show success/warning notification
+        const successfulImports = data.persons_imported ? data.persons_imported.filter(p => !p.failed && p.faces_detected > 0).length : 0;
+        if (successfulImports > 0 && data.errors.length === 0 && data.failed_images.length === 0) {
+            showToast(`Successfully imported ${successfulImports} person(s)`, 'success');
+        } else if (successfulImports > 0) {
+             showToast(`Import completed with some issues for ${successfulImports} person(s). Check details.`, 'warning');
         } else {
-            showToast('Import completed with issues. See the details for more information.', 'warning');
+            showToast('Import completed, but no faces were successfully detected or issues occurred.', 'error');
         }
     }
 
     /**
-     * Fetch a thumbnail for a person by trying to get their face data
-     * @param {string} personId - The ID of the person to fetch thumbnail for
+     * Fetch a thumbnail for a person or generate a placeholder.
+     * Checks window.faceThumbnails first.
+     * @param {string} personId - The ID of the person (usually the name)
      * @returns {Promise<string|null>} - Promise resolving to thumbnail URL or null
      */
     async function fetchPersonThumbnail(personId) {
         try {
-            // First try to see if we have any face data in the main window
+            // 1. Check live thumbnails from the main script
             if (window.faceThumbnails && window.faceThumbnails[personId] && window.faceThumbnails[personId].length > 0) {
-                return window.faceThumbnails[personId][0]; // Return the first thumbnail
+                console.log(`Using live thumbnail for ${personId}`);
+                return window.faceThumbnails[personId][window.faceThumbnails[personId].length - 1]; // Use the latest thumbnail
             }
-            
-            // If not found in faceThumbnails, try to get a generic placeholder based on the person ID
-            // Generate a persistent thumbnail color based on the person's name
+
+            // 2. Generate placeholder if no live thumbnail exists
+            console.log(`Generating placeholder thumbnail for ${personId}`);
             const hash = personId.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0);
-            const hue = hash % 360; // 0-359 color hue
-            
-            // Create a data URL for a colored placeholder with initials
+            const hue = hash % 360;
+
             const canvas = document.createElement('canvas');
             canvas.width = 100;
             canvas.height = 100;
             const ctx = canvas.getContext('2d');
-            
-            // Fill background with a generated color
-            ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+
+            ctx.fillStyle = `hsl(${hue}, 60%, 70%)`; // Slightly adjusted color
             ctx.fillRect(0, 0, 100, 100);
-            
-            // Draw the initials
+
             const initials = personId.substring(0, 2).toUpperCase();
             ctx.fillStyle = 'white';
             ctx.font = 'bold 40px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(initials, 50, 50);
-            
-            // Return the data URL
+            ctx.fillText(initials, 50, 55); // Adjust vertical position slightly
+
             return canvas.toDataURL('image/png');
         } catch (error) {
-            console.error('Error creating person thumbnail:', error);
-            return null;
+            console.error(`Error fetching/generating thumbnail for ${personId}:`, error);
+            return null; // Return null on error
         }
     }
 

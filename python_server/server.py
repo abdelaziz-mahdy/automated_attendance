@@ -361,14 +361,16 @@ class CameraProviderServer:
         self._request_count += 1
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received IMPORT_FACES_BATCH request from {request.remote}")
-        
+
         try:
             # Check content type
-            content_type = request.headers.get('Content-Type', '')
+            content_type = request.content_type
             if not content_type.startswith('multipart/'):
-                logger.error(f"Invalid content type: {content_type}")
-                return web.Response(status=400, text="Expected multipart form data")
-            
+                logger.warning(f"Invalid content type: {content_type}")
+                return web.Response(status=400, text="Invalid content type, expected multipart/form-data")
+
+            reader = await request.multipart()
+
             # Prepare result object
             result = {
                 "success": True,
@@ -378,216 +380,128 @@ class CameraProviderServer:
                 "failed_images": [],
                 "errors": []
             }
-            
+
             # Create temporary directory for processing
             temp_dir = tempfile.mkdtemp()
             logger.info(f"Created temp directory: {temp_dir}")
-            
+
             # Initialize tracking variables
             person_name = None
-            image_files = []
-            
+            image_files = [] # Store tuples of (filename, filepath)
+
             try:
-                # Parse multipart form data
-                reader = await request.multipart()
-                logger.info("Started processing multipart data")
-                
-                # Process each part
-                part_index = 0
+                # Process multipart data
                 while True:
                     part = await reader.next()
                     if part is None:
                         break
-                    
-                    part_index += 1
-                    logger.info(f"Processing part #{part_index}: {part.name}")
-                    
+
                     if part.name == 'person_name':
-                        person_name = await part.text()
+                        person_name = (await part.text()).strip()
                         result["person_name"] = person_name
-                        logger.info(f"Found person_name: {person_name}")
+                        logger.info(f"Processing import for person: {person_name}")
                     elif part.name == 'images':
-                        # Get filename from part
                         filename = part.filename
-                        if not filename:
-                            logger.warning(f"Skipping part with missing filename")
-                            continue
-                        
-                        logger.info(f"Processing image file: {filename}")
-                        
-                        if not self._is_valid_image_filename(filename):
-                            logger.warning(f"Invalid image extension: {filename}")
+                        if filename and self._is_valid_image_filename(filename):
+                            # Save file temporarily
+                            file_path = os.path.join(temp_dir, filename)
+                            with open(file_path, 'wb') as f:
+                                while True:
+                                    chunk = await part.read_chunk()
+                                    if not chunk:
+                                        break
+                                    f.write(chunk)
+                            image_files.append((filename, file_path))
+                            logger.debug(f"Saved temporary image: {file_path}")
+                        else:
+                            logger.warning(f"Skipping invalid file: {filename}")
                             result["failed_images"].append(filename)
-                            continue
-                        
-                        # Save file to temporary directory
-                        file_path = os.path.join(temp_dir, filename)
-                        size = 0
-                        with open(file_path, 'wb') as f:
-                            while True:
-                                chunk = await part.read_chunk()
-                                if not chunk:
-                                    break
-                                size += len(chunk)
-                                f.write(chunk)
-                        
-                        logger.info(f"Saved file {filename} ({size} bytes) to {file_path}")
-                        image_files.append((filename, file_path))
-                        result["images_processed"] += 1
-                
-                # Validate required data
+                            result["errors"].append(f"Invalid file type: {filename}")
+
                 if not person_name:
-                    raise ValueError("Missing person_name in request")
-                
+                    raise ValueError("Missing 'person_name' in form data")
                 if not image_files:
-                    raise ValueError("No valid image files received")
-                
-                logger.info(f"Processing {len(image_files)} images for person '{person_name}'")
-                
-                # Process the images
+                    raise ValueError("No valid image files provided")
+
+                # Process saved images using FaceProcessor
                 detected_faces = 0
+                processed_count = 0
                 for filename, file_path in image_files:
                     try:
-                        # Read the image
+                        # Read image using OpenCV
                         img = cv2.imread(file_path)
                         if img is None:
-                            logger.warning(f"Failed to read image file: {filename}")
-                            result["failed_images"].append(filename)
-                            continue
-                        
-                        # Get dimensions for logging
-                        height, width = img.shape[:2]
-                        logger.info(f"Processing image {filename} ({width}x{height})")
-                        
-                        # Process the image
-                        success, face_id = await self._process_face_image(img, person_name)
-                        
+                            raise ValueError(f"Could not read image file: {filename}")
+
+                        # Process using FaceProcessor
+                        success, face_id = await asyncio.get_event_loop().run_in_executor(
+                            None, self.face_processor.process_imported_face_image, img, person_name
+                        )
+
+                        processed_count += 1
                         if success:
-                            logger.info(f"Successfully detected face in {filename}")
                             detected_faces += 1
+                            # face_id should be the person_name if successful
+                            result["face_id"] = face_id # Store the confirmed face_id (person_name)
                         else:
-                            logger.warning(f"No face detected in {filename}")
                             result["failed_images"].append(filename)
-                    except Exception as e:
-                        logger.error(f"Error processing image {filename}: {e}")
+                            # Add more specific error if possible, otherwise generic
+                            if f"No face detected in image for {person_name}" not in str(result["errors"]): # Avoid duplicate no-face errors
+                                result["errors"].append(f"Processing failed for {filename} (e.g., no face or low confidence)")
+
+
+                    except Exception as img_err:
+                        logger.error(f"Error processing image {filename}: {img_err}", exc_info=True)
                         result["failed_images"].append(filename)
-                        result["errors"].append(f"Error processing {filename}: {str(e)}")
-                
-                # Update result - enhanced with more data for the UI
+                        result["errors"].append(f"Error processing {filename}: {str(img_err)}")
+
+                # Update result
+                result["images_processed"] = processed_count
                 result["faces_detected"] = detected_faces
-                result["face_id"] = person_name  # Use person_name as face_id for consistency
-                
-                # Include information to help UI show thumbnails 
-                if detected_faces > 0:
-                    # Add a simple reference timestamp so UI can request the latest image
-                    result["thumbnail_timestamp"] = datetime.datetime.now().isoformat()
-                    
-                # Check if we successfully detected any faces
-                if detected_faces == 0:
+                # face_id is already set if any face was detected successfully
+
+                # Check if overall success based on detected faces
+                if detected_faces == 0 and processed_count > 0:
                     result["success"] = False
-                    error_msg = f"No faces were detected in any of the {len(image_files)} images"
-                    result["errors"].append(error_msg)
-                    logger.warning(error_msg)
-            
+                    if not result["errors"]: # Add a generic error if none specific were added
+                         result["errors"].append(f"No faces successfully processed for {person_name}")
+
+
             finally:
-                # Cleanup temp files
+                # Cleanup temp files and directory
+                logger.info(f"Cleaning up temp directory: {temp_dir}")
                 for _, file_path in image_files:
                     try:
                         if os.path.exists(file_path):
-                            os.unlink(file_path)
+                            os.remove(file_path)
                     except Exception as e:
                         logger.error(f"Error removing temp file {file_path}: {e}")
-                
+
                 try:
-                    os.rmdir(temp_dir)
-                    logger.info(f"Removed temp directory: {temp_dir}")
+                    if os.path.exists(temp_dir):
+                        os.rmdir(temp_dir)
                 except Exception as e:
                     logger.error(f"Error removing temp directory {temp_dir}: {e}")
-            
+
             # Return results
             elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
-            logger.info(f"[Request #{self._request_count}] Processed batch import for '{person_name}' in {elapsed:.2f}ms - {detected_faces} faces detected")
-            
+            logger.info(f"[Request #{self._request_count}] Processed batch import for '{person_name}' in {elapsed:.2f}ms - {result['faces_detected']}/{result['images_processed']} faces detected/processed.")
+
             return web.json_response(result)
-                
+
         except Exception as e:
             logger.error(f"[Request #{self._request_count}] Error handling batch import: {e}", exc_info=True)
-            return web.Response(status=500, text=f"Server error: {str(e)}")
-    
-    async def _process_face_image(self, img, person_name):
-        """Process a single face image for the batch import.
-        
-        Args:
-            img: OpenCV image
-            person_name: Name of the person
-            
-        Returns:
-            tuple: (success, face_id)
-        """
-        try:
-            if self.face_processor.detection_model is None:
-                # If models aren't loaded yet, load them
-                models_dir = os.path.join(os.path.dirname(__file__), 'models')
-                detection_model = os.path.join(models_dir, 'face_detection_yunet.onnx')
-                recognition_model = os.path.join(models_dir, 'face_recognition_sface.onnx')
-                
-                if not os.path.exists(detection_model) or not os.path.exists(recognition_model):
-                    logger.error("Face models not found")
-                    return False, None
-                    
-                success = self.face_processor.load_models(detection_model, recognition_model)
-                if not success:
-                    logger.error("Failed to load face models")
-                    return False, None
-            
-            # Detect faces in the image
-            height, width, _ = img.shape
-            self.face_processor.detection_model.setInputSize((width, height))
-            faces = self.face_processor.detection_model.detect(img)
-            
-            if faces[1] is None or len(faces[1]) == 0:
-                logger.warning(f"No face detected for {person_name}")
-                return False, None
-                
-            # Use the face with highest confidence
-            best_face = None
-            best_confidence = -1
-            
-            for face_info in faces[1]:
-                confidence = face_info[4]
-                if confidence > best_confidence:
-                    best_face = face_info
-                    best_confidence = confidence
-            
-            if best_confidence < 0.9:  # Minimum confidence threshold
-                logger.warning(f"Face confidence too low for {person_name}: {best_confidence}")
-                return False, None
-            
-            # Extract face features
-            aligned_face = self.face_processor.recognition_model.alignCrop(img, best_face)
-            face_feature = self.face_processor.recognition_model.feature(aligned_face)
-            
-            # Add to known faces using person_name as the face_id
-            self.face_processor.known_faces[person_name] = face_feature
-            
-            # Set or update time tracking for this face
-            current_datetime = datetime.datetime.now(self.face_processor.local_timezone)
-            if person_name not in self.face_processor.first_seen_times:
-                self.face_processor.first_seen_times[person_name] = current_datetime
-            self.face_processor.last_seen_times[person_name] = current_datetime
-            
-            # Initialize or update appearance count
-            if person_name not in self.face_processor.face_appearance_count:
-                self.face_processor.face_appearance_count[person_name] = 1
-            else:
-                self.face_processor.face_appearance_count[person_name] += 1
-            
-            return True, person_name
-            
-        except Exception as e:
-            logger.error(f"Error processing face image for {person_name}: {e}")
-            return False, None
-    
+            # Ensure result reflects the error
+            error_result = {
+                "success": False,
+                "person_name": person_name if 'person_name' in locals() else "Unknown",
+                "images_processed": 0,
+                "faces_detected": 0,
+                "failed_images": [f[0] for f in image_files] if 'image_files' in locals() else [],
+                "errors": [f"Server error during import: {str(e)}"]
+            }
+            return web.json_response(error_result, status=500)
+
     def _is_valid_image_filename(self, filename):
         """Check if filename has a valid image extension."""
         valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']

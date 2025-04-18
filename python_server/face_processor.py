@@ -462,34 +462,113 @@ class FaceProcessor:
             
         return result_frame, recognized_faces
         
+    def detect_best_face(self, img):
+        """Detect the face with the highest confidence in an image.
+        
+        Args:
+            img: OpenCV image
+            
+        Returns:
+            tuple: (face_info, confidence) or (None, 0) if no face detected
+        """
+        if self.detection_model is None:
+            logger.error("Detection model not loaded")
+            return None, 0
+            
+        # Set input size for detection
+        height, width, _ = img.shape
+        self.detection_model.setInputSize((width, height))
+        
+        # Detect faces
+        faces = self.detection_model.detect(img)
+        
+        # If no faces detected, return None
+        if faces[1] is None or len(faces[1]) == 0:
+            return None, 0
+        
+        # Find face with highest confidence
+        best_face = None
+        best_confidence = -1
+        
+        for face_info in faces[1]:
+            confidence = face_info[4]
+            if confidence > best_confidence:
+                best_face = face_info
+                best_confidence = confidence
+                
+        return best_face, best_confidence
+    
+    def extract_face_feature(self, img, face_info):
+        """Extract face features from aligned face.
+        
+        Args:
+            img: OpenCV image
+            face_info: Face information from detector
+            
+        Returns:
+            numpy.ndarray: Face feature vector or None if failed
+        """
+        if self.recognition_model is None:
+            logger.error("Recognition model not loaded")
+            return None
+            
+        try:
+            # Align and extract face
+            aligned_face = self.recognition_model.alignCrop(img, face_info)
+            face_feature = self.recognition_model.feature(aligned_face)
+            return face_feature
+        except Exception as e:
+            logger.error(f"Error extracting face feature: {e}")
+            return None
+    
+    def update_face_tracking_data(self, face_id, face_feature):
+        """Update tracking data for a face (timestamps, counts, etc).
+        
+        Args:
+            face_id: Identifier for the face
+            face_feature: Feature vector for the face
+        """
+        # Get current datetime with timezone
+        current_datetime = datetime.datetime.now(self.local_timezone)
+        
+        # Save or update feature in known faces
+        self.known_faces[face_id] = face_feature
+        
+        # Update timestamps
+        if face_id not in self.first_seen_times:
+            self.first_seen_times[face_id] = current_datetime
+            logger.info(f"First time seeing {face_id}")
+        
+        # Always update last seen time
+        self.last_seen_times[face_id] = current_datetime
+        
+        # Update appearance count
+        if face_id not in self.face_appearance_count:
+            self.face_appearance_count[face_id] = 1
+        else:
+            self.face_appearance_count[face_id] += 1
+            
+        logger.info(f"Updated tracking data for {face_id}. Total appearances: {self.face_appearance_count[face_id]}")
+    
     def add_face(self, frame, face_id):
         """Add a face to the known faces database."""
         if self.detection_model is None or self.recognition_model is None:
             logger.error("Detection or recognition model not loaded")
             return False
             
-        # Detect faces in the frame
-        height, width, _ = frame.shape
-        self.detection_model.setInputSize((width, height))
-        faces = self.detection_model.detect(frame)
+        # Use shared method to detect the best face  
+        face_info, confidence = self.detect_best_face(frame)
         
-        if faces[1] is None or len(faces[1]) == 0:
-            logger.error("No face detected for registration")
+        if face_info is None or confidence < FR.DETECTION_CONFIDENCE_THRESHOLD:
+            logger.error(f"No suitable face detected for registration. Confidence: {confidence}")
+            return False
+        
+        # Use shared method to extract features
+        face_feature = self.extract_face_feature(frame, face_info)
+        if face_feature is None:
+            logger.error("Failed to extract face features")
             return False
             
-        # Use the first (hopefully only) face
-        face_info = faces[1][0]
-        
-        # Extract confidence
-        confidence = face_info[4]
-        if confidence < FR.DETECTION_CONFIDENCE_THRESHOLD:
-            logger.error(f"Face confidence too low for registration: {confidence}")
-            return False
-        
-        # Align and extract face feature
-        aligned_face = self.recognition_model.alignCrop(frame, face_info)
-        face_feature = self.recognition_model.feature(aligned_face)
-        
         # Check if this face is similar to any existing known face
         matching_face_id, similarity_scores = self._find_matching_known_face(face_feature)
         
@@ -497,18 +576,22 @@ class FaceProcessor:
             logger.info(f"Face similar to existing face '{matching_face_id}' with similarity {similarity_scores[0]:.2f}")
             # We'll continue adding it but notify caller about similarity
             
-        # Store the face feature
+        # Store the face feature and update tracking data  
         self.known_faces[face_id] = face_feature
-        logger.info(f"Added face with ID: {face_id}")
         
-        # Set or update time tracking for this face
+        # Update tracking timestamps and counts
         current_datetime = datetime.datetime.now(self.local_timezone)
         if face_id not in self.first_seen_times:
             self.first_seen_times[face_id] = current_datetime
         self.last_seen_times[face_id] = current_datetime
         
-        # If this face is similar to a tracked face, update the tracking data
-        current_time = time.time()
+        # Initialize or update appearance count
+        if face_id not in self.face_appearance_count:
+            self.face_appearance_count[face_id] = 1
+        else:
+            self.face_appearance_count[face_id] += 1
+            
+        # Check if similar to tracked faces and merge if appropriate
         for tracked_id, tracked_data in list(self.tracked_faces.items()):
             if tracked_id.startswith("Face_"):  # Only update auto-generated IDs
                 is_similar = self.comparison_service.are_features_similar(
@@ -516,29 +599,124 @@ class FaceProcessor:
                     FR.COSINE_THRESHOLD, FR.NORM_L2_THRESHOLD)
                 
                 if is_similar:
-                    # Transfer appearance count to the named face
-                    if tracked_id in self.face_appearance_count:
-                        if face_id not in self.face_appearance_count:
-                            self.face_appearance_count[face_id] = self.face_appearance_count[tracked_id]
-                        else:
-                            self.face_appearance_count[face_id] += self.face_appearance_count[tracked_id]
-                        del self.face_appearance_count[tracked_id]
-                    
-                    # Transfer time tracking information
-                    if tracked_id in self.first_seen_times:
-                        # Only update if the tracked face was seen earlier
-                        if face_id not in self.first_seen_times or self.first_seen_times[tracked_id] < self.first_seen_times[face_id]:
-                            self.first_seen_times[face_id] = self.first_seen_times[tracked_id]
-                        del self.first_seen_times[tracked_id]
-                    
-                    if tracked_id in self.last_seen_times:
-                        # Only update if the tracked face was seen more recently
-                        if face_id not in self.last_seen_times or self.last_seen_times[tracked_id] > self.last_seen_times[face_id]:
-                            self.last_seen_times[face_id] = self.last_seen_times[tracked_id]
-                        del self.last_seen_times[tracked_id]
-                    
-                    # Remove the auto-generated entry
-                    del self.tracked_faces[tracked_id]
+                    # Use the helper method for merging
+                    self._merge_face_data(tracked_id, face_id)
                     logger.info(f"Updated tracking information for newly named face: {face_id}")
         
+        logger.info(f"Successfully added face: {face_id}")
         return True
+
+    def process_imported_face_image(self, img, person_name):
+        """Process a single face image for batch import and add to known faces.
+        
+        Args:
+            img: OpenCV image (numpy array)
+            person_name: Name of the person (used as face_id)
+            
+        Returns:
+            tuple: (success, face_id) - face_id will be person_name if successful
+        """
+        try:
+            # Ensure models are loaded
+            if self.detection_model is None or self.recognition_model is None:
+                logger.error("Face models not loaded, cannot process imported image.")
+                # Attempt to load models if not already loaded
+                assets_dir = os.path.join(os.path.dirname(__file__),'..', 'assets')
+                detection_model_path = os.path.join(assets_dir, 'face_detection_yunet_2023mar.onnx')
+                recognition_model_path = os.path.join(assets_dir, 'face_recognition_sface_2021dec.onnx')
+                if not self.load_models(detection_model_path, recognition_model_path):
+                    return False, None
+            
+            # 1. Use the shared method to detect the best face
+            face_info, confidence = self.detect_best_face(img)
+            
+            # Check if a face was detected and meets confidence threshold
+            # Use a slightly lower threshold for import to be more permissive
+            min_import_confidence = 0.85
+            if face_info is None or confidence < min_import_confidence:
+                if face_info is None:
+                    logger.warning(f"No face detected in image for {person_name}")
+                else:
+                    logger.warning(f"Face confidence too low for import ({person_name}): {confidence:.2f} < {min_import_confidence}")
+                return False, None
+                
+            # 2. Use the shared method to extract face features 
+            face_feature = self.extract_face_feature(img, face_info)
+            if face_feature is None:
+                logger.error(f"Failed to extract face features for {person_name}")
+                return False, None
+                
+            # 3. Update tracking data (known faces, timestamps, counts)
+            # For imports, we may want to avoid incrementing the count too much
+            # Let's conditionally check if this is a new face or existing face
+            is_new_face = person_name not in self.known_faces
+            
+            # Store the face feature
+            self.known_faces[person_name] = face_feature
+            logger.info(f"{'Added' if is_new_face else 'Updated'} face with ID: {person_name}")
+            
+            # Update timestamps
+            current_datetime = datetime.datetime.now(self.local_timezone)
+            if person_name not in self.first_seen_times:
+                self.first_seen_times[person_name] = current_datetime
+            self.last_seen_times[person_name] = current_datetime
+            
+            # For imports, update count conservatively
+            if person_name not in self.face_appearance_count:
+                self.face_appearance_count[person_name] = 1
+            else:
+                # When importing existing people, don't inflate their count artificially
+                # Just ensure it's at least 1
+                self.face_appearance_count[person_name] = max(1, self.face_appearance_count[person_name])
+                
+            # 4. Check if similar to any tracked faces and merge if appropriate
+            # This reuses logic from add_face
+            for tracked_id, tracked_data in list(self.tracked_faces.items()):
+                if tracked_id.startswith("Face_"):  # Only merge with auto-generated IDs
+                    is_similar = self.comparison_service.are_features_similar(
+                        face_feature, tracked_data['feature'],
+                        FR.COSINE_THRESHOLD, FR.NORM_L2_THRESHOLD)
+                    
+                    if is_similar:
+                        logger.info(f"Import: {person_name} is similar to tracked face {tracked_id}, merging data")
+                        self._merge_face_data(tracked_id, person_name)
+                        break
+                        
+            return True, person_name
+            
+        except Exception as e:
+            logger.error(f"Error processing imported face image for {person_name}: {e}", exc_info=True)
+            return False, None
+    
+    def _merge_face_data(self, source_id, target_id):
+        """Merge data from source face into target face (internal helper).
+        
+        Args:
+            source_id: ID of source face (typically auto-generated)
+            target_id: ID of target face (typically named by user)
+        """
+        # Transfer appearance count
+        if source_id in self.face_appearance_count:
+            if target_id not in self.face_appearance_count:
+                self.face_appearance_count[target_id] = self.face_appearance_count[source_id]
+            else:
+                self.face_appearance_count[target_id] += self.face_appearance_count[source_id]
+            del self.face_appearance_count[source_id]
+        
+        # Transfer first_seen time if earlier
+        if source_id in self.first_seen_times:
+            if target_id not in self.first_seen_times or self.first_seen_times[source_id] < self.first_seen_times[target_id]:
+                self.first_seen_times[target_id] = self.first_seen_times[source_id]
+            del self.first_seen_times[source_id]
+            
+        # Transfer last_seen time if later
+        if source_id in self.last_seen_times:
+            if target_id not in self.last_seen_times or self.last_seen_times[source_id] > self.last_seen_times[target_id]:
+                self.last_seen_times[target_id] = self.last_seen_times[source_id]
+            del self.last_seen_times[source_id]
+            
+        # Remove the source entry from tracked_faces if it exists
+        if source_id in self.tracked_faces:
+            del self.tracked_faces[source_id]
+            
+        logger.info(f"Merged data from {source_id} into {target_id}")
