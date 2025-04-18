@@ -548,26 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Add thumbnail container
                 const thumbnailContainer = document.createElement('div');
                 thumbnailContainer.className = 'person-thumbnail';
-                
-                // Try to get a thumbnail for this person
-                fetchPersonThumbnail(person.id || person.name)
-                    .then(thumbnailUrl => {
-                        if (thumbnailUrl) {
-                            // Create image element if we have a thumbnail
-                            const img = document.createElement('img');
-                            img.src = thumbnailUrl;
-                            img.alt = person.name;
-                            img.className = 'person-thumbnail-img';
-                            thumbnailContainer.appendChild(img);
-                        } else {
-                            // Use placeholder if no thumbnail
-                            thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
-                        }
-                    })
-                    .catch(() => {
-                        // Use placeholder on error
-                        thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
-                    });
+                thumbnailContainer.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>'; // Loading indicator
                 
                 // Create person details container
                 const detailsContainer = document.createElement('div');
@@ -586,6 +567,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 personItem.appendChild(detailsContainer);
                 
                 importedPersonsList.appendChild(personItem);
+                
+                // Try to get a thumbnail for this person
+                fetchPersonThumbnail(person.id || person.name)
+                    .then(thumbnailUrl => {
+                        if (thumbnailUrl) {
+                            // Create image element if we have a thumbnail
+                            thumbnailContainer.innerHTML = ''; // Clear loading spinner
+                            const img = document.createElement('img');
+                            img.src = thumbnailUrl;
+                            img.alt = person.name;
+                            img.className = 'person-thumbnail-img';
+                            thumbnailContainer.appendChild(img);
+                        } else {
+                            // Use placeholder if no thumbnail
+                            thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
+                        }
+                    })
+                    .catch(() => {
+                        // Use placeholder on error
+                        thumbnailContainer.innerHTML = '<i class="fas fa-user"></i>';
+                    });
             });
         } else {
             importedPersonsList.innerHTML = '<div class="import-placeholder">No persons were imported</div>';
@@ -656,24 +658,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 return window.faceThumbnails[personId][0]; // Return the first thumbnail
             }
             
-            // Try to get face data from server
-            const response = await fetch('/get_face_data');
-            if (!response.ok) return null;
+            // If not found in faceThumbnails, try to get a generic placeholder based on the person ID
+            // Generate a persistent thumbnail color based on the person's name
+            const hash = personId.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0);
+            const hue = hash % 360; // 0-359 color hue
             
-            const data = await response.json();
-            if (!data.faces || data.faces.length === 0) return null;
+            // Create a data URL for a colored placeholder with initials
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
             
-            // Look for a face matching our person ID
-            const matchingFace = data.faces.find(face => face.id === personId);
-            if (!matchingFace) return null;
+            // Fill background with a generated color
+            ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+            ctx.fillRect(0, 0, 100, 100);
             
-            // Generate a timestamp to avoid browser caching
-            const timestamp = new Date().getTime();
+            // Draw the initials
+            const initials = personId.substring(0, 2).toUpperCase();
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 40px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(initials, 50, 50);
             
-            // Return a URL to get the most recent image with detection for this face
-            return `/get_image_with_recognition?t=${timestamp}`;
+            // Return the data URL
+            return canvas.toDataURL('image/png');
         } catch (error) {
-            console.error('Error fetching person thumbnail:', error);
+            console.error('Error creating person thumbnail:', error);
             return null;
         }
     }

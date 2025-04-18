@@ -67,27 +67,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 tabContents.forEach(content => content.classList.remove('active'));
                 
                 // Add active class to selected button and content
-                button.addEventListener('click', () => {
-                    const tabId = button.dataset.tab;
-                    
-                    // Remove active class from all buttons and contents
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    tabContents.forEach(content => content.classList.remove('active'));
-                    
-                    // Add active class to selected button and content
-                    button.classList.add('active');
-                    document.getElementById(tabId).classList.add('active');
-                    
-                    // If switching to faces tab, refresh face counts
-                    if (tabId === 'faces-tab') {
-                        updateFaceCounts();
-                    }
-                    
-                    // If switching to attendance tab, refresh attendance data
-                    if (tabId === 'attendance-tab') {
-                        updateAttendance();
-                    }
-                });
+                button.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                
+                // If switching to faces tab, refresh face counts
+                if (tabId === 'faces-tab') {
+                    updateFaceCounts();
+                }
+                
+                // If switching to attendance tab, refresh attendance data
+                if (tabId === 'attendance-tab') {
+                    updateAttendance();
+                }
             });
         });
     }
