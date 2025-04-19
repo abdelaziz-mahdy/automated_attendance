@@ -3,12 +3,17 @@
 # Exit on error
 set -e
 
+# Get current directory (should be inside python_server in the cloned repo)
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+# Default to parent directory of the script location
+DEFAULT_INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
+
 # Default values
 CAMERA_TYPE="auto"
 VERBOSE=1
 NON_INTERACTIVE=0
 SKIP_REBOOT=0
-INSTALL_DIR="$HOME/camera_server"
+INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 
 # Parse command-line arguments
 while getopts "c:i:vnrh" opt; do
@@ -31,7 +36,7 @@ while getopts "c:i:vnrh" opt; do
     h)
       echo "Usage: $0 [-c camera_type] [-i install_dir] [-v] [-n] [-r] [-h]"
       echo "  -c camera_type   Camera type: 'auto', 'opencv', 'picamera', or 'picamera2'"
-      echo "  -i install_dir   Installation directory (default: ~/camera_server)"
+      echo "  -i install_dir   Installation directory (default: parent directory of this script)"
       echo "  -v               Verbose mode"
       echo "  -n               Non-interactive mode"
       echo "  -r               Skip reboot prompt"
@@ -45,12 +50,10 @@ while getopts "c:i:vnrh" opt; do
   esac
 done
 
-# Get current directory (should be inside python_server in the cloned repo)
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-
 echo "===================================="
 echo "Camera Server - Cron Setup"
 echo "===================================="
+[ "$VERBOSE" -eq 1 ] && echo "📂 Using installation directory: $INSTALL_DIR"
 
 # Function to auto-detect best available camera
 detect_camera_type() {
@@ -159,67 +162,57 @@ cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/requirements-opencv.txt" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/requirements-picamera.txt" "$INSTALL_DIR/"
 
-# Copy run scripts
-[ "$VERBOSE" -eq 1 ] && echo "📋 Copying run scripts..."
-cp "$SCRIPT_DIR/run_opencv_camera.sh" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/run_picamera_camera.sh" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/run_picamera2_camera.sh" "$INSTALL_DIR/"
+# Copy setup_and_run.sh script (instead of individual run scripts)
+[ "$VERBOSE" -eq 1 ] && echo "📋 Copying setup and run script..."
+cp "$SCRIPT_DIR/setup_and_run.sh" "$INSTALL_DIR/"
+chmod +x "$INSTALL_DIR/setup_and_run.sh"
 
-# Make scripts executable
-chmod +x "$INSTALL_DIR/run_opencv_camera.sh"
-chmod +x "$INSTALL_DIR/run_picamera_camera.sh"
-chmod +x "$INSTALL_DIR/run_picamera2_camera.sh"
+# Create wrapper script for the cron job
+WRAPPER_SCRIPT="$INSTALL_DIR/run_camera_server.sh"
+[ "$VERBOSE" -eq 1 ] && echo "📝 Creating wrapper script for cron job..."
 
-# Create symlink to the selected camera script
-if [ "$CAMERA_TYPE" = "picamera2" ]; then
-    ln -sf "$INSTALL_DIR/run_picamera2_camera.sh" "$INSTALL_DIR/run_camera_server.sh"
-elif [ "$CAMERA_TYPE" = "picamera" ]; then
-    ln -sf "$INSTALL_DIR/run_picamera_camera.sh" "$INSTALL_DIR/run_camera_server.sh"
-else
-    ln -sf "$INSTALL_DIR/run_opencv_camera.sh" "$INSTALL_DIR/run_camera_server.sh"
-fi
-
-# Set up the virtual environment in the install directory
-[ "$VERBOSE" -eq 1 ] && echo "🔧 Setting up virtual environment in installation directory..."
+cat > "$WRAPPER_SCRIPT" << EOF
+#!/bin/bash
 cd "$INSTALL_DIR"
-if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
-    [ "$VERBOSE" -eq 1 ] && echo "Creating virtual environment..."
-    rm -rf .venv
-    
-    # For PiCamera2, use system-site-packages to access system-installed picamera2
-    if [ "$CAMERA_TYPE" = "picamera2" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
-        [ "$VERBOSE" -eq 1 ] && echo "Using system-site-packages for camera libraries..."
-        python3 -m venv --system-site-packages .venv
-    else
-        # For OpenCV, create a standard virtual environment
-        uv venv .venv
-    fi
-    
-    source .venv/bin/activate
-    if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
-        uv pip install -r requirements-picamera.txt 
-    else
-        uv pip install -r requirements-opencv.txt
-    fi
-else
-    [ "$VERBOSE" -eq 1 ] && echo "Updating existing virtual environment..."
-    source .venv/bin/activate
-    if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
-        uv pip install --upgrade -r requirements-picamera.txt 
-    else
-        uv pip install --upgrade -r requirements-opencv.txt
-    fi
+# Log file setup
+LOG_FILE="\$HOME/camera_server.log"
+
+# Start with timestamp
+echo "=========================================" >> "\$LOG_FILE"
+echo "\$(date) - Starting camera server ($CAMERA_TYPE)" >> "\$LOG_FILE"
+echo "=========================================" >> "\$LOG_FILE"
+
+# Check if the server is already running
+if pgrep -f "python main.py --camera" > /dev/null; then
+    echo "WARNING: Camera server already running. Killing existing process..." >> "\$LOG_FILE"
+    pkill -f "python main.py --camera" || echo "Failed to kill existing process" >> "\$LOG_FILE"
+    sleep 2
 fi
 
-# Create or update cron job
-[ "$VERBOSE" -eq 1 ] && echo "⏰ Setting up cron job for automatic startup..."
-CRON_JOB="@reboot $INSTALL_DIR/run_camera_server.sh"
+# Rotate log if it's getting large (>10MB)
+if [ -f "\$LOG_FILE" ] && [ \$(stat -c%s "\$LOG_FILE" 2>/dev/null || stat -f%z "\$LOG_FILE") -gt 10485760 ]; then
+    echo "Rotating log file (exceeds 10MB)" >> "\$LOG_FILE" 
+    mv "\$LOG_FILE" "\${LOG_FILE}.old"
+    echo "\$(date) - Log rotated, starting new log" > "\$LOG_FILE"
+fi
 
-# Remove any existing cron jobs for this script
-crontab -l 2>/dev/null | grep -v "run_camera_server.sh\|run_opencv_camera.sh\|run_picamera_camera.sh\|run_picamera2_camera.sh" | crontab -
+# Run the setup_and_run script with the correct parameters
+./setup_and_run.sh -c $CAMERA_TYPE -n >> "\$LOG_FILE" 2>&1
 
-# Add new cron job
-(crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+# This code only runs if the server exits
+EXIT_CODE=\$?
+echo "\$(date) - Server exited with code \$EXIT_CODE" >> "\$LOG_FILE"
+
+# Try to restart if it crashed
+if [ \$EXIT_CODE -ne 0 ]; then
+    echo "Server crashed, waiting 10 seconds before restarting..." >> "\$LOG_FILE"
+    sleep 10
+    echo "\$(date) - Restarting server..." >> "\$LOG_FILE"
+    ./setup_and_run.sh -c $CAMERA_TYPE -n >> "\$LOG_FILE" 2>&1
+fi
+EOF
+
+chmod +x "$WRAPPER_SCRIPT"
 
 # Install system dependencies if using PiCamera/PiCamera2
 if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
@@ -238,6 +231,16 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
         sudo usermod -a -G video $USER
     fi
 fi
+
+# Create or update cron job
+[ "$VERBOSE" -eq 1 ] && echo "⏰ Setting up cron job for automatic startup..."
+CRON_JOB="@reboot $INSTALL_DIR/run_camera_server.sh"
+
+# Remove any existing cron jobs for this script
+crontab -l 2>/dev/null | grep -v "run_camera_server.sh\|run_opencv_camera.sh\|run_picamera_camera.sh\|run_picamera2_camera.sh" | crontab -
+
+# Add new cron job
+(crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
 # Status message
 if [ "$UPDATE_MODE" -eq 1 ]; then
