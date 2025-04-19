@@ -251,46 +251,56 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update face thumbnails in the UI
     function updateFaceThumbnails(faceElement, faceId) {
-        // First check if the face has a server-generated thumbnail URL
-        const faceData = window.faceData && window.faceData[faceId];
-        const serverThumbnail = faceData && faceData.thumbnail_url;
-        
-        // If we don't have any thumbnails (server or client-side), return early
-        if ((!faceThumbnails[faceId] || faceThumbnails[faceId].length === 0) && !serverThumbnail) return;
+        // Get the latest data for this face from the global faceData
+        const currentFaceData = window.faceData && window.faceData[faceId];
         
         // Find or create image container
         let imgContainer = faceElement.querySelector('.face-img-container');
         if (!imgContainer) return;
-        
+
         // Clear existing content
         imgContainer.innerHTML = '';
-        
-        // Use server thumbnail if available, otherwise use client-side thumbnails
-        if (serverThumbnail) {
+
+        // Prioritize server-provided thumbnail URL
+        if (currentFaceData && currentFaceData.thumbnail_url) {
             const mainImg = document.createElement('img');
             mainImg.className = 'face-img';
-            mainImg.src = serverThumbnail;
+            mainImg.src = currentFaceData.thumbnail_url;
             mainImg.alt = `Face ${faceId}`;
             imgContainer.appendChild(mainImg);
         } else if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
-            // Use the latest thumbnail as the main image
-            const latestThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
+            // Fallback to client-side captured thumbnails if server URL is missing
+            const latestClientThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
             const mainImg = document.createElement('img');
             mainImg.className = 'face-img';
-            mainImg.src = latestThumbnail;
+            mainImg.src = latestClientThumbnail;
             mainImg.alt = `Face ${faceId}`;
             imgContainer.appendChild(mainImg);
+        } else {
+             // Final fallback to placeholder
+             const placeholder = document.createElement('div');
+             placeholder.className = 'face-img-placeholder';
+             placeholder.innerHTML = '<i class="fas fa-user"></i>';
+             imgContainer.appendChild(placeholder);
         }
+
+        // Update thumbnails row using server data if available, else client data
+        let thumbnailsToShow = (currentFaceData && currentFaceData.all_thumbnail_urls) || faceThumbnails[faceId] || [];
         
-        // Create thumbnails row if more than one thumbnail exists
-        if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 1) {
-            let thumbnailsContainer = faceElement.querySelector('.face-thumbnails');
+        let thumbnailsContainer = faceElement.querySelector('.face-thumbnails');
+        if (thumbnailsToShow.length > 1) {
             if (!thumbnailsContainer) {
                 thumbnailsContainer = document.createElement('div');
                 thumbnailsContainer.className = 'face-thumbnails';
                 const contentContainer = faceElement.querySelector('.face-content');
                 if (contentContainer) {
-                    contentContainer.appendChild(thumbnailsContainer);
+                    // Insert thumbnails before the stats
+                    const statsElement = contentContainer.querySelector('.face-stats');
+                    if (statsElement) {
+                        contentContainer.insertBefore(thumbnailsContainer, statsElement);
+                    } else {
+                        contentContainer.appendChild(thumbnailsContainer);
+                    }
                 }
             }
             
@@ -298,20 +308,22 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbnailsContainer.innerHTML = '';
             
             // Add thumbnails
-            faceThumbnails[faceId].forEach((thumbnail, index) => {
+            thumbnailsToShow.forEach((thumbnailUrl, index) => {
                 const thumbImg = document.createElement('img');
                 thumbImg.className = 'face-thumbnail';
-                thumbImg.src = thumbnail;
+                thumbImg.src = thumbnailUrl; // Use the URL (could be server or client)
                 thumbImg.alt = `Thumbnail ${index + 1}`;
                 thumbImg.addEventListener('click', () => {
-                    // When clicked, set this thumbnail as the main image
                     const mainImg = imgContainer.querySelector('.face-img');
                     if (mainImg) {
-                        mainImg.src = thumbnail;
+                        mainImg.src = thumbnailUrl;
                     }
                 });
                 thumbnailsContainer.appendChild(thumbImg);
             });
+        } else if (thumbnailsContainer) {
+            // Remove container if not enough thumbnails
+            thumbnailsContainer.remove();
         }
     }
     
@@ -592,14 +604,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const imgContainer = document.createElement('div');
             imgContainer.className = 'face-img-container';
             
-            // If we have thumbnails, use them, otherwise use placeholder
-            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
+            // Use the thumbnail_url provided by the server if available
+            if (data.thumbnail_url) {
                 const img = document.createElement('img');
                 img.className = 'face-img';
-                img.src = faceThumbnails[faceId][faceThumbnails[faceId].length - 1]; // Latest thumbnail
+                img.src = data.thumbnail_url; // Use the full URL from server
                 img.alt = `Face ${faceId}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback to placeholder if no server URL
                 const placeholder = document.createElement('div');
                 placeholder.className = 'face-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user"></i>';
@@ -639,21 +652,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             contentContainer.appendChild(faceHeader);
             
-            // Add thumbnails gallery if we have more than one thumbnail
-            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 1) {
+            // Add thumbnails gallery using all_thumbnail_urls from server
+            if (data.all_thumbnail_urls && data.all_thumbnail_urls.length > 1) {
                 const thumbnailsContainer = document.createElement('div');
                 thumbnailsContainer.className = 'face-thumbnails';
                 
-                faceThumbnails[faceId].forEach((thumbnail, index) => {
+                data.all_thumbnail_urls.forEach((thumbnailUrl, index) => {
                     const thumbImg = document.createElement('img');
                     thumbImg.className = 'face-thumbnail';
-                    thumbImg.src = thumbnail;
+                    thumbImg.src = thumbnailUrl; // Use the full URL from server
                     thumbImg.alt = `Thumbnail ${index + 1}`;
                     thumbImg.addEventListener('click', () => {
                         // When clicked, set this thumbnail as the main image
                         const mainImg = imgContainer.querySelector('.face-img');
                         if (mainImg) {
-                            mainImg.src = thumbnail;
+                            mainImg.src = thumbnailUrl;
                         }
                     });
                     thumbnailsContainer.appendChild(thumbImg);
@@ -724,13 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
             faceCountsList.appendChild(faceItem);
         });
         
-        // Update any face thumbnails
-        for (const faceId in faceThumbnails) {
-            const faceElement = document.querySelector(`.face-count-item[data-face-id="${faceId}"]`);
-            if (faceElement) {
-                updateFaceThumbnails(faceElement, faceId);
-            }
-        }
+        // No need to call updateFaceThumbnails separately here as server data includes URLs
     }
     
     // Start editing a face name
@@ -1584,15 +1591,18 @@ class AttendanceManager {
             const imgContainer = document.createElement('div');
             imgContainer.className = 'attendance-img-container';
             
-            // If we have thumbnails, use them, otherwise use placeholder
-            const thumbnail = person.getLatestThumbnail();
-            if (thumbnail) {
+            // Get thumbnail URL from faceData if available
+            const personData = window.faceData && window.faceData[person.id];
+            const thumbnailUrl = personData && personData.thumbnail_url;
+
+            if (thumbnailUrl) {
                 const img = document.createElement('img');
                 img.className = 'attendance-img';
-                img.src = thumbnail;
+                img.src = thumbnailUrl; // Use server URL
                 img.alt = `Face ${person.id}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback placeholder
                 const placeholder = document.createElement('div');
                 placeholder.className = 'attendance-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user"></i>';
@@ -1638,63 +1648,65 @@ class AttendanceManager {
             attendanceList.appendChild(attendanceItem);
         });
     }
-    
+
     renderAbsenteesList() {
         const absenteesList = document.getElementById('absenteesList');
         absenteesList.innerHTML = '';
-        
+
         if (this.absent.length === 0) {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'attendance-placeholder';
-            placeholder.textContent = 'All expected people are present';
-            absenteesList.appendChild(placeholder);
-            return;
+             const placeholder = document.createElement('div');
+             placeholder.className = 'attendance-placeholder';
+             placeholder.textContent = 'All expected people are present';
+             absenteesList.appendChild(placeholder);
+             return;
         }
-        
-        // Create attendance items for each absent person
+
         this.absent.forEach(person => {
             const attendanceItem = document.createElement('div');
             attendanceItem.className = 'attendance-item';
-            
+
             // Image container
             const imgContainer = document.createElement('div');
             imgContainer.className = 'attendance-img-container';
-            
-            // If we have thumbnails, use them, otherwise use placeholder
-            const thumbnail = person.getLatestThumbnail();
-            if (thumbnail) {
+
+            // Get thumbnail URL from faceData if available
+            const personData = window.faceData && window.faceData[person.id];
+            const thumbnailUrl = personData && personData.thumbnail_url;
+
+            if (thumbnailUrl) {
                 const img = document.createElement('img');
                 img.className = 'attendance-img';
-                img.src = thumbnail;
+                img.src = thumbnailUrl; // Use server URL
                 img.alt = `Face ${person.id}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback placeholder
                 const placeholder = document.createElement('div');
                 placeholder.className = 'attendance-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user-xmark"></i>';
                 imgContainer.appendChild(placeholder);
             }
-            
+
             attendanceItem.appendChild(imgContainer);
-            
+
             // Attendance content
             const contentContainer = document.createElement('div');
             contentContainer.className = 'attendance-content';
-            
+
             // Person name
             const nameElement = document.createElement('div');
             nameElement.className = 'attendance-name';
             nameElement.textContent = person.id;
-            
+
             // Absence message
             const statusElement = document.createElement('div');
             statusElement.className = 'attendance-count';
             statusElement.innerHTML = '<i class="fas fa-calendar-xmark"></i> Not seen today';
-            
+
             contentContainer.appendChild(nameElement);
             contentContainer.appendChild(statusElement);
             attendanceItem.appendChild(contentContainer);
-            
+
             absenteesList.appendChild(attendanceItem);
         });
     }

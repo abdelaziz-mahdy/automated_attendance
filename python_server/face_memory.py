@@ -27,12 +27,19 @@ class FaceMemory:
         self._save_requested = False
         self._last_save_time = 0  # Initialize to 0 to force initial save after loading
         self._save_interval = 60  # Save every 60 seconds
+        self._min_save_cooldown = 30 # Minimum seconds between any save operations
         self._lock = threading.RLock()  # Reentrant lock for thread safety
         
         # Save status tracking for UI
         self._next_scheduled_save = 0
         self._auto_save_in_progress = False
         self._manual_save_requested = False
+        
+        # Save progress tracking
+        self._save_progress = 0.0
+        self._save_total_items = 0
+        self._save_processed_items = 0
+        self._save_current_step = "idle"
         
         # Create storage directory if it doesn't exist
         if self.storage_dir and not os.path.exists(self.storage_dir):
@@ -76,7 +83,6 @@ class FaceMemory:
         """Worker function that periodically saves data."""
         while not getattr(self, "_stop_periodic_save", False):
             try:
-                # Check if save is requested or if it's been too long since last save
                 current_time = time.time()
                 
                 with self._lock:
@@ -84,50 +90,65 @@ class FaceMemory:
                     self._next_scheduled_save = self._last_save_time + self._save_interval
                     time_remaining = max(0, self._next_scheduled_save - current_time)
                     
+                    # Check cooldown: Ensure at least 30 seconds have passed since the last save completed
+                    can_save_now = (current_time - self._last_save_time) >= self._min_save_cooldown
+                    
                     save_due_to_interval = (current_time >= self._next_scheduled_save)
                     save_needed = self._save_requested or save_due_to_interval
                     
-                    if save_needed and not self._save_in_progress:
+                    # Only save if needed, not already saving, and cooldown period has passed
+                    if save_needed and not self._save_in_progress and can_save_now:
                         # Set auto-save flag if triggered by interval
                         self._auto_save_in_progress = save_due_to_interval
                         self._manual_save_requested = self._save_requested
                         
-                        # If a save is needed, perform it
-                        self.save_to_storage()
-                        self._save_requested = False
+                        # Perform the save
+                        self.save_to_storage() # This now initiates the background save
+                        self._save_requested = False # Reset manual request flag
                         
-                        # Don't update _last_save_time here - it will be updated in _save_completed
-                        # This allows the countdown to continue while save is in progress
-                        
-                        # Log the save with appropriate message
+                        # Log the save initiation
                         if self._auto_save_in_progress:
                             logger.info(f"Auto-save initiated at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
                         else:
                             logger.info(f"Manual save initiated at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
+                    elif save_needed and not self._save_in_progress and not can_save_now:
+                        # Log if save is needed but cooldown is active
+                        logger.debug(f"Save needed but cooldown active. {self._min_save_cooldown - (current_time - self._last_save_time):.1f}s remaining.")
+                        # Ensure the save is requested so it happens after cooldown
+                        self._save_requested = True 
+                        
             except Exception as e:
                 logger.error(f"Error in periodic save worker: {e}", exc_info=True)
+                # Reset flags on error
                 self._auto_save_in_progress = False
                 self._manual_save_requested = False
                 self._save_in_progress = False
             
-            # Sleep briefly before checking again (checking more frequently than the save interval)
-            time.sleep(5)  # Check every 5 seconds if a save is needed
+            # Sleep briefly before checking again
+            time.sleep(5)
     
     def request_save(self):
-        """Request a manual save operation to happen on next check."""
+        """Request a manual save operation to happen on next check, respecting cooldown."""
         with self._lock:
-            # Only set save_requested if we're not already in a save operation
-            # and if it's been at least 10 seconds since last save was initiated
             current_time = time.time()
-            min_time_between_saves = 10  # Minimum seconds between save requests
             
-            if not self._save_in_progress and not self._save_requested and \
-               (current_time - self._last_save_time) > min_time_between_saves:
+            # Check if a save is already in progress or requested
+            if self._save_in_progress or self._save_requested:
+                logger.debug("Save request ignored - save already in progress or requested.")
+                return
+                
+            # Check if cooldown period has passed since the last save completed
+            if (current_time - self._last_save_time) < self._min_save_cooldown:
+                logger.debug(f"Manual save request ignored - cooldown active. {self._min_save_cooldown - (current_time - self._last_save_time):.1f}s remaining.")
+                # Still set save_requested to true so it saves after cooldown
                 self._save_requested = True
-                self._manual_save_requested = True
-                logger.debug("Manual save requested")
-            else:
-                logger.debug("Save request ignored - too soon after previous save or save already in progress")
+                self._manual_save_requested = True # Mark it as manual for status
+                return
+
+            # If checks pass, request the save
+            self._save_requested = True
+            self._manual_save_requested = True # Mark it as manual for status
+            logger.debug("Manual save requested")
         
     def _load_from_storage(self):
         """Load face data from persistent storage into memory."""
@@ -202,20 +223,36 @@ class FaceMemory:
                     
                 self._save_in_progress = True
                 
+                # Reset progress indicators
+                self._save_progress = 0.0
+                self._save_total_items = people_count + 2  # People + validation + writing
+                self._save_processed_items = 0
+                self._save_current_step = "preparing"
+                
                 # Convert all people to dictionaries with JSON-safe values
                 try:
                     people_data = []
-                    for person in self.people.values():
+                    for i, person in enumerate(self.people.values()):
                         try:
                             person_dict = self._validate_json_data(person.to_dict())
                             people_data.append(person_dict)
+                            
+                            # Update progress (70% of progress is person processing)
+                            self._save_processed_items = i + 1
+                            self._save_progress = (self._save_processed_items / self._save_total_items) * 0.7
+                            
                         except Exception as e:
                             logger.error(f"Error processing person {person.id} for JSON: {e}")
                             continue
                 except Exception as e:
                     logger.error(f"Error converting people to dicts: {e}")
                     self._save_in_progress = False
+                    self._save_current_step = "error"
                     raise
+                
+                # Update progress
+                self._save_current_step = "validating"
+                self._save_progress = 0.75
                 
                 # Create data structure with metadata
                 data = {
@@ -233,11 +270,16 @@ class FaceMemory:
                     logger.error(f"JSON serialization error: {e}")
                     self._identify_json_problem(data)
                     self._save_in_progress = False
+                    self._save_current_step = "error"
                     raise
                     
                 # Create a backup of the existing file if it exists
                 backup_path = f"{storage_path}.bak"
                 backup_exists = os.path.exists(storage_path)
+                
+                # Update progress
+                self._save_current_step = "writing"
+                self._save_progress = 0.85
             
             # Submit the actual save operation to the process pool
             # This happens outside the lock to avoid blocking
@@ -267,6 +309,8 @@ class FaceMemory:
             logger.error(f"Error preparing data for save: {e}", exc_info=True)
             with self._lock:
                 self._save_in_progress = False
+                self._save_current_step = "error"
+                self._save_progress = 0.0
     
     @staticmethod
     def _save_worker(storage_path, backup_path, backup_exists, json_data):
@@ -310,24 +354,37 @@ class FaceMemory:
             result = future.result()
             
             with self._lock:
+                # Mark save as no longer in progress regardless of outcome
                 self._save_in_progress = False
                 self._auto_save_in_progress = False
-                self._manual_save_requested = False
+                self._manual_save_requested = False # Reset manual flag after attempt
                 
-                # Only update the last save time when the save actually completes
+                # Update progress based on result
+                self._save_current_step = "completed" if result["success"] else "error"
+                self._save_progress = 1.0 if result["success"] else 0.0
+                
                 if result["success"]:
+                    # Update last save time ONLY on successful completion
                     self._last_save_time = time.time()
+                    # Recalculate next scheduled save based on the new last save time
                     self._next_scheduled_save = self._last_save_time + self._save_interval
                     logger.info(f"Background save completed successfully at {result['path']}")
                 else:
                     logger.error(f"Background save failed during {result['stage']}: {result['error']}")
+                    # Keep _save_requested as True if the save failed, so it retries
+                    self._save_requested = True 
                 
         except Exception as e:
             logger.error(f"Error in save completion callback: {e}")
             with self._lock:
+                # Ensure flags are reset even if callback logic fails
                 self._save_in_progress = False
                 self._auto_save_in_progress = False
                 self._manual_save_requested = False
+                self._save_current_step = "error"
+                self._save_progress = 0.0
+                # Keep _save_requested as True if the callback failed, so it retries
+                self._save_requested = True
     
     def _json_serializer(self, obj):
         """Custom JSON serializer to handle non-serializable types."""
@@ -721,6 +778,8 @@ class FaceMemory:
                 - auto_save_in_progress: Whether an auto-save is currently in progress
                 - manual_save_requested: Whether a manual save has been requested
                 - save_in_progress: Whether any type of save is in progress
+                - save_progress: Percentage of save progress (0.0 to 1.0)
+                - save_step: Current save step description
         """
         with self._lock:
             current_time = time.time()
@@ -736,5 +795,10 @@ class FaceMemory:
                 'auto_save_in_progress': self._auto_save_in_progress,
                 'manual_save_requested': self._manual_save_requested,
                 'save_in_progress': save_in_progress,
-                'save_interval': self._save_interval
+                'save_interval': self._save_interval,
+                'save_progress': self._save_progress,
+                'save_step': self._save_current_step,
+                'total_items': self._save_total_items,
+                'processed_items': self._save_processed_items
             }
+

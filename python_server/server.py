@@ -179,20 +179,41 @@ class CameraProviderServer:
         # Get the current timestamp for reference
         current_time = datetime.datetime.now().isoformat()
         
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+        
         # Convert to a format suitable for JSON with timestamp information
-        counts_data = {
-            person_id: {
+        counts_data = {}
+        for person_id, person in people.items():
+            # Get thumbnail URLs using the person object methods
+            thumbnail_url = None
+            all_thumbnail_urls = []
+
+            # Get the latest thumbnail URL
+            latest_thumbnail_path = person.get_thumbnail_url()
+            if latest_thumbnail_path:
+                 # Construct full URL if it's a relative path
+                 thumbnail_url = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path.startswith('/') else latest_thumbnail_path
+
+            # Get all thumbnail URLs
+            for path in person.get_all_thumbnail_urls():
+                 # Construct full URL if it's a relative path
+                 full_url = f"{base_url}{path}" if path.startswith('/') else path
+                 all_thumbnail_urls.append(full_url)
+                            
+            counts_data[person_id] = {
                 'count': person.appearance_count,
                 'is_named': person.is_named,
                 'first_seen': self.face_processor.get_first_seen_time(person_id),
                 'last_seen': self.face_processor.get_last_seen_time(person_id),
                 'timestamp': current_time,
-                'thumbnail_url': person.get_thumbnail_url(),  # Use URL path instead of base64 data
-                'thumbnail_count': person.thumbnail_count,    # Add thumbnail count for debugging
-                'has_thumbnails': len(person.thumbnails) > 0  # Add flag to check if person has thumbnails
+                'thumbnail_url': thumbnail_url, # Use the potentially full URL
+                'thumbnail_count': person.thumbnail_count,
+                'has_thumbnails': len(person.thumbnails) > 0,
+                'all_thumbnail_urls': all_thumbnail_urls # Use the list of potentially full URLs
             }
-            for person_id, person in people.items()
-        }
         
         response = web.json_response(counts_data)
         
@@ -213,12 +234,23 @@ class CameraProviderServer:
         all_people = self.face_processor.memory.get_all_people()
         known_face_ids = [person_id for person_id, person in all_people.items() if person.is_named]
         
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+
         # Add thumbnail URLs to each known face entry instead of base64 data
         for face_id, face_data in known_faces.items():
             person = self.face_processor.memory.get_person(face_id)
             if person:
-                face_data['thumbnail_url'] = person.get_thumbnail_url()
-                face_data['all_thumbnails'] = person.get_all_thumbnail_urls()
+                latest_thumbnail_path = person.get_thumbnail_url()
+                face_data['thumbnail_url'] = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path and latest_thumbnail_path.startswith('/') else latest_thumbnail_path
+                
+                all_urls = []
+                for path in person.get_all_thumbnail_urls():
+                    full_url = f"{base_url}{path}" if path.startswith('/') else path
+                    all_urls.append(full_url)
+                face_data['all_thumbnails'] = all_urls
         
         response = web.json_response({
             'known_faces': known_faces,
@@ -274,8 +306,20 @@ class CameraProviderServer:
         nparr = np.frombuffer(jpeg_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+
         # Process with face recognition
         _, recognized_faces = self.face_processor.recognize_faces(img)
+
+        # Add full thumbnail URLs to the response
+        for face in recognized_faces:
+            person = self.face_processor.memory.get_person(face.get('id'))
+            if person:
+                latest_thumbnail_path = person.get_thumbnail_url()
+                face['thumbnail_url'] = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path and latest_thumbnail_path.startswith('/') else latest_thumbnail_path
         
         # Return just the face data (not the image)
         response = web.json_response({

@@ -160,22 +160,33 @@ class Person:
         return os.path.join(self.person_thumbnails_dir, latest_file)
     
     def get_thumbnail_url(self, filename=None):
-        """Get a URL path to access the thumbnail via HTTP."""
-        if not filename and not self.thumbnails:
-            return None
-            
-        filename = filename or self.thumbnails[-1]  # Use latest if not specified
+        """Get a relative URL path to access the thumbnail via HTTP."""
+        if not self.thumbnails:
+             # If no thumbnails exist, return None
+             return None
+
+        # Use the latest thumbnail if filename is not specified
+        filename_to_use = filename or self.thumbnails[-1]
         
-        # Create URL path for access via server
+        # Ensure the filename exists in the list
+        if filename_to_use not in self.thumbnails:
+             # If the specified or latest filename isn't valid, try the actual latest
+             if self.thumbnails:
+                 filename_to_use = self.thumbnails[-1]
+             else:
+                 return None # No valid thumbnails left
+
         safe_id = self._get_safe_id()
-        return f"/thumbnails/{safe_id}/{filename}"
+        # Ensure the path starts with a slash for relative URL
+        return f"/thumbnails/{safe_id}/{filename_to_use}"
     
     def get_all_thumbnail_urls(self):
-        """Get URLs for all thumbnails."""
+        """Get relative URLs for all valid thumbnails."""
         if not self.thumbnails:
             return []
             
         safe_id = self._get_safe_id()
+        # Ensure all paths start with a slash
         return [f"/thumbnails/{safe_id}/{filename}" for filename in self.thumbnails]
     
     def to_dict(self):

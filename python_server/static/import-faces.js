@@ -675,13 +675,48 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function fetchPersonThumbnail(personId) {
         try {
-            // 1. Check live thumbnails from the main script
+            // 1. Check if we already have data in faceData
+            if (window.faceData && window.faceData[personId]) {
+                const faceData = window.faceData[personId];
+                
+                // Check for thumbnail_url (direct server path)
+                if (faceData.thumbnail_url) {
+                    console.log(`Using server thumbnail for ${personId}`);
+                    return faceData.thumbnail_url;
+                }
+                
+                // Check all_thumbnail_urls if available
+                if (faceData.all_thumbnail_urls && faceData.all_thumbnail_urls.length > 0) {
+                    console.log(`Using thumbnail from all_thumbnail_urls for ${personId}`);
+                    return faceData.all_thumbnail_urls[faceData.all_thumbnail_urls.length - 1];
+                }
+            }
+            
+            // 2. Check live thumbnails from the main script
             if (window.faceThumbnails && window.faceThumbnails[personId] && window.faceThumbnails[personId].length > 0) {
                 console.log(`Using live thumbnail for ${personId}`);
                 return window.faceThumbnails[personId][window.faceThumbnails[personId].length - 1]; // Use the latest thumbnail
             }
 
-            // 2. Generate placeholder if no live thumbnail exists
+            // 3. Try direct fetch from the server by constructing a thumbnail URL
+            // This is a best-effort attempt based on naming conventions
+            try {
+                // Create safe ID (replicate server-side logic)
+                const safeId = personId.replace(/[^a-zA-Z0-9]/g, '_');
+                const currentTime = new Date().getTime();
+                const thumbnailUrl = `/thumbnails/${safeId}/latest.jpg?t=${currentTime}`;
+                
+                // Try to fetch and see if it exists
+                const response = await fetch(thumbnailUrl, { method: 'HEAD' });
+                if (response.ok) {
+                    console.log(`Found thumbnail via direct URL for ${personId}`);
+                    return thumbnailUrl;
+                }
+            } catch (fetchErr) {
+                console.log(`No direct thumbnail found for ${personId}`);
+            }
+
+            // 4. Generate placeholder if no live thumbnail exists
             console.log(`Generating placeholder thumbnail for ${personId}`);
             const hash = personId.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0);
             const hue = hash % 360;

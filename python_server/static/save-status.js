@@ -32,6 +32,12 @@ function createSaveStatusIndicator() {
     statusText.className = 'save-status-text';
     statusText.textContent = 'Auto-save: Idle';
     
+    // Create progress info element
+    const progressInfo = document.createElement('div');
+    progressInfo.id = 'saveProgressInfo';
+    progressInfo.className = 'save-progress-info';
+    progressInfo.textContent = '';
+    
     // Create progress bar container
     const progressContainer = document.createElement('div');
     progressContainer.className = 'save-progress-container';
@@ -45,6 +51,7 @@ function createSaveStatusIndicator() {
     progressContainer.appendChild(progressBar);
     container.appendChild(icon);
     container.appendChild(statusText);
+    container.appendChild(progressInfo);
     container.appendChild(progressContainer);
     
     // Add CSS for save status indicator
@@ -86,6 +93,7 @@ function addSaveStatusStyles() {
             font-size: 14px;
             transition: opacity 0.3s, transform 0.3s;
             opacity: 0.7;
+            min-width: 200px;
         }
         
         .save-status-indicator:hover {
@@ -106,6 +114,14 @@ function addSaveStatusStyles() {
         .save-status-text {
             flex: 1;
             white-space: nowrap;
+            font-weight: 500;
+        }
+        
+        .save-progress-info {
+            font-size: 12px;
+            color: #666;
+            width: 100%;
+            margin-top: 2px;
         }
         
         .save-progress-container {
@@ -114,19 +130,46 @@ function addSaveStatusStyles() {
             background-color: #eee;
             border-radius: 2px;
             overflow: hidden;
+            margin-top: 5px;
         }
         
         .save-progress-bar {
             height: 100%;
             width: 0%;
             background-color: #3498db;
-            transition: width 1s linear;
+            transition: width 0.3s linear;
+        }
+        
+        .save-status-indicator.error .save-progress-bar {
+            background-color: #e74c3c;
+        }
+        
+        .save-status-indicator.completed .save-progress-bar {
+            background-color: #2ecc71;
         }
         
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
             100% { opacity: 1; }
+        }
+        
+        .save-now-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 5px;
+            transition: background-color 0.2s;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .save-now-button:hover {
+            background-color: #2980b9;
         }
     `;
     
@@ -137,8 +180,8 @@ function addSaveStatusStyles() {
  * Start polling for save status
  */
 function startSaveStatusPolling() {
-    // Poll every 3 seconds
-    setInterval(updateSaveStatus, 3000);
+    // Poll every 2 seconds
+    setInterval(updateSaveStatus, 2000);
     
     // Initial update
     updateSaveStatus();
@@ -165,6 +208,7 @@ async function updateSaveStatus() {
 function updateSaveStatusUI(status) {
     const indicator = document.getElementById('saveStatusIndicator');
     const statusText = document.getElementById('saveStatusText');
+    const progressInfo = document.getElementById('saveProgressInfo');
     const progressBar = document.getElementById('saveProgressBar');
     
     if (!indicator || !statusText || !progressBar) return;
@@ -174,9 +218,7 @@ function updateSaveStatusUI(status) {
     const remaining = status.seconds_remaining || 0;
     const progress = ((interval - remaining) / interval) * 100;
     
-    // Update progress bar
-    progressBar.style.width = `${progress}%`;
-    
+    // Update countdown timer
     // Format countdown time
     const minutes = Math.floor(remaining / 60);
     const seconds = Math.floor(remaining % 60);
@@ -190,22 +232,89 @@ function updateSaveStatusUI(status) {
         forceSaveButton.remove();
     }
     
-    // Update status text based on save state
+    // Reset CSS classes
+    indicator.classList.remove('saving', 'error', 'completed');
+    
+    // Update progress info and UI based on save state
     if (status.save_in_progress) {
+        // Update progress bar with save progress
+        const saveProgress = status.save_progress * 100;
+        progressBar.style.width = `${saveProgress}%`;
+        
         indicator.classList.add('saving');
         statusText.textContent = 'Saving in progress...';
+        
+        // Add step information
+        const stepText = status.save_step ? status.save_step.charAt(0).toUpperCase() + status.save_step.slice(1) : '';
+        progressInfo.textContent = `${stepText}: ${saveProgress.toFixed(0)}%`;
+        
     } else if (status.auto_save_in_progress) {
+        // Update progress bar with save progress
+        const saveProgress = status.save_progress * 100;
+        progressBar.style.width = `${saveProgress}%`;
+        
         indicator.classList.add('saving');
         statusText.textContent = 'Auto-saving...';
+        
+        // Add step information
+        const stepText = status.save_step ? status.save_step.charAt(0).toUpperCase() + status.save_step.slice(1) : '';
+        progressInfo.textContent = `${stepText}: ${saveProgress.toFixed(0)}%`;
+        
     } else if (status.manual_save_requested) {
+        // Update progress bar with save progress
+        const saveProgress = status.save_progress * 100;
+        progressBar.style.width = `${saveProgress}%`;
+        
         indicator.classList.add('saving');
         statusText.textContent = 'Manual save in progress...';
-    } else {
-        indicator.classList.remove('saving');
         
-        // Show timer counting down
-        if (remaining < interval) {
+        // Add step information
+        const stepText = status.save_step ? status.save_step.charAt(0).toUpperCase() + status.save_step.slice(1) : '';
+        progressInfo.textContent = `${stepText}: ${saveProgress.toFixed(0)}%`;
+        
+    } else {
+        // Check if we just completed a save
+        if (status.save_step === 'completed') {
+            indicator.classList.add('completed');
+            progressBar.style.width = '100%';
+            statusText.textContent = 'Save completed';
+            progressInfo.textContent = 'All data saved successfully';
+            
+            // Hide after 3 seconds
+            setTimeout(() => {
+                if (document.getElementById('saveStatusText') && 
+                    document.getElementById('saveStatusText').textContent === 'Save completed') {
+                    // Update to timer mode
+                    statusText.textContent = `Auto-save in: ${countdownText}`;
+                    progressInfo.textContent = '';
+                    progressBar.style.width = `${progress}%`;
+                    indicator.classList.remove('completed');
+                }
+            }, 3000);
+            
+        } else if (status.save_step === 'error') {
+            indicator.classList.add('error');
+            progressBar.style.width = '100%';
+            statusText.textContent = 'Save failed';
+            progressInfo.textContent = 'Error saving data';
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                if (document.getElementById('saveStatusText') && 
+                    document.getElementById('saveStatusText').textContent === 'Save failed') {
+                    // Update to timer mode
+                    statusText.textContent = `Auto-save in: ${countdownText}`;
+                    progressInfo.textContent = '';
+                    progressBar.style.width = `${progress}%`;
+                    indicator.classList.remove('error');
+                }
+            }, 5000);
+            
+        } else {
+            // Normal countdown mode
+            progressBar.style.width = `${progress}%`;
             statusText.textContent = `Auto-save in: ${countdownText}`;
+            progressInfo.textContent = '';
             
             // Add option to force a save if not available and timer > 10s
             if (!forceSaveButton && remaining > 10) {
@@ -216,8 +325,6 @@ function updateSaveStatusUI(status) {
                 newForceSaveButton.addEventListener('click', requestManualSave);
                 indicator.appendChild(newForceSaveButton);
             }
-        } else {
-            statusText.textContent = 'Auto-save pending...';
         }
     }
 }
