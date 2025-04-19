@@ -1159,6 +1159,29 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Error connecting to server', 'error');
             console.error('Server connection error:', err);
         });
+
+    // Add additional CSS styles for the new thumbnail aspect ratio
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+        .face-img-container img, .attendance-img-container img {
+            aspect-ratio: 3/4; /* Match the 96x128 aspect ratio */
+            object-fit: cover;
+            width: auto;
+            height: 100%;
+        }
+        
+        .face-img-container, .attendance-img-container {
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .face-thumbnail {
+            aspect-ratio: 3/4;
+            object-fit: cover;
+        }
+    `;
+    document.head.appendChild(styleElement);
 });
 
 // Attendance Settings and Class Definitions

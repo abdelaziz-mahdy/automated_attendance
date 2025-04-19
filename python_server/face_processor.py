@@ -648,22 +648,25 @@ class FaceProcessor:
             # Extract face coordinates
             x, y, w, h = list(map(int, face_info[:4]))
             
-            # Add some margin around the face (20%)
-            margin_x = int(w * 0.2)
-            margin_y = int(h * 0.2)
+            # Add different margins for width and height to account for face proportions
+            # Add more margin on top for forehead and less on sides
+            margin_x = int(w * 0.15)  # Reduced side margins (was 0.2)
+            margin_y_top = int(h * 0.3)  # More margin on top for forehead
+            margin_y_bottom = int(h * 0.1)  # Less margin on bottom
             
             # Calculate new coordinates with margins, ensuring they're within image bounds
             height, width = img.shape[:2]
             x1 = max(0, x - margin_x)
-            y1 = max(0, y - margin_y)
+            y1 = max(0, y - margin_y_top)  # More space above
             x2 = min(width, x + w + margin_x)
-            y2 = min(height, y + h + margin_y)
+            y2 = min(height, y + h + margin_y_bottom)  # Less space below
             
             # Crop the face region with margin
             face_img = img[y1:y2, x1:x2]
             
-            # Resize to a standard size (128x128) for thumbnails
-            face_img = cv2.resize(face_img, (128, 128))
+            # Resize to a portrait aspect ratio (96x128) for thumbnails
+            # This gives us a 3:4 aspect ratio which is better for faces
+            face_img = cv2.resize(face_img, (96, 128))
             
             # Return the face image directly (no base64 encoding)
             return face_img
