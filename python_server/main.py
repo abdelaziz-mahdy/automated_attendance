@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Camera Provider Server for Raspberry Pi and other platforms')
-    parser.add_argument('--camera', choices=['auto', 'picamera', 'opencv'], default='auto',
-                      help='Camera type to use (auto, picamera, or opencv). Default is auto.')
+    parser.add_argument('--camera', choices=['auto', 'picamera', 'picamera2', 'opencv'], default='auto',
+                      help='Camera type to use (auto, picamera, picamera2, or opencv). Default is auto.')
     parser.add_argument('--debug', action='store_true',
                       help='Enable debug logging')
     parser.add_argument('--camera-index', type=int, default=0,
