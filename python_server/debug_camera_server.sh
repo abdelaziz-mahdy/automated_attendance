@@ -10,13 +10,40 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Get installation directory, defaulting to current directory if not specified
-INSTALL_DIR="${1:-$HOME/camera_server}"
+# Config file location
+CONFIG_FILE="$HOME/.automated_attendance_config"
+
+# Try to detect the installation directory
+# First check if we have it in the config file
+if [ -f "$CONFIG_FILE" ] && grep -q "INSTALL_DIR=" "$CONFIG_FILE"; then
+    source "$CONFIG_FILE"
+    echo -e "${BLUE}Found installation directory from config: $INSTALL_DIR${NC}"
+else
+    # If not in config file, try to find it from the script location
+    SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+    if [ -f "$SCRIPT_DIR/main.py" ] && [ -f "$SCRIPT_DIR/camera_provider.py" ]; then
+        # Script is inside the installation directory
+        INSTALL_DIR="$SCRIPT_DIR"
+    else
+        # Try the parent directory (if script is in python_server subdir)
+        POTENTIAL_DIR="$(dirname "$SCRIPT_DIR")"
+        if [ -f "$POTENTIAL_DIR/main.py" ] && [ -f "$POTENTIAL_DIR/camera_provider.py" ]; then
+            INSTALL_DIR="$POTENTIAL_DIR"
+        else
+            # Fall back to the default location
+            INSTALL_DIR="$HOME/automated_attendance"
+            echo -e "${YELLOW}Warning: Could not detect installation directory automatically.${NC}"
+            echo -e "${YELLOW}Using default: $INSTALL_DIR${NC}"
+        fi
+    fi
+fi
+
 LOG_FILE="$HOME/camera_server.log"
 
 echo -e "${BLUE}===================================${NC}"
 echo -e "${BLUE}Camera Server Diagnostic Tool${NC}"
 echo -e "${BLUE}===================================${NC}"
+echo -e "Installation directory: ${GREEN}$INSTALL_DIR${NC}"
 
 echo -e "\n${BLUE}[1/7] Checking if server is running...${NC}"
 if pgrep -f "python main.py --camera" > /dev/null; then
@@ -82,7 +109,7 @@ if [ -d "$INSTALL_DIR" ]; then
     
     # Check for key files
     for file in main.py server.py camera_provider.py run_camera_server.sh setup_and_run.sh; do
-        if [ -f "$INSTALL_DIR/$file" ]; then
+        if [ -f "$INSTALL_DIR/$file" ];then
             echo -e "  ${GREEN}✓ $file exists${NC}"
         else
             echo -e "  ${RED}✗ $file missing${NC}"
@@ -113,50 +140,68 @@ else
 fi
 
 echo -e "\n${BLUE}[6/7] Checking camera type...${NC}"
-if [ -h "$INSTALL_DIR/run_camera_server.sh" ]; then
-    CAMERA_SCRIPT=$(readlink "$INSTALL_DIR/run_camera_server.sh")
-    echo "  Camera script: $CAMERA_SCRIPT"
-    
-    if [[ $CAMERA_SCRIPT == *"opencv"* ]]; then
-        echo -e "${GREEN}✓ Using OpenCV camera${NC}"
-        # Check if OpenCV is installed in the virtual environment
-        if [ -d "$INSTALL_DIR/.venv" ] && "$INSTALL_DIR/.venv/bin/pip" list | grep -q "opencv-python"; then
-            echo -e "${GREEN}✓ OpenCV is installed in virtual environment${NC}"
+# Get camera type from config file or wrapper script
+if [ -f "$CONFIG_FILE" ] && grep -q "CAMERA_TYPE=" "$CONFIG_FILE"; then
+    source "$CONFIG_FILE"
+    echo -e "  Camera type from config: ${GREEN}$CAMERA_TYPE${NC}"
+elif [ -f "$INSTALL_DIR/run_camera_server.sh" ]; then
+    CAMERA_TYPE=$(grep "Starting camera server" "$INSTALL_DIR/run_camera_server.sh" | sed -E 's/.*camera server \(([^)]+)\).*/\1/')
+    echo -e "  Camera type from wrapper script: ${GREEN}$CAMERA_TYPE${NC}"
+else
+    CAMERA_TYPE="unknown"
+    echo -e "  ${RED}✗ Could not determine camera type${NC}"
+fi
+
+# Check for appropriate camera support
+if [ "$CAMERA_TYPE" = "opencv" ]; then
+    echo -e "  ${GREEN}✓ Using OpenCV camera${NC}"
+    # Check if OpenCV is installed in the virtual environment
+    if [ -d "$INSTALL_DIR/.venv" ] && [ -f "$INSTALL_DIR/.venv/bin/pip" ] && "$INSTALL_DIR/.venv/bin/pip" list | grep -q "opencv-python"; then
+        echo -e "  ${GREEN}✓ OpenCV is installed in virtual environment${NC}"
+    else
+        echo -e "  ${RED}✗ OpenCV not installed in virtual environment${NC}"
+        echo "  Run setup_and_run.sh to install dependencies"
+    fi
+elif [ "$CAMERA_TYPE" = "picamera2" ]; then
+    echo -e "  ${GREEN}✓ Using PiCamera2${NC}"
+    # Check if picamera2 is available
+    if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
+        if python3 -c "import picamera2" &> /dev/null || dpkg -l | grep -q python3-picamera2; then
+            echo -e "  ${GREEN}✓ PiCamera2 is available on the system${NC}"
         else
-            echo -e "${RED}✗ OpenCV not installed in virtual environment${NC}"
-        fi
-    elif [[ $CAMERA_SCRIPT == *"picamera2"* ]]; then
-        echo -e "${GREEN}✓ Using PiCamera2${NC}"
-        # Check if picamera2 is available
-        if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
-            if command -v python3 -c "import picamera2" &> /dev/null || dpkg -l | grep -q python3-picamera2; then
-                echo -e "${GREEN}✓ PiCamera2 is available on the system${NC}"
-            else
-                echo -e "${RED}✗ PiCamera2 is not installed${NC}"
-                echo "  Install with: sudo apt install -y python3-picamera2 python3-libcamera"
-            fi
-        else
-            echo -e "${RED}✗ Not running on a Raspberry Pi${NC}"
-        fi
-    elif [[ $CAMERA_SCRIPT == *"picamera"* ]]; then
-        echo -e "${GREEN}✓ Using PiCamera (legacy)${NC}"
-        # Check if picamera is available
-        if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
-            if command -v python3 -c "import picamera" &> /dev/null || dpkg -l | grep -q python3-picamera; then
-                echo -e "${GREEN}✓ PiCamera is available on the system${NC}"
-            else
-                echo -e "${RED}✗ PiCamera is not installed${NC}"
-                echo "  Install with: sudo apt install -y python3-picamera"
-            fi
-        else
-            echo -e "${RED}✗ Not running on a Raspberry Pi${NC}"
+            echo -e "  ${RED}✗ PiCamera2 is not installed${NC}"
+            echo "  Install with: sudo apt install -y python3-picamera2 python3-libcamera"
         fi
     else
-        echo -e "${YELLOW}? Unknown camera type${NC}"
+        echo -e "  ${RED}✗ Not running on a Raspberry Pi${NC}"
+    fi
+elif [ "$CAMERA_TYPE" = "picamera" ]; then
+    echo -e "  ${GREEN}✓ Using PiCamera (legacy)${NC}"
+    # Check if picamera is available
+    if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
+        if python3 -c "import picamera" &> /dev/null || dpkg -l | grep -q python3-picamera; then
+            echo -e "  ${GREEN}✓ PiCamera is available on the system${NC}"
+        else
+            echo -e "  ${RED}✗ PiCamera is not installed${NC}"
+            echo "  Install with: sudo apt install -y python3-picamera"
+        fi
+    else
+        echo -e "  ${RED}✗ Not running on a Raspberry Pi${NC}"
     fi
 else
-    echo -e "${RED}✗ Camera script symlink not found${NC}"
-    echo "  Run cron_setup.sh to set up the appropriate camera script"
+    echo -e "  ${YELLOW}? Unknown camera type: $CAMERA_TYPE${NC}"
+fi
+
+# Check if setup_and_run.sh exists and is executable
+if [ -f "$INSTALL_DIR/setup_and_run.sh" ]; then
+    if [ -x "$INSTALL_DIR/setup_and_run.sh" ]; then
+        echo -e "  ${GREEN}✓ setup_and_run.sh exists and is executable${NC}"
+    else
+        echo -e "  ${RED}✗ setup_and_run.sh exists but is not executable${NC}"
+        echo "  Run: chmod +x $INSTALL_DIR/setup_and_run.sh"
+    fi
+else
+    echo -e "  ${RED}✗ setup_and_run.sh missing${NC}"
 fi
 
 echo -e "\n${BLUE}[7/7] Checking log file...${NC}"
@@ -210,7 +255,8 @@ echo -e "${BLUE}===================================${NC}"
 echo "1. If the server isn't starting automatically:"
 echo "   - Check the cron job is set up correctly (crontab -l)"
 echo "   - Make sure run_camera_server.sh is executable (chmod +x)"
-echo "   - Try running it manually to see immediate errors"
+echo "   - Make sure setup_and_run.sh is executable (chmod +x)"
+echo "   - Try running setup_and_run.sh manually to see immediate errors"
 echo ""
 echo "2. If the camera isn't working:"
 echo "   - Check camera connections and permissions"
@@ -226,6 +272,6 @@ echo "   - Kill the process: pkill -f 'python main.py'"
 echo "   - Start it again: $INSTALL_DIR/run_camera_server.sh"
 echo ""
 echo "5. If all else fails:"
-echo "   - Try reinstalling with: ./setup_and_run.sh"
-echo "   - Or reconfigure cron with: ./cron_setup.sh"
+echo "   - Try reinstalling with: cd $INSTALL_DIR && ./setup_and_run.sh"
+echo "   - Or reconfigure cron with: cd $INSTALL_DIR && ./cron_setup.sh"
 echo -e "${BLUE}===================================${NC}"

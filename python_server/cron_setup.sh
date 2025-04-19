@@ -13,16 +13,16 @@ CAMERA_TYPE="auto"
 VERBOSE=1
 NON_INTERACTIVE=0
 SKIP_REBOOT=0
-INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+CONFIG_FILE="$HOME/.automated_attendance_config"
+
+# Use the script's location as the installation directory
+INSTALL_DIR="$SCRIPT_DIR"
 
 # Parse command-line arguments
-while getopts "c:i:vnrh" opt; do
+while getopts "c:vnrh" opt; do
   case $opt in
     c)
       CAMERA_TYPE="$OPTARG"
-      ;;
-    i)
-      INSTALL_DIR="$OPTARG"
       ;;
     v)
       VERBOSE=1
@@ -34,9 +34,8 @@ while getopts "c:i:vnrh" opt; do
       SKIP_REBOOT=1
       ;;
     h)
-      echo "Usage: $0 [-c camera_type] [-i install_dir] [-v] [-n] [-r] [-h]"
+      echo "Usage: $0 [-c camera_type] [-v] [-n] [-r] [-h]"
       echo "  -c camera_type   Camera type: 'auto', 'opencv', 'picamera', or 'picamera2'"
-      echo "  -i install_dir   Installation directory (default: parent directory of this script)"
       echo "  -v               Verbose mode"
       echo "  -n               Non-interactive mode"
       echo "  -r               Skip reboot prompt"
@@ -53,7 +52,14 @@ done
 echo "===================================="
 echo "Camera Server - Cron Setup"
 echo "===================================="
-[ "$VERBOSE" -eq 1 ] && echo "📂 Using installation directory: $INSTALL_DIR"
+[ "$VERBOSE" -eq 1 ] && echo "📂 Using script directory: $INSTALL_DIR"
+
+# Save the installation directory to config file for debugging
+echo "INSTALL_DIR=$INSTALL_DIR" > "$CONFIG_FILE"
+echo "CAMERA_TYPE=$CAMERA_TYPE" >> "$CONFIG_FILE"
+echo "SETUP_DATE=$(date)" >> "$CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
+[ "$VERBOSE" -eq 1 ] && echo "💾 Saved configuration to $CONFIG_FILE"
 
 # Function to auto-detect best available camera
 detect_camera_type() {
@@ -85,7 +91,7 @@ select_camera_type() {
         fi
     fi
     
-    if [ "$NON_INTERACTIVE" -eq 1 ]; then
+    if [ "$NON_INTERACTIVE" -eq 1 ] && [ -n "$CAMERA_TYPE" ]; then
         printf "auto\n"
         return
     fi
@@ -142,31 +148,6 @@ else
     [ "$VERBOSE" -eq 1 ] && echo "Using camera type: $CAMERA_TYPE"
 fi
 
-# Check if this is an update
-UPDATE_MODE=0
-if [ -d "$INSTALL_DIR" ]; then
-    UPDATE_MODE=1
-    [ "$VERBOSE" -eq 1 ] && echo "📥 Update mode detected - will upgrade existing installation"
-fi
-
-# Create install directory if it doesn't exist
-[ "$VERBOSE" -eq 1 ] && echo "📁 Setting up installation directory..."
-mkdir -p "$INSTALL_DIR"
-
-# Copy necessary files to installation directory
-[ "$VERBOSE" -eq 1 ] && echo "📋 Copying server files..."
-cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/server.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/camera_provider.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/requirements-opencv.txt" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/requirements-picamera.txt" "$INSTALL_DIR/"
-
-# Copy setup_and_run.sh script (instead of individual run scripts)
-[ "$VERBOSE" -eq 1 ] && echo "📋 Copying setup and run script..."
-cp "$SCRIPT_DIR/setup_and_run.sh" "$INSTALL_DIR/"
-chmod +x "$INSTALL_DIR/setup_and_run.sh"
-
 # Create wrapper script for the cron job
 WRAPPER_SCRIPT="$INSTALL_DIR/run_camera_server.sh"
 [ "$VERBOSE" -eq 1 ] && echo "📝 Creating wrapper script for cron job..."
@@ -174,6 +155,14 @@ WRAPPER_SCRIPT="$INSTALL_DIR/run_camera_server.sh"
 cat > "$WRAPPER_SCRIPT" << EOF
 #!/bin/bash
 cd "$INSTALL_DIR"
+
+# Log file setup
+LOG_FILE="\$HOME/camera_server.log"
+
+# Start with timestamp
+echo "=========================================" >> "\$LOG_FILE"
+echo "\$(date) - Starting camera server ($CAMERA_TYPE)" >> "\$LOG_FILE"
+echo "=========================================" >> "\$LOG_FILE"
 
 # Source profile files to get environment variables (important for cron jobs)
 for profile in /etc/profile ~/.bash_profile ~/.bashrc ~/.profile; do
@@ -186,14 +175,6 @@ done
 # Export PATH to include common locations
 export PATH="\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 echo "PATH: \$PATH" >> "\$LOG_FILE"
-
-# Log file setup
-LOG_FILE="\$HOME/camera_server.log"
-
-# Start with timestamp
-echo "=========================================" >> "\$LOG_FILE"
-echo "\$(date) - Starting camera server ($CAMERA_TYPE)" >> "\$LOG_FILE"
-echo "=========================================" >> "\$LOG_FILE"
 
 # Check for required tools
 command -v python3 >/dev/null 2>&1 || { echo "Python3 not found in PATH: \$PATH" >> "\$LOG_FILE"; exit 1; }
@@ -228,54 +209,9 @@ if [ -f "\$LOG_FILE" ] && [ \$(stat -c%s "\$LOG_FILE" 2>/dev/null || stat -f%z "
     echo "\$(date) - Log rotated, starting new log" > "\$LOG_FILE"
 fi
 
-# Check virtual environment and create if needed
-if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
-    echo "Virtual environment missing or broken, creating new one..." >> "\$LOG_FILE"
-    rm -rf .venv
-    
-    if [ "$CAMERA_TYPE" = "picamera2" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
-        echo "Creating virtual environment with system site packages..." >> "\$LOG_FILE"
-        python3 -m venv --system-site-packages .venv
-    else
-        echo "Creating standard virtual environment..." >> "\$LOG_FILE"
-        python3 -m venv .venv
-    fi
-fi
-
-# Activate virtual environment
-echo "Activating virtual environment..." >> "\$LOG_FILE"
-source .venv/bin/activate
-
-# Install or update dependencies
-if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
-    echo "Installing/updating picamera dependencies..." >> "\$LOG_FILE"
-    \$PIP_CMD install --upgrade -r requirements-picamera.txt >> "\$LOG_FILE" 2>&1 || {
-        echo "Failed to install with \$PIP_CMD, trying with pip directly..." >> "\$LOG_FILE"
-        pip install --upgrade -r requirements-picamera.txt >> "\$LOG_FILE" 2>&1
-    }
-else
-    echo "Installing/updating OpenCV dependencies..." >> "\$LOG_FILE"
-    \$PIP_CMD install --upgrade -r requirements-opencv.txt >> "\$LOG_FILE" 2>&1 || {
-        echo "Failed to install with \$PIP_CMD, trying with pip directly..." >> "\$LOG_FILE"
-        pip install --upgrade -r requirements-opencv.txt >> "\$LOG_FILE" 2>&1
-    }
-fi
-
-# Run the server
-echo "Starting camera server with $CAMERA_TYPE camera..." >> "\$LOG_FILE"
-python main.py --camera $CAMERA_TYPE >> "\$LOG_FILE" 2>&1
-
-# This code only runs if the server exits
-EXIT_CODE=\$?
-echo "\$(date) - Server exited with code \$EXIT_CODE" >> "\$LOG_FILE"
-
-# Try to restart if it crashed
-if [ \$EXIT_CODE -ne 0 ]; then
-    echo "Server crashed, waiting 10 seconds before restarting..." >> "\$LOG_FILE"
-    sleep 10
-    echo "\$(date) - Restarting server..." >> "\$LOG_FILE"
-    python main.py --camera $CAMERA_TYPE >> "\$LOG_FILE" 2>&1
-fi
+# Just run the setup_and_run.sh script with the right parameters
+echo "Running setup_and_run.sh from current directory..." >> "\$LOG_FILE"
+./setup_and_run.sh -c $CAMERA_TYPE -n >> "\$LOG_FILE" 2>&1
 EOF
 
 chmod +x "$WRAPPER_SCRIPT"
@@ -318,14 +254,8 @@ else
 fi
 
 # Status message
-if [ "$UPDATE_MODE" -eq 1 ]; then
-    echo "===================================="
-    echo "✅ Cron job updated!"
-else
-    echo "===================================="
-    echo "✅ Cron job setup complete!"
-fi
-
+echo "===================================="
+echo "✅ Cron job setup complete!"
 echo "===================================="
 echo "The camera server will now automatically start on boot."
 echo "You can check the server logs at: $HOME/camera_server.log"
