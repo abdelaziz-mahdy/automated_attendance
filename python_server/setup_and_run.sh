@@ -45,13 +45,13 @@ detect_camera_type() {
   # Check for Raspberry Pi
   if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
     # Try PiCamera2 first
-    if command -v python3 -c "import picamera2" &> /dev/null || dpkg -l | grep -q python3-picamera2; then
+    if python3 -c "import picamera2" &> /dev/null || dpkg -l | grep -q python3-picamera2; then
       echo "picamera2"
       return
     fi
     
     # Then try PiCamera
-    if command -v python3 -c "import picamera" &> /dev/null || dpkg -l | grep -q python3-picamera; then
+    if python3 -c "import picamera" &> /dev/null || dpkg -l | grep -q python3-picamera; then
       echo "picamera"
       return
     fi
@@ -141,7 +141,15 @@ fi
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
     [ "$VERBOSE" -eq 1 ] && echo "🔧 Creating virtual environment..."
-    uv venv .venv
+    
+    # For PiCamera2, use system-site-packages to access system-installed picamera2
+    if [ "$CAMERA_TYPE" = "picamera2" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
+        [ "$VERBOSE" -eq 1 ] && echo "Using system-site-packages for camera libraries..."
+        python3 -m venv --system-site-packages .venv
+    else
+        # For OpenCV, create a standard virtual environment
+        uv venv .venv
+    fi
 else
     [ "$VERBOSE" -eq 1 ] && echo "✅ Virtual environment already exists"
 fi
@@ -159,7 +167,7 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
         
         if [ "$CAMERA_TYPE" = "picamera2" ]; then
             [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera2 system package..."
-            sudo apt install -y python3-picamera2
+            sudo apt install -y python3-picamera2 python3-libcamera
         elif [ "$CAMERA_TYPE" = "picamera" ]; then
             [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system package..."
             sudo apt install -y python3-picamera

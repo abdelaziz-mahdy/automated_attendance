@@ -185,7 +185,16 @@ cd "$INSTALL_DIR"
 if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
     [ "$VERBOSE" -eq 1 ] && echo "Creating virtual environment..."
     rm -rf .venv
-    uv venv  .venv
+    
+    # For PiCamera2, use system-site-packages to access system-installed picamera2
+    if [ "$CAMERA_TYPE" = "picamera2" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
+        [ "$VERBOSE" -eq 1 ] && echo "Using system-site-packages for camera libraries..."
+        python3 -m venv --system-site-packages .venv
+    else
+        # For OpenCV, create a standard virtual environment
+        uv venv .venv
+    fi
+    
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
         uv pip install -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
@@ -219,7 +228,7 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
         
         if [ "$CAMERA_TYPE" = "picamera2" ]; then
             [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera2 system package..."
-            sudo apt install -y python3-picamera2
+            sudo apt install -y python3-picamera2 python3-libcamera
         elif [ "$CAMERA_TYPE" = "picamera" ]; then
             [ "$VERBOSE" -eq 1 ] && echo "Installing PiCamera system package..."
             sudo apt install -y python3-picamera

@@ -300,10 +300,19 @@ class PiCamera2Provider(BaseCameraProvider):
         
     def _check_picamera2(self):
         try:
+            # First try to import from system packages
             from picamera2 import Picamera2
             self.Picamera2 = Picamera2
+            logger.info("Using system-installed picamera2")
         except ImportError:
-            raise ImportError("picamera2 is required for PiCamera2Provider")
+            # Fall back to pip-installed package if available
+            try:
+                from picamera2 import Picamera2
+                self.Picamera2 = Picamera2
+                logger.info("Using pip-installed picamera2")
+            except ImportError:
+                raise ImportError("picamera2 is required for PiCamera2Provider. "
+                                  "Install with: sudo apt install -y python3-picamera2 python3-libcamera")
 
     async def open_camera(self):
         try:
@@ -413,9 +422,17 @@ def create_camera_provider(camera_type='auto', camera_index=0):
     else:  # auto detection
         # Try PiCamera2 first on Raspberry Pi
         try:
-            if importlib.util.find_spec("picamera2"):
-                return PiCamera2Provider()
-        except ImportError:
+            if sys.platform.startswith('linux') and os.path.exists("/proc/device-tree/model"):
+                with open("/proc/device-tree/model") as f:
+                    if "Raspberry Pi" in f.read():
+                        # Check for system-installed picamera2
+                        try:
+                            import picamera2
+                            logger.info("Auto-detected system-installed picamera2")
+                            return PiCamera2Provider()
+                        except ImportError:
+                            pass
+        except:
             pass
             
         # Then try PiCamera 
