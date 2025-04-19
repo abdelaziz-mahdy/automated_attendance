@@ -333,10 +333,13 @@ class PiCamera2Provider(BaseCameraProvider):
         try:
             # Capture frame and convert to JPEG
             frame = self.camera.capture_array()
-            
+            # convert to RGB if needed
+
             # We need OpenCV to encode the image
             import cv2
-            _, jpeg_data = cv2.imencode('.jpg', frame)
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            _, jpeg_data = cv2.imencode('.jpg', image)
             return jpeg_data.tobytes()
         except Exception as e:
             logger.error(f"Error capturing frame: {e}")
