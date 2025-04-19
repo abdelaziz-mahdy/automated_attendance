@@ -520,8 +520,11 @@ class FaceProcessor:
             if face_feature is None:
                 logger.error(f"Failed to extract face features for {person_name}")
                 return False, None
+
+            # 3. Generate a thumbnail from the face for display
+            thumbnail_img = self._create_thumbnail_from_face(img, face_info)
                 
-            # 3. Update the person in memory
+            # 4. Update the person in memory
             existing_person = self.memory.get_person(person_name)
             if existing_person:
                 # Update existing person
@@ -532,14 +535,21 @@ class FaceProcessor:
                     confidence=confidence,
                     increment_count=True
                 )
+                # Add thumbnail
+                if thumbnail_img is not None:
+                    existing_person.add_thumbnail(thumbnail_img)
                 logger.info(f"Updated existing person: {person_name}")
             else:
                 # Create new person
-                self.memory.add_person(
+                person = self.memory.add_person(
                     person_name,
                     feature_vector=face_feature,
                     is_named=True
                 )
+                
+                # Add thumbnail to the new person
+                if thumbnail_img is not None and person:
+                    person.add_thumbnail(thumbnail_img)
                 
                 # Update detection info
                 self.memory.update_person(
@@ -577,3 +587,42 @@ class FaceProcessor:
         except Exception as e:
             logger.error(f"Error processing imported face image for {person_name}: {e}", exc_info=True)
             return False, None
+            
+    def _create_thumbnail_from_face(self, img, face_info):
+        """Create a thumbnail image directly from the detected face region.
+        
+        Args:
+            img (numpy.ndarray): The full image
+            face_info (numpy.ndarray): Face detection information
+            
+        Returns:
+            numpy.ndarray: Cropped face thumbnail or None if creation fails
+        """
+        try:
+            # Extract face coordinates
+            x, y, w, h = list(map(int, face_info[:4]))
+            
+            # Add some margin around the face (20%)
+            margin_x = int(w * 0.2)
+            margin_y = int(h * 0.2)
+            
+            # Calculate new coordinates with margins, ensuring they're within image bounds
+            height, width = img.shape[:2]
+            x1 = max(0, x - margin_x)
+            y1 = max(0, y - margin_y)
+            x2 = min(width, x + w + margin_x)
+            y2 = min(height, y + h + margin_y)
+            
+            # Crop the face region with margin
+            face_img = img[y1:y2, x1:x2]
+            
+            # Resize to a standard size (128x128) for thumbnails
+            face_img = cv2.resize(face_img, (128, 128))
+            
+            # Return the face image directly (no base64 encoding)
+            return face_img
+            
+        except Exception as e:
+            logger.error(f"Error creating thumbnail: {e}")
+            return None
+

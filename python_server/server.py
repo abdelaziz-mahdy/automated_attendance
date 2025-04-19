@@ -186,7 +186,8 @@ class CameraProviderServer:
                 'is_named': person.is_named,
                 'first_seen': self.face_processor.get_first_seen_time(person_id),
                 'last_seen': self.face_processor.get_last_seen_time(person_id),
-                'timestamp': current_time
+                'timestamp': current_time,
+                'thumbnail_url': person.get_thumbnail_url()  # Use URL path instead of base64 data
             }
             for person_id, person in people.items()
         }
@@ -209,6 +210,13 @@ class CameraProviderServer:
         # Additional information about known people
         all_people = self.face_processor.memory.get_all_people()
         known_face_ids = [person_id for person_id, person in all_people.items() if person.is_named]
+        
+        # Add thumbnail URLs to each known face entry instead of base64 data
+        for face_id, face_data in known_faces.items():
+            person = self.face_processor.memory.get_person(face_id)
+            if person:
+                face_data['thumbnail_url'] = person.get_thumbnail_url()
+                face_data['all_thumbnails'] = person.get_all_thumbnail_urls()
         
         response = web.json_response({
             'known_faces': known_faces,
@@ -496,6 +504,57 @@ class CameraProviderServer:
         ext = os.path.splitext(filename.lower())[1]
         return ext in valid_extensions
     
+    async def _handle_thumbnail(self, request):
+        """Handle requests for thumbnail images."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received THUMBNAIL request from {request.remote}")
+        
+        # Get person_id and filename from URL path
+        person_id = request.match_info.get('person_id', None)
+        filename = request.match_info.get('filename', None)
+        
+        if not person_id or not filename:
+            logger.error(f"[Request #{self._request_count}] Missing person_id or filename")
+            return web.Response(status=400, text="Both person_id and filename are required")
+        
+        # Get thumbnail path
+        person = self.face_processor.memory.get_person(person_id)
+        if not person or not person.person_thumbnails_dir:
+            logger.error(f"[Request #{self._request_count}] Person {person_id} not found or has no thumbnail directory")
+            return web.Response(status=404, text="Person not found or has no thumbnails")
+        
+        # Build full path to thumbnail file
+        thumbnail_path = os.path.join(person.person_thumbnails_dir, filename)
+        
+        # Check if file exists
+        if not os.path.exists(thumbnail_path):
+            logger.error(f"[Request #{self._request_count}] Thumbnail file {thumbnail_path} not found")
+            return web.Response(status=404, text="Thumbnail file not found")
+        
+        # Return the thumbnail file
+        with open(thumbnail_path, 'rb') as f:
+            content = f.read()
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled THUMBNAIL request in {elapsed:.2f}ms")
+        return web.Response(body=content, content_type='image/jpeg')
+
+    async def _handle_get_save_status(self, request):
+        """Handle requests for face memory save status."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received GET_SAVE_STATUS request from {request.remote}")
+        
+        # Get save status from face memory
+        save_status = self.face_processor.memory.get_save_status()
+        
+        response = web.json_response(save_status)
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled GET_SAVE_STATUS request in {elapsed:.2f}ms")
+        return response
+
     async def start(self):
         try:
             logger.info("Starting Camera Provider Server...")
@@ -537,6 +596,8 @@ class CameraProviderServer:
             app.router.add_get('/get_face_data', self._handle_get_face_data)
             app.router.add_get('/rename_face', self._handle_rename_face)
             app.router.add_post('/import_faces_batch', self._handle_import_faces_batch)
+            app.router.add_get('/thumbnails/{person_id}/{filename}', self._handle_thumbnail)
+            app.router.add_get('/get_save_status', self._handle_get_save_status)
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             

@@ -5,7 +5,10 @@ import logging
 import numpy as np
 import threading
 import time
+import shutil
 from person import Person
+import concurrent.futures
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +29,33 @@ class FaceMemory:
         self._save_interval = 60  # Save every 60 seconds
         self._lock = threading.RLock()  # Reentrant lock for thread safety
         
+        # Save status tracking for UI
+        self._next_scheduled_save = 0
+        self._auto_save_in_progress = False
+        self._manual_save_requested = False
+        
         # Create storage directory if it doesn't exist
         if self.storage_dir and not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir, exist_ok=True)
+        
+        # Create thumbnails directory within storage directory
+        self.thumbnails_dir = None
+        if self.storage_dir:
+            self.thumbnails_dir = os.path.join(self.storage_dir, "thumbnails")
+            os.makedirs(self.thumbnails_dir, exist_ok=True)
+            logger.info(f"Created thumbnails directory at {self.thumbnails_dir}")
             
         # Load from persistence if available - this populates the in-memory data
         self._load_from_storage()
         
         # Start the periodic save thread
         self._start_periodic_save()
+        
+        # Create process pool for background saves
+        self._process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+        self._save_queue = queue.Queue()
+        self._save_in_progress = False
+        self._save_results = []  # Store futures for save operations
         
         logger.info(f"FaceMemory initialized with {len(self.people)} people loaded from storage")
         
@@ -57,27 +78,49 @@ class FaceMemory:
             try:
                 # Check if save is requested or if it's been too long since last save
                 current_time = time.time()
+                
                 with self._lock:
-                    save_due_to_interval = (current_time - self._last_save_time) > self._save_interval
+                    # Calculate time until next scheduled save
+                    self._next_scheduled_save = self._last_save_time + self._save_interval
+                    time_remaining = max(0, self._next_scheduled_save - current_time)
+                    
+                    save_due_to_interval = (current_time >= self._next_scheduled_save)
                     save_needed = self._save_requested or save_due_to_interval
                     
                     if save_needed:
+                        # Set auto-save flag if triggered by interval
+                        self._auto_save_in_progress = save_due_to_interval
+                        self._manual_save_requested = self._save_requested
+                        
                         # If a save is needed, perform it
                         self.save_to_storage()
                         self._save_requested = False
                         self._last_save_time = current_time
-                        logger.debug(f"Periodic save at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
+                        self._next_scheduled_save = current_time + self._save_interval
+                        
+                        # Log the save with appropriate message
+                        if self._auto_save_in_progress:
+                            logger.info(f"Auto-save completed at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
+                        else:
+                            logger.info(f"Manual save completed at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
+                        
+                        # Reset flags
+                        self._auto_save_in_progress = False
+                        self._manual_save_requested = False
             except Exception as e:
                 logger.error(f"Error in periodic save worker: {e}", exc_info=True)
+                self._auto_save_in_progress = False
+                self._manual_save_requested = False
             
             # Sleep briefly before checking again (checking more frequently than the save interval)
             time.sleep(5)  # Check every 5 seconds if a save is needed
     
     def request_save(self):
-        """Request a save operation to happen on next check."""
+        """Request a manual save operation to happen on next check."""
         with self._lock:
             self._save_requested = True
-            logger.debug("Save requested")
+            self._manual_save_requested = True
+            logger.debug("Manual save requested")
         
     def _load_from_storage(self):
         """Load face data from persistent storage into memory."""
@@ -111,7 +154,7 @@ class FaceMemory:
                 for person_data in data.get('people', []):
                     person_id = person_data.get('id')
                     if person_id:
-                        person = Person(person_id)
+                        person = Person(person_id, thumbnails_dir=self.thumbnails_dir)
                         person.from_dict(person_data)
                         self.people[person_id] = person
                     
@@ -119,6 +162,14 @@ class FaceMemory:
                 
                 # Set last save time to track when we last loaded or saved
                 self._last_save_time = time.time()
+                
+                # Verify feature vector types after loading 
+                # This extra check helps identify any potential type issues
+                for person_id, person in self.people.items():
+                    if person.feature_vector is not None:
+                        if person.feature_vector.dtype != np.float32:
+                            logger.warning(f"Converting feature vector for {person_id} from {person.feature_vector.dtype} to float32")
+                            person.feature_vector = person.feature_vector.astype(np.float32)
             
         except Exception as e:
             logger.error(f"Error loading face data: {e}", exc_info=True)
@@ -126,7 +177,7 @@ class FaceMemory:
             self.people.clear()
             
     def save_to_storage(self):
-        """Save face data from memory to persistent storage."""
+        """Prepare data and save to persistent storage in a background process."""
         storage_path = self._get_storage_path()
         if not storage_path:
             logger.warning("No storage path specified, cannot save face data")
@@ -134,33 +185,29 @@ class FaceMemory:
             
         try:
             people_count = len(self.people)
-            logger.info(f"Saving {people_count} people to storage at {storage_path}")
+            logger.info(f"Preparing {people_count} people for storage at {storage_path}")
             
+            # This block prepares data while holding the lock, but doesn't perform I/O
             with self._lock:
-                # Create a backup of the existing file first
-                if os.path.exists(storage_path):
-                    backup_path = f"{storage_path}.bak"
-                    try:
-                        with open(storage_path, 'r') as src, open(backup_path, 'w') as dst:
-                            dst.write(src.read())
-                        logger.debug(f"Created backup at {backup_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to create backup: {e}")
+                if self._save_in_progress:
+                    logger.debug("Save already in progress, skipping duplicate save")
+                    return
+                    
+                self._save_in_progress = True
                 
                 # Convert all people to dictionaries with JSON-safe values
                 try:
                     people_data = []
                     for person in self.people.values():
                         try:
-                            # Validate each person's data for JSON compatibility
                             person_dict = self._validate_json_data(person.to_dict())
                             people_data.append(person_dict)
                         except Exception as e:
                             logger.error(f"Error processing person {person.id} for JSON: {e}")
-                            # Skip this person if there's an error, but continue with others
                             continue
                 except Exception as e:
                     logger.error(f"Error converting people to dicts: {e}")
+                    self._save_in_progress = False
                     raise
                 
                 # Create data structure with metadata
@@ -171,28 +218,108 @@ class FaceMemory:
                     'count': people_count
                 }
                 
-                # Write to a temporary file first, then rename for atomicity
-                temp_path = f"{storage_path}.tmp"
+                # Serialize data to JSON string before passing to worker process
+                # This avoids serialization issues with complex Python objects
                 try:
-                    with open(temp_path, 'w') as f:
-                        json.dump(data, f, indent=2, default=self._json_serializer)
+                    json_data = json.dumps(data, indent=2, default=self._json_serializer)
                 except TypeError as e:
                     logger.error(f"JSON serialization error: {e}")
-                    # Try to identify the problematic value
                     self._identify_json_problem(data)
+                    self._save_in_progress = False
                     raise
-                
-                # Rename (atomic on most filesystems)
-                os.replace(temp_path, storage_path)
-                
-                # Update last save time after successful save
+                    
+                # Create a backup of the existing file if it exists
+                backup_path = f"{storage_path}.bak"
+                backup_exists = os.path.exists(storage_path)
+            
+            # Submit the actual save operation to the process pool
+            # This happens outside the lock to avoid blocking
+            future = self._process_pool.submit(
+                self._save_worker,
+                storage_path,
+                backup_path,
+                backup_exists,
+                json_data
+            )
+            
+            # Add callback to handle completion
+            future.add_done_callback(self._save_completed)
+            
+            # Store the future to prevent it from being garbage collected
+            self._save_results.append(future)
+            
+            # Clean up completed futures 
+            self._save_results = [f for f in self._save_results if not f.done()]
+            
+            # Update last save time after initiating save (not waiting for completion)
+            with self._lock:
                 self._last_save_time = time.time()
                 
-            logger.info(f"Successfully saved {people_count} people to storage")
+            logger.info(f"Save operation for {people_count} people initiated in background")
             
         except Exception as e:
-            logger.error(f"Error saving face data: {e}", exc_info=True)
+            logger.error(f"Error preparing data for save: {e}", exc_info=True)
+            with self._lock:
+                self._save_in_progress = False
+    
+    @staticmethod
+    def _save_worker(storage_path, backup_path, backup_exists, json_data):
+        """Worker function that runs in a separate process to save data to disk.
+        
+        Args:
+            storage_path: Path to the storage file
+            backup_path: Path to the backup file
+            backup_exists: Whether the storage file already exists
+            json_data: JSON string to write to file
             
+        Returns:
+            dict: Result information including success/failure
+        """
+        try:
+            # Create a backup of the existing file first if it exists
+            if backup_exists:
+                try:
+                    # Simple file copy instead of reading/writing
+                    shutil.copy2(storage_path, backup_path)
+                except Exception as e:
+                    # Log but continue - backup failure shouldn't prevent save
+                    return {"success": False, "stage": "backup", "error": str(e)}
+            
+            # Write to a temporary file first, then rename for atomicity
+            temp_path = f"{storage_path}.tmp"
+            with open(temp_path, 'w') as f:
+                f.write(json_data)  # Write pre-serialized JSON string
+            
+            # Rename (atomic on most filesystems)
+            os.replace(temp_path, storage_path)
+            
+            return {"success": True, "path": storage_path}
+            
+        except Exception as e:
+            return {"success": False, "stage": "write", "error": str(e)}
+    
+    def _save_completed(self, future):
+        """Callback for when a save operation completes."""
+        try:
+            result = future.result()
+            
+            with self._lock:
+                self._save_in_progress = False
+                self._auto_save_in_progress = False
+                self._manual_save_requested = False
+                
+            if result["success"]:
+                logger.info(f"Background save completed successfully at {result['path']}")
+            else:
+                logger.error(f"Background save failed during {result['stage']}: {result['error']}")
+                
+        except Exception as e:
+            logger.error(f"Error in save completion callback: {e}")
+            with self._lock:
+                self._save_in_progress = False
+                self._auto_save_in_progress = False
+                self._manual_save_requested = False
+    
     def _json_serializer(self, obj):
         """Custom JSON serializer to handle non-serializable types."""
         # Handle numpy arrays
@@ -276,14 +403,69 @@ class FaceMemory:
         if hasattr(self, '_save_thread') and self._save_thread.is_alive():
             self._save_thread.join(timeout=5)
             
-        # Do a final save to ensure latest data is persisted
+        # Wait for any pending save operations to complete
+        if hasattr(self, '_save_results') and self._save_results:
+            # Wait for current save operations to complete with timeout
+            try:
+                # Use a short timeout to avoid hanging during shutdown
+                concurrent.futures.wait(self._save_results, timeout=10)
+                logger.info("All pending save operations completed")
+            except Exception as e:
+                logger.error(f"Error waiting for pending saves: {e}")
+        
+        # Do a final synchronous save to ensure latest data is persisted
         try:
-            self.save_to_storage()
+            # Use a direct save method that doesn't use the process pool
+            self._direct_save_to_storage()
             logger.info("Final save completed during shutdown")
         except Exception as e:
             logger.error(f"Error during final save: {e}", exc_info=True)
             
+        # Shutdown the process pool
+        if hasattr(self, '_process_pool'):
+            self._process_pool.shutdown(wait=False)
+            
         logger.info("FaceMemory shutdown complete")
+    
+    def _direct_save_to_storage(self):
+        """Direct synchronous save method for shutdown."""
+        storage_path = self._get_storage_path()
+        if not storage_path:
+            return
+            
+        with self._lock:
+            try:
+                # Prepare data
+                people_data = []
+                for person in self.people.values():
+                    try:
+                        person_dict = self._validate_json_data(person.to_dict())
+                        people_data.append(person_dict)
+                    except Exception:
+                        continue
+                
+                data = {
+                    'people': people_data,
+                    'timestamp': datetime.datetime.now().isoformat(),
+                    'version': '1.0',
+                    'count': len(people_data)
+                }
+                
+                # Create backup
+                backup_path = f"{storage_path}.bak"
+                if os.path.exists(storage_path):
+                    shutil.copy2(storage_path, backup_path)
+                
+                # Save data
+                temp_path = f"{storage_path}.tmp"
+                with open(temp_path, 'w') as f:
+                    json.dump(data, f, indent=2, default=self._json_serializer)
+                
+                os.replace(temp_path, storage_path)
+                
+            except Exception as e:
+                logger.error(f"Error in direct save: {e}", exc_info=True)
+                raise
         
     def get_person(self, person_id):
         """Get a person by ID from memory (fast lookup)."""
@@ -293,7 +475,7 @@ class FaceMemory:
     def add_person(self, person_id, feature_vector, is_named=False):
         """Add a new person to memory."""
         with self._lock:
-            person = Person(person_id, feature_vector, is_named)
+            person = Person(person_id, feature_vector, is_named, thumbnails_dir=self.thumbnails_dir)
             self.people[person_id] = person
             self._save_requested = True
             return person
@@ -340,6 +522,33 @@ class FaceMemory:
                 
             # Get the person and update ID
             person = self.people[old_id]
+            
+            # Rename thumbnail directory if it exists
+            if self.thumbnails_dir and person.person_thumbnails_dir:
+                old_thumbnail_dir = person.person_thumbnails_dir
+                new_thumbnail_dir = os.path.join(self.thumbnails_dir, Person(new_id)._get_safe_id())
+                
+                if os.path.exists(old_thumbnail_dir):
+                    try:
+                        # Create new directory if it doesn't exist
+                        os.makedirs(new_thumbnail_dir, exist_ok=True)
+                        
+                        # Move files from old to new directory
+                        for filename in person.thumbnails:
+                            old_file = os.path.join(old_thumbnail_dir, filename)
+                            new_file = os.path.join(new_thumbnail_dir, filename)
+                            if os.path.exists(old_file):
+                                shutil.copy2(old_file, new_file)
+                        
+                        # Remove old directory after moving files
+                        shutil.rmtree(old_thumbnail_dir, ignore_errors=True)
+                        
+                        # Update thumbnail directory
+                        person.person_thumbnails_dir = new_thumbnail_dir
+                    except Exception as e:
+                        logger.error(f"Error moving thumbnail directory: {e}")
+            
+            # Update person ID
             person.id = new_id
             person.is_named = True  # If renamed, assume it's a named person
             
@@ -387,6 +596,48 @@ class FaceMemory:
                     target_weight = target.appearance_count / total_count
                     target.feature_vector = (target_weight * target.feature_vector + 
                                             source_weight * source.feature_vector)
+            
+            # Merge thumbnails - copy thumbnail files from source to target
+            if self.thumbnails_dir and source.thumbnails and target.person_thumbnails_dir:
+                try:
+                    source_dir = source.person_thumbnails_dir
+                    target_dir = target.person_thumbnails_dir
+                    
+                    if os.path.exists(source_dir):
+                        # Make sure target directory exists
+                        os.makedirs(target_dir, exist_ok=True)
+                        
+                        # Copy up to 3 of the latest thumbnails from source to target
+                        latest_source_thumbnails = source.thumbnails[-3:] if len(source.thumbnails) > 3 else source.thumbnails
+                        
+                        for filename in latest_source_thumbnails:
+                            source_file = os.path.join(source_dir, filename)
+                            if os.path.exists(source_file):
+                                # Generate new filename with current timestamp
+                                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                                new_filename = f"{timestamp}.jpg"
+                                target_file = os.path.join(target_dir, new_filename)
+                                
+                                # Copy the file
+                                shutil.copy2(source_file, target_file)
+                                
+                                # Add to target's thumbnails list
+                                target.thumbnails.append(new_filename)
+                        
+                        # Limit target thumbnails to 5
+                        while len(target.thumbnails) > 5:
+                            oldest = target.thumbnails.pop(0)
+                            oldest_path = os.path.join(target_dir, oldest)
+                            if os.path.exists(oldest_path):
+                                os.remove(oldest_path)
+                                
+                        target.thumbnail_count = len(target.thumbnails)
+                        
+                        # Clean up source thumbnail directory
+                        shutil.rmtree(source_dir, ignore_errors=True)
+                    
+                except Exception as e:
+                    logger.error(f"Error merging thumbnail directories: {e}")
             
             # Remove source person
             del self.people[source_id]
@@ -449,4 +700,32 @@ class FaceMemory:
                 'total_appearances': total_appearances,
                 'last_save_time': datetime.datetime.fromtimestamp(self._last_save_time).isoformat(),
                 'in_memory': True  # Flag to indicate we're using in-memory storage
+            }
+    
+    def get_save_status(self):
+        """Get the current save status for UI display.
+        
+        Returns:
+            dict: A dictionary containing save status information:
+                - next_save_time: Timestamp when the next auto-save will occur
+                - seconds_remaining: Seconds until next auto-save
+                - auto_save_in_progress: Whether an auto-save is currently in progress
+                - manual_save_requested: Whether a manual save has been requested
+                - save_in_progress: Whether any type of save is in progress
+        """
+        with self._lock:
+            current_time = time.time()
+            next_save_time = self._next_scheduled_save
+            seconds_remaining = max(0, next_save_time - current_time)
+            
+            # Check if any save operation is in progress (background or foreground)
+            save_in_progress = self._auto_save_in_progress or self._manual_save_requested or self._save_in_progress
+            
+            return {
+                'next_save_time': datetime.datetime.fromtimestamp(next_save_time).isoformat(),
+                'seconds_remaining': int(seconds_remaining),
+                'auto_save_in_progress': self._auto_save_in_progress,
+                'manual_save_requested': self._manual_save_requested,
+                'save_in_progress': save_in_progress,
+                'save_interval': self._save_interval
             }
