@@ -13,6 +13,8 @@ import argparse
 import os
 import cv2
 import numpy as np
+import tempfile
+from aiohttp import MultipartReader, BodyPartReader
 
 # Configure logging with more detail
 logging.basicConfig(
@@ -33,7 +35,9 @@ class CameraProviderServer:
         self._port = port
         self.camera_provider = None  # Will be initialized in start()
         self._request_count = 0
-        self.face_processor = FaceProcessor()
+        storage_dir = os.path.join(os.path.dirname(__file__), 'data')
+        os.makedirs(storage_dir, exist_ok=True)
+        self.face_processor = FaceProcessor(storage_dir=storage_dir)
         self.current_frame = None  # Store the latest frame
         
     async def _handle_test(self, request):
@@ -169,22 +173,47 @@ class CameraProviderServer:
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received GET_FACE_COUNTS request from {request.remote}")
         
-        face_counts = self.face_processor.get_face_counts()
+        # Use memory-based approach to get counts
+        people = self.face_processor.memory.get_all_people()
         
         # Get the current timestamp for reference
         current_time = datetime.datetime.now().isoformat()
         
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+        
         # Convert to a format suitable for JSON with timestamp information
-        counts_data = {
-            face_id: {
-                'count': count,
-                'is_named': face_id in self.face_processor.known_faces,
-                'first_seen': self.face_processor.get_first_seen_time(face_id),
-                'last_seen': self.face_processor.get_last_seen_time(face_id),
-                'timestamp': current_time
+        counts_data = {}
+        for person_id, person in people.items():
+            # Get thumbnail URLs using the person object methods
+            thumbnail_url = None
+            all_thumbnail_urls = []
+
+            # Get the latest thumbnail URL
+            latest_thumbnail_path = person.get_thumbnail_url()
+            if latest_thumbnail_path:
+                 # Construct full URL if it's a relative path
+                 thumbnail_url = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path.startswith('/') else latest_thumbnail_path
+
+            # Get all thumbnail URLs
+            for path in person.get_all_thumbnail_urls():
+                 # Construct full URL if it's a relative path
+                 full_url = f"{base_url}{path}" if path.startswith('/') else path
+                 all_thumbnail_urls.append(full_url)
+                            
+            counts_data[person_id] = {
+                'count': person.appearance_count,
+                'is_named': person.is_named,
+                'first_seen': self.face_processor.get_first_seen_time(person_id),
+                'last_seen': self.face_processor.get_last_seen_time(person_id),
+                'timestamp': current_time,
+                'thumbnail_url': thumbnail_url, # Use the potentially full URL
+                'thumbnail_count': person.thumbnail_count,
+                'has_thumbnails': len(person.thumbnails) > 0,
+                'all_thumbnail_urls': all_thumbnail_urls # Use the list of potentially full URLs
             }
-            for face_id, count in face_counts.items()
-        }
         
         response = web.json_response(counts_data)
         
@@ -198,9 +227,36 @@ class CameraProviderServer:
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received GET_KNOWN_FACES request from {request.remote}")
         
+        # Use the existing method that already uses memory
         known_faces = self.face_processor.get_known_faces()
         
-        response = web.json_response(known_faces)
+        # Additional information about known people
+        all_people = self.face_processor.memory.get_all_people()
+        known_face_ids = [person_id for person_id, person in all_people.items() if person.is_named]
+        
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+
+        # Add thumbnail URLs to each known face entry instead of base64 data
+        for face_id, face_data in known_faces.items():
+            person = self.face_processor.memory.get_person(face_id)
+            if person:
+                latest_thumbnail_path = person.get_thumbnail_url()
+                face_data['thumbnail_url'] = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path and latest_thumbnail_path.startswith('/') else latest_thumbnail_path
+                
+                all_urls = []
+                for path in person.get_all_thumbnail_urls():
+                    full_url = f"{base_url}{path}" if path.startswith('/') else path
+                    all_urls.append(full_url)
+                face_data['all_thumbnails'] = all_urls
+        
+        response = web.json_response({
+            'known_faces': known_faces,
+            'count': len(known_face_ids),
+            'known_faces_list': known_face_ids
+        })
         
         elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_KNOWN_FACES request in {elapsed:.2f}ms")
@@ -250,8 +306,20 @@ class CameraProviderServer:
         nparr = np.frombuffer(jpeg_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
+        # Get server base URL for thumbnail URLs
+        scheme = request.url.scheme
+        host = request.host
+        base_url = f"{scheme}://{host}"
+
         # Process with face recognition
         _, recognized_faces = self.face_processor.recognize_faces(img)
+
+        # Add full thumbnail URLs to the response
+        for face in recognized_faces:
+            person = self.face_processor.memory.get_person(face.get('id'))
+            if person:
+                latest_thumbnail_path = person.get_thumbnail_url()
+                face['thumbnail_url'] = f"{base_url}{latest_thumbnail_path}" if latest_thumbnail_path and latest_thumbnail_path.startswith('/') else latest_thumbnail_path
         
         # Return just the face data (not the image)
         response = web.json_response({
@@ -281,10 +349,9 @@ class CameraProviderServer:
             logger.info(f"[Request #{self._request_count}] Old and new face IDs are the same, no action needed")
             return web.Response(text="No changes needed")
         
-        # Check if this is actually a merge (new_id already exists)
-        if new_face_id in self.face_processor.known_faces:
+        # Check if new ID already exists - this is a merge operation, not a rename
+        if self.face_processor.memory.get_person(new_face_id):
             logger.info(f"[Request #{self._request_count}] New face ID already exists, redirecting to merge operation")
-            # This is a merge operation, not a rename
             success = self.face_processor.merge_faces(old_face_id, new_face_id)
             if not success:
                 return web.Response(status=400, text="Failed to merge faces - one or both IDs may not exist")
@@ -293,44 +360,24 @@ class CameraProviderServer:
             logger.info(f"[Request #{self._request_count}] Successfully merged faces in {elapsed:.2f}ms")
             return web.Response(text=f"Successfully merged '{old_face_id}' into '{new_face_id}'")
         
-        # Check if old_face_id exists in tracked_faces but not in known_faces
-        # This handles the case of renaming a newly detected face
-        old_face_in_known = old_face_id in self.face_processor.known_faces
-        old_face_in_tracked = old_face_id in self.face_processor.tracked_faces
-        
-        if not old_face_in_known and not old_face_in_tracked:
-            logger.error(f"[Request #{self._request_count}] Face ID '{old_face_id}' not found in known or tracked faces")
+        # Check if old face exists
+        old_person = self.face_processor.memory.get_person(old_face_id)
+        if not old_person:
+            logger.error(f"[Request #{self._request_count}] Face ID '{old_face_id}' not found")
             return web.Response(status=400, text=f"Face ID '{old_face_id}' not found")
-            
-        # If face is only in tracked_faces, we need to move it to known_faces first
-        if not old_face_in_known and old_face_in_tracked:
-            logger.info(f"[Request #{self._request_count}] Moving face from tracked to known faces before renaming")
-            self.face_processor.known_faces[old_face_id] = self.face_processor.tracked_faces[old_face_id]['feature']
-            old_face_in_known = True
         
-        # This is a true rename operation
-        # Update the face entry directly in the processor's dictionaries
-        if old_face_in_known:
-            # Copy the face feature to the new ID
-            self.face_processor.known_faces[new_face_id] = self.face_processor.known_faces[old_face_id]
-            # Remove the old entry
-            del self.face_processor.known_faces[old_face_id]
+        # Use the memory's rename_person method for the rename operation
+        success = self.face_processor.memory.rename_person(old_face_id, new_face_id)
+        
+        if success:
+            # Request a save to persist the change
+            self.face_processor.memory.request_save()
             
-            # Update appearance counts
-            if old_face_id in self.face_processor.face_appearance_count:
-                self.face_processor.face_appearance_count[new_face_id] = self.face_processor.face_appearance_count[old_face_id]
-                del self.face_processor.face_appearance_count[old_face_id]
-            
-            # Update tracked faces if necessary
-            if old_face_id in self.face_processor.tracked_faces:
-                self.face_processor.tracked_faces[new_face_id] = self.face_processor.tracked_faces[old_face_id]
-                del self.face_processor.tracked_faces[old_face_id]
-                
             elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"[Request #{self._request_count}] Successfully renamed face from '{old_face_id}' to '{new_face_id}' in {elapsed:.2f}ms")
             return web.Response(text=f"Successfully renamed '{old_face_id}' to '{new_face_id}'")
         else:
-            return web.Response(status=400, text=f"Failed to rename face - something unexpected happened")
+            return web.Response(status=400, text=f"Failed to rename face - please check logs for details")
     
     async def _handle_static_files(self, request):
         path = request.match_info.get('path', 'index.html')
@@ -354,6 +401,215 @@ class CameraProviderServer:
         else:
             return web.Response(status=404)
         
+    async def _handle_import_faces_batch(self, request):
+        """Handle batch import of faces from uploaded images."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received IMPORT_FACES_BATCH request from {request.remote}")
+        try:
+            # Check content type
+            content_type = request.content_type
+            if not content_type.startswith('multipart/'):
+                logger.warning(f"Invalid content type: {content_type}")
+                return web.Response(status=400, text="Invalid content type, expected multipart/form-data")
+
+            reader = await request.multipart()
+
+            # Prepare result object
+            result = {
+                "success": True,
+                "person_name": "",
+                "images_processed": 0,
+                "faces_detected": 0,
+                "failed_images": [],
+                "errors": []
+            }
+
+            # Create temporary directory for processing
+            temp_dir = tempfile.mkdtemp()
+            logger.info(f"Created temp directory: {temp_dir}")
+
+            # Initialize tracking variables
+            person_name = None
+            image_files = [] # Store tuples of (filename, filepath)
+
+            try:
+                # Process multipart data
+                while True:
+                    part = await reader.next()
+                    if part is None:
+                        break
+
+                    if part.name == 'person_name':
+                        person_name = (await part.text()).strip()
+                        result["person_name"] = person_name
+                        logger.info(f"Processing import for person: {person_name}")
+                    elif part.name == 'images':
+                        filename = part.filename
+                        if filename and self._is_valid_image_filename(filename):
+                            # Save file temporarily
+                            file_path = os.path.join(temp_dir, filename)
+                            with open(file_path, 'wb') as f:
+                                while True:
+                                    chunk = await part.read_chunk()
+                                    if not chunk:
+                                        break
+                                    f.write(chunk)
+                            image_files.append((filename, file_path))
+                            logger.debug(f"Saved temporary image: {file_path}")
+                        else:
+                            logger.warning(f"Skipping invalid file: {filename}")
+                            result["failed_images"].append(filename)
+                            result["errors"].append(f"Invalid file type: {filename}")
+
+                if not person_name:
+                    raise ValueError("Missing 'person_name' in form data")
+                if not image_files:
+                    raise ValueError("No valid image files provided")
+
+                # Process saved images using FaceProcessor
+                detected_faces = 0
+                processed_count = 0
+                for filename, file_path in image_files:
+                    try:
+                        # Read image using OpenCV
+                        img = cv2.imread(file_path)
+                        if img is None:
+                            raise ValueError(f"Could not read image file: {filename}")
+
+                        # Process using FaceProcessor
+                        success, face_id = await asyncio.get_event_loop().run_in_executor(
+                            None, self.face_processor.process_imported_face_image, img, person_name
+                        )
+                        processed_count += 1
+                        if success:
+                            detected_faces += 1
+                            # face_id should be the person_name if successful
+                            result["face_id"] = face_id # Store the confirmed face_id
+                        else:
+                            result["failed_images"].append(filename)
+                            # Add more specific error if possible, otherwise generic
+                            if f"No face detected in image for {person_name}" not in str(result["errors"]): # Avoid duplicate no-face errors
+                                result["errors"].append(f"Processing failed for {filename} (e.g., no face or low confidence)")
+                    except Exception as img_err:
+                        logger.error(f"Error processing image {filename}: {img_err}", exc_info=True)
+                        result["failed_images"].append(filename)
+                        result["errors"].append(f"Error processing {filename}: {str(img_err)}")
+
+                # Update result
+                result["images_processed"] = processed_count
+                result["faces_detected"] = detected_faces
+
+                # Check if overall success based on detected faces
+                if detected_faces == 0 and processed_count > 0:
+                    result["success"] = False
+                    if not result["errors"]: # Add a generic error if none specific were added
+                         result["errors"].append(f"No faces successfully processed for {person_name}")
+            finally:
+                # Cleanup temp files and directory
+                logger.info(f"Cleaning up temp directory: {temp_dir}")
+                for _, file_path in image_files:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        logger.error(f"Error removing temp file {file_path}: {e}")
+                try:
+                    if os.path.exists(temp_dir):
+                        os.rmdir(temp_dir)
+                except Exception as e:
+                    logger.error(f"Error removing temp directory {temp_dir}: {e}")
+
+            # Return results
+            elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+            logger.info(f"[Request #{self._request_count}] Processed batch import for '{person_name}' in {elapsed:.2f}ms - {result['faces_detected']}/{result['images_processed']} faces detected/processed.")
+            return web.json_response(result)
+
+        except Exception as e:
+            logger.error(f"[Request #{self._request_count}] Error handling batch import: {e}", exc_info=True)
+            # Ensure result reflects the error
+            error_result = {
+                "success": False,
+                "person_name": person_name if 'person_name' in locals() else "Unknown",
+                "images_processed": 0,
+                "faces_detected": 0,
+                "failed_images": [f[0] for f in image_files] if 'image_files' in locals() else [],
+                "errors": [f"Server error during import: {str(e)}"]
+            }
+            return web.json_response(error_result, status=500)
+    
+    def _is_valid_image_filename(self, filename):
+        """Check if filename has a valid image extension."""
+        valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
+        ext = os.path.splitext(filename.lower())[1]
+        return ext in valid_extensions
+    
+    async def _handle_thumbnail(self, request):
+        """Handle requests for thumbnail images."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received THUMBNAIL request from {request.remote}")
+        
+        # Get person_id and filename from URL path
+        person_id = request.match_info.get('person_id', None)
+        filename = request.match_info.get('filename', None)
+        
+        if not person_id or not filename:
+            logger.error(f"[Request #{self._request_count}] Missing person_id or filename")
+            return web.Response(status=400, text="Both person_id and filename are required")
+        
+        # Get thumbnail path
+        person = self.face_processor.memory.get_person(person_id)
+        if not person or not person.person_thumbnails_dir:
+            logger.error(f"[Request #{self._request_count}] Person {person_id} not found or has no thumbnail directory")
+            return web.Response(status=404, text="Person not found or has no thumbnails")
+        
+        # Build full path to thumbnail file
+        thumbnail_path = os.path.join(person.person_thumbnails_dir, filename)
+        
+        # Check if file exists
+        if not os.path.exists(thumbnail_path):
+            logger.error(f"[Request #{self._request_count}] Thumbnail file {thumbnail_path} not found")
+            return web.Response(status=404, text="Thumbnail file not found")
+        
+        # Return the thumbnail file
+        with open(thumbnail_path, 'rb') as f:
+            content = f.read()
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled THUMBNAIL request in {elapsed:.2f}ms")
+        return web.Response(body=content, content_type='image/jpeg')
+
+    async def _handle_get_save_status(self, request):
+        """Handle requests for face memory save status."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received GET_SAVE_STATUS request from {request.remote}")
+        
+        # Get save status from face memory
+        save_status = self.face_processor.memory.get_save_status()
+        
+        response = web.json_response(save_status)
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled GET_SAVE_STATUS request in {elapsed:.2f}ms")
+        return response
+
+    async def _handle_request_save(self, request):
+        """Handle manual save requests."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received REQUEST_SAVE request from {request.remote}")
+        
+        # Request a save from face memory
+        self.face_processor.memory.request_save()
+        
+        response = web.Response(status=200, text="Save requested")
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled REQUEST_SAVE request in {elapsed:.2f}ms")
+        return response
+
     async def start(self):
         try:
             logger.info("Starting Camera Provider Server...")
@@ -390,10 +646,14 @@ class CameraProviderServer:
             app.router.add_get('/get_image_with_recognition', self._handle_get_image_with_recognition)
             app.router.add_get('/add_face', self._handle_add_face)
             app.router.add_get('/get_face_counts', self._handle_get_face_counts)
-            app.router.add_get('/get_known_faces', self._handle_get_known_faces)  # New endpoint for known faces
-            app.router.add_get('/merge_faces', self._handle_merge_faces)  # New endpoint for merging faces
-            app.router.add_get('/get_face_data', self._handle_get_face_data)  # New endpoint for face data without image
-            app.router.add_get('/rename_face', self._handle_rename_face)  # New endpoint for renaming faces
+            app.router.add_get('/get_known_faces', self._handle_get_known_faces)
+            app.router.add_get('/merge_faces', self._handle_merge_faces)
+            app.router.add_get('/get_face_data', self._handle_get_face_data)
+            app.router.add_get('/rename_face', self._handle_rename_face)
+            app.router.add_post('/import_faces_batch', self._handle_import_faces_batch)
+            app.router.add_get('/thumbnails/{person_id}/{filename}', self._handle_thumbnail)
+            app.router.add_get('/get_save_status', self._handle_get_save_status)
+            app.router.add_post('/request_save', self._handle_request_save)
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             
@@ -452,6 +712,11 @@ class CameraProviderServer:
     async def stop(self):
         logger.info("Stopping Camera Provider Server...")
         
+        # Shutdown face memory to ensure data is saved
+        if hasattr(self.face_processor, 'memory'):
+            logger.info("Shutting down face memory...")
+            self.face_processor.memory.shutdown()
+            
         if self._zeroconf and self._service_info:
             logger.info("Unregistering Zeroconf service...")
             await self._zeroconf.async_unregister_service(self._service_info)

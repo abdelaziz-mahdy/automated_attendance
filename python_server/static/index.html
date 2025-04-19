@@ -6,6 +6,7 @@
     <title>Camera Viewer</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="modal-styles.css">
 </head>
 <body>
     <div class="container">
@@ -52,6 +53,7 @@
                 <div class="face-stats-header">
                     <h2>Detected Faces</h2>
                     <div class="face-stats-actions">
+                        <button id="importFacesBtn" class="action-button"><i class="fas fa-file-import"></i> Import Faces</button>
                         <span id="totalFacesCount">Total Faces: 0</span>
                         <button id="toggleDragMode"><i class="fas fa-arrows-alt"></i> Drag to Merge</button>
                         <button id="refreshFaceCounts"><i class="fas fa-sync-alt"></i> Refresh</button>
@@ -266,7 +268,118 @@
     
     <!-- Toast notifications container -->
     <div class="toast-container" id="toastContainer"></div>
+    
+    <!-- Import Faces Modal -->
+    <div id="importFacesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Import Faces from Directory</h2>
+                <button class="close-button" id="closeImportModal"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="import-instruction">
+                    Select a directory where each subdirectory contains photos of a person.
+                    <br>
+                    <strong>Required structure:</strong> root_dir/person_name/image1.jpg, image2.jpg...
+                </p>
+                
+                <div class="import-controls">
+                    <div class="directory-selection">
+                        <button id="browseDirectoryBtn" class="primary-button">
+                            <i class="fas fa-folder-open"></i> Select Directory
+                        </button>
+                        <span id="selectedDirectoryName" class="selected-directory">No directory selected</span>
+                        <!-- Hidden file input for directory selection -->
+                        <input type="file" id="directoryInput" webkitdirectory directory multiple style="display:none">
+                    </div>
+                    <div class="import-options">
+                        <div class="option-item">
+                            <label for="batchSizeInput">Batch size:</label>
+                            <select id="batchSizeInput">
+                                <option value="5">5 images (Low memory)</option>
+                                <option value="10" selected>10 images (Recommended)</option>
+                                <option value="20">20 images (Fast)</option>
+                                <option value="50">50 images (High memory)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="startImportBtn" class="primary-button" disabled>
+                        <i class="fas fa-file-import"></i> Start Import
+                    </button>
+                </div>
+                
+                <!-- Import Progress -->
+                <div id="importProgress" class="import-progress" style="display: none;">
+                    <h3>Import Progress</h3>
+                    <div class="file-progress">
+                        <div class="progress-label">Current batch:</div>
+                        <div class="progress-container">
+                            <div id="currentBatchProgress" class="progress-bar" style="width: 0%;"></div>
+                            <span id="currentBatchProgressText" class="progress-text">0%</span>
+                        </div>
+                    </div>
+                    <div class="overall-progress">
+                        <div class="progress-label">Overall progress:</div>
+                        <div class="progress-container">
+                            <div id="overallProgress" class="progress-bar" style="width: 0%;"></div>
+                            <span id="overallProgressText" class="progress-text">0%</span>
+                        </div>
+                    </div>
+                    <div id="importStatusText" class="status-text">Preparing to import...</div>
+                    <div id="batchStatusText" class="batch-status">Processing batch 0 of 0</div>
+                </div>
+                
+                <!-- Import Results -->
+                <div id="importResults" class="import-results" style="display: none;">
+                    <h3>Import Results</h3>
+                    <div class="import-summary">
+                        <div class="stat-card">
+                            <i class="fas fa-user"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="importedPersonsCount">0</span>
+                                <span class="stat-label">Persons Imported</span>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <i class="fas fa-image"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="processedImagesCount">0</span>
+                                <span class="stat-label">Images Processed</span>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <i class="fas fa-check-circle"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="detectedFacesCount">0</span>
+                                <span class="stat-label">Faces Detected</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- List of imported persons -->
+                    <div class="imported-persons-container">
+                        <h3>Imported Persons</h3>
+                        <div id="importedPersonsList" class="imported-persons-list">
+                            <!-- Imported persons will be added here dynamically -->
+                        </div>
+                    </div>
+                    
+                    <!-- Error details if any -->
+                    <div id="importErrorsContainer" class="import-errors" style="display: none;">
+                        <h3>Import Errors</h3>
+                        <div id="importErrorsList" class="errors-list">
+                            <!-- Errors will be added here dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
+    <script src="import-faces.js"></script>
+    <script src="save-status.js"></script>
 </body>
 </html>

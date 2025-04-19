@@ -1,3 +1,5 @@
+let faceThumbnails = {}; // Global declaration
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM elements
     const streamImage = document.getElementById('streamImage');
@@ -35,7 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let draggedFaceId = null;
     let faceData = {};
     let attendanceData = {};
-    let faceThumbnails = {}; // Store thumbnails for faces
+    // This line is no longer needed as we declared it globally
+    // let faceThumbnails = {}; // Store thumbnails for faces
     let droppedFaces = []; // Store faces dropped into the merge area
     let thumbnailCleanupInterval = null; // Interval for cleaning up thumbnails
     
@@ -67,27 +70,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 tabContents.forEach(content => content.classList.remove('active'));
                 
                 // Add active class to selected button and content
-                button.addEventListener('click', () => {
-                    const tabId = button.dataset.tab;
-                    
-                    // Remove active class from all buttons and contents
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    tabContents.forEach(content => content.classList.remove('active'));
-                    
-                    // Add active class to selected button and content
-                    button.classList.add('active');
-                    document.getElementById(tabId).classList.add('active');
-                    
-                    // If switching to faces tab, refresh face counts
-                    if (tabId === 'faces-tab') {
-                        updateFaceCounts();
-                    }
-                    
-                    // If switching to attendance tab, refresh attendance data
-                    if (tabId === 'attendance-tab') {
-                        updateAttendance();
-                    }
-                });
+                button.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                
+                // If switching to faces tab, refresh face counts
+                if (tabId === 'faces-tab') {
+                    updateFaceCounts();
+                }
+                
+                // If switching to attendance tab, refresh attendance data
+                if (tabId === 'attendance-tab') {
+                    updateAttendance();
+                }
             });
         });
     }
@@ -260,32 +254,56 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update face thumbnails in the UI
     function updateFaceThumbnails(faceElement, faceId) {
-        if (!faceThumbnails[faceId] || faceThumbnails[faceId].length === 0) return;
+        // Get the latest data for this face from the global faceData
+        const currentFaceData = window.faceData && window.faceData[faceId];
         
         // Find or create image container
         let imgContainer = faceElement.querySelector('.face-img-container');
         if (!imgContainer) return;
-        
+
         // Clear existing content
         imgContainer.innerHTML = '';
+
+        // Prioritize server-provided thumbnail URL
+        if (currentFaceData && currentFaceData.thumbnail_url) {
+            const mainImg = document.createElement('img');
+            mainImg.className = 'face-img';
+            mainImg.src = currentFaceData.thumbnail_url;
+            mainImg.alt = `Face ${faceId}`;
+            imgContainer.appendChild(mainImg);
+        } else if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
+            // Fallback to client-side captured thumbnails if server URL is missing
+            const latestClientThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
+            const mainImg = document.createElement('img');
+            mainImg.className = 'face-img';
+            mainImg.src = latestClientThumbnail;
+            mainImg.alt = `Face ${faceId}`;
+            imgContainer.appendChild(mainImg);
+        } else {
+             // Final fallback to placeholder
+             const placeholder = document.createElement('div');
+             placeholder.className = 'face-img-placeholder';
+             placeholder.innerHTML = '<i class="fas fa-user"></i>';
+             imgContainer.appendChild(placeholder);
+        }
+
+        // Update thumbnails row using server data if available, else client data
+        let thumbnailsToShow = (currentFaceData && currentFaceData.all_thumbnail_urls) || faceThumbnails[faceId] || [];
         
-        // Use the latest thumbnail as the main image
-        const latestThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
-        const mainImg = document.createElement('img');
-        mainImg.className = 'face-img';
-        mainImg.src = latestThumbnail;
-        mainImg.alt = `Face ${faceId}`;
-        imgContainer.appendChild(mainImg);
-        
-        // Create thumbnails row if more than one thumbnail exists
-        if (faceThumbnails[faceId].length > 1) {
-            let thumbnailsContainer = faceElement.querySelector('.face-thumbnails');
+        let thumbnailsContainer = faceElement.querySelector('.face-thumbnails');
+        if (thumbnailsToShow.length > 1) {
             if (!thumbnailsContainer) {
                 thumbnailsContainer = document.createElement('div');
                 thumbnailsContainer.className = 'face-thumbnails';
                 const contentContainer = faceElement.querySelector('.face-content');
                 if (contentContainer) {
-                    contentContainer.appendChild(thumbnailsContainer);
+                    // Insert thumbnails before the stats
+                    const statsElement = contentContainer.querySelector('.face-stats');
+                    if (statsElement) {
+                        contentContainer.insertBefore(thumbnailsContainer, statsElement);
+                    } else {
+                        contentContainer.appendChild(thumbnailsContainer);
+                    }
                 }
             }
             
@@ -293,17 +311,22 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbnailsContainer.innerHTML = '';
             
             // Add thumbnails
-            faceThumbnails[faceId].forEach((thumbnail, index) => {
+            thumbnailsToShow.forEach((thumbnailUrl, index) => {
                 const thumbImg = document.createElement('img');
                 thumbImg.className = 'face-thumbnail';
-                thumbImg.src = thumbnail;
+                thumbImg.src = thumbnailUrl; // Use the URL (could be server or client)
                 thumbImg.alt = `Thumbnail ${index + 1}`;
                 thumbImg.addEventListener('click', () => {
-                    // When clicked, set this thumbnail as the main image
-                    mainImg.src = thumbnail;
+                    const mainImg = imgContainer.querySelector('.face-img');
+                    if (mainImg) {
+                        mainImg.src = thumbnailUrl;
+                    }
                 });
                 thumbnailsContainer.appendChild(thumbImg);
             });
+        } else if (thumbnailsContainer) {
+            // Remove container if not enough thumbnails
+            thumbnailsContainer.remove();
         }
     }
     
@@ -437,27 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Show toast notification
     function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        
-        toastContainer.appendChild(toast);
-        
-        // Trigger reflow to enable transition
-        toast.offsetHeight;
-        
-        // Show toast
-        toast.classList.add('show');
-        
-        // Auto-hide toast after 3 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            
-            // Remove toast from DOM after transition
-            setTimeout(() => {
-                toastContainer.removeChild(toast);
-            }, 300);
-        }, 3000);
+        window.showToast(message, type);
     }
     
     // Fetch face counts from server
@@ -572,6 +575,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalFaces = Object.keys(faceData).length;
         totalFacesCount.textContent = `Total Faces: ${totalFaces}`;
         
+        // Store face data globally for other functions to use
+        window.faceData = faceData;
+        
         if (totalFaces === 0) {
             // Show placeholder if no faces
             const placeholder = document.createElement('div');
@@ -601,14 +607,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const imgContainer = document.createElement('div');
             imgContainer.className = 'face-img-container';
             
-            // If we have thumbnails, use them, otherwise use placeholder
-            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
+            // Use the thumbnail_url provided by the server if available
+            if (data.thumbnail_url) {
                 const img = document.createElement('img');
                 img.className = 'face-img';
-                img.src = faceThumbnails[faceId][faceThumbnails[faceId].length - 1]; // Latest thumbnail
+                img.src = data.thumbnail_url; // Use the full URL from server
                 img.alt = `Face ${faceId}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback to placeholder if no server URL
                 const placeholder = document.createElement('div');
                 placeholder.className = 'face-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user"></i>';
@@ -648,21 +655,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             contentContainer.appendChild(faceHeader);
             
-            // Add thumbnails gallery if we have more than one thumbnail
-            if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 1) {
+            // Add thumbnails gallery using all_thumbnail_urls from server
+            if (data.all_thumbnail_urls && data.all_thumbnail_urls.length > 1) {
                 const thumbnailsContainer = document.createElement('div');
                 thumbnailsContainer.className = 'face-thumbnails';
                 
-                faceThumbnails[faceId].forEach((thumbnail, index) => {
+                data.all_thumbnail_urls.forEach((thumbnailUrl, index) => {
                     const thumbImg = document.createElement('img');
                     thumbImg.className = 'face-thumbnail';
-                    thumbImg.src = thumbnail;
+                    thumbImg.src = thumbnailUrl; // Use the full URL from server
                     thumbImg.alt = `Thumbnail ${index + 1}`;
                     thumbImg.addEventListener('click', () => {
                         // When clicked, set this thumbnail as the main image
                         const mainImg = imgContainer.querySelector('.face-img');
                         if (mainImg) {
-                            mainImg.src = thumbnail;
+                            mainImg.src = thumbnailUrl;
                         }
                     });
                     thumbnailsContainer.appendChild(thumbImg);
@@ -733,13 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
             faceCountsList.appendChild(faceItem);
         });
         
-        // Update any face thumbnails
-        for (const faceId in faceThumbnails) {
-            const faceElement = document.querySelector(`.face-count-item[data-face-id="${faceId}"]`);
-            if (faceElement) {
-                updateFaceThumbnails(faceElement, faceId);
-            }
-        }
+        // No need to call updateFaceThumbnails separately here as server data includes URLs
     }
     
     // Start editing a face name
@@ -1161,6 +1162,29 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Error connecting to server', 'error');
             console.error('Server connection error:', err);
         });
+
+    // Add additional CSS styles for the new thumbnail aspect ratio
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+        .face-img-container img, .attendance-img-container img {
+            aspect-ratio: 3/4; /* Match the 96x128 aspect ratio */
+            object-fit: cover;
+            width: auto;
+            height: 100%;
+        }
+        
+        .face-img-container, .attendance-img-container {
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .face-thumbnail {
+            aspect-ratio: 3/4;
+            object-fit: cover;
+        }
+    `;
+    document.head.appendChild(styleElement);
 });
 
 // Attendance Settings and Class Definitions
@@ -1440,16 +1464,26 @@ class AttendanceManager {
             const data = await response.json();
             
             // Add all known faces to the set
-            this.knownPeople = new Set(data.known_faces || []);
+            this.knownPeople = new Set(data.known_faces_list || []);
             
             return this.knownPeople;
         } catch (err) {
             console.error('Error fetching known people:', err);
             // Fall back to using face thumbnails as a source of known people
-            this.knownPeople = new Set(Object.keys(faceThumbnails || {}).filter(id => {
-                // Consider only named faces (those without UUID-like patterns)
-                return !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(id);
-            }));
+            // Ensure faceThumbnails is defined before using it
+            if (typeof faceThumbnails === 'undefined') {
+                // Initialize as empty object if undefined
+                window.faceThumbnails = {};
+                faceThumbnails = {};
+            }
+            
+            // Create a set from keys, check that object exists first
+            this.knownPeople = new Set(
+                Object.keys(faceThumbnails || {}).filter(id => {
+                    // Consider only named faces (those without UUID-like patterns)
+                    return !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(id);
+                })
+            );
             
             return this.knownPeople;
         }
@@ -1593,15 +1627,18 @@ class AttendanceManager {
             const imgContainer = document.createElement('div');
             imgContainer.className = 'attendance-img-container';
             
-            // If we have thumbnails, use them, otherwise use placeholder
-            const thumbnail = person.getLatestThumbnail();
-            if (thumbnail) {
+            // Get thumbnail URL from faceData if available
+            const personData = window.faceData && window.faceData[person.id];
+            const thumbnailUrl = personData && personData.thumbnail_url;
+
+            if (thumbnailUrl) {
                 const img = document.createElement('img');
                 img.className = 'attendance-img';
-                img.src = thumbnail;
+                img.src = thumbnailUrl; // Use server URL
                 img.alt = `Face ${person.id}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback placeholder
                 const placeholder = document.createElement('div');
                 placeholder.className = 'attendance-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user"></i>';
@@ -1647,63 +1684,65 @@ class AttendanceManager {
             attendanceList.appendChild(attendanceItem);
         });
     }
-    
+
     renderAbsenteesList() {
         const absenteesList = document.getElementById('absenteesList');
         absenteesList.innerHTML = '';
-        
+
         if (this.absent.length === 0) {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'attendance-placeholder';
-            placeholder.textContent = 'All expected people are present';
-            absenteesList.appendChild(placeholder);
-            return;
+             const placeholder = document.createElement('div');
+             placeholder.className = 'attendance-placeholder';
+             placeholder.textContent = 'All expected people are present';
+             absenteesList.appendChild(placeholder);
+             return;
         }
-        
-        // Create attendance items for each absent person
+
         this.absent.forEach(person => {
             const attendanceItem = document.createElement('div');
             attendanceItem.className = 'attendance-item';
-            
+
             // Image container
             const imgContainer = document.createElement('div');
             imgContainer.className = 'attendance-img-container';
-            
-            // If we have thumbnails, use them, otherwise use placeholder
-            const thumbnail = person.getLatestThumbnail();
-            if (thumbnail) {
+
+            // Get thumbnail URL from faceData if available
+            const personData = window.faceData && window.faceData[person.id];
+            const thumbnailUrl = personData && personData.thumbnail_url;
+
+            if (thumbnailUrl) {
                 const img = document.createElement('img');
                 img.className = 'attendance-img';
-                img.src = thumbnail;
+                img.src = thumbnailUrl; // Use server URL
                 img.alt = `Face ${person.id}`;
                 imgContainer.appendChild(img);
             } else {
+                // Fallback placeholder
                 const placeholder = document.createElement('div');
                 placeholder.className = 'attendance-img-placeholder';
                 placeholder.innerHTML = '<i class="fas fa-user-xmark"></i>';
                 imgContainer.appendChild(placeholder);
             }
-            
+
             attendanceItem.appendChild(imgContainer);
-            
+
             // Attendance content
             const contentContainer = document.createElement('div');
             contentContainer.className = 'attendance-content';
-            
+
             // Person name
             const nameElement = document.createElement('div');
             nameElement.className = 'attendance-name';
             nameElement.textContent = person.id;
-            
+
             // Absence message
             const statusElement = document.createElement('div');
             statusElement.className = 'attendance-count';
             statusElement.innerHTML = '<i class="fas fa-calendar-xmark"></i> Not seen today';
-            
+
             contentContainer.appendChild(nameElement);
             contentContainer.appendChild(statusElement);
             attendanceItem.appendChild(contentContainer);
-            
+
             absenteesList.appendChild(attendanceItem);
         });
     }
@@ -1735,41 +1774,52 @@ class AttendanceManager {
 }
 
 // Initialize the attendance manager
-let attendanceManager;
+let attendanceManager = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize attendance manager
-    attendanceManager = new AttendanceManager();
-    
-    // Add event listeners for attendance settings
-    const toggleSettingsBtn = document.getElementById('toggleAttendanceSettings');
-    const closeSettingsBtn = document.getElementById('closeAttendanceSettings');
-    const saveSettingsBtn = document.getElementById('saveAttendanceSettings');
-    const settingsPanel = document.getElementById('attendanceSettings');
-    
-    toggleSettingsBtn.addEventListener('click', () => {
-        settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
-    });
-    
-    closeSettingsBtn.addEventListener('click', () => {
-        settingsPanel.style.display = 'none';
-    });
-    
-    saveSettingsBtn.addEventListener('click', () => {
-        if (attendanceManager.saveSettings()) {
-            showToast('Attendance settings saved', 'success');
+    try {
+        attendanceManager = new AttendanceManager();
+        
+        // Add event listeners for attendance settings
+        const toggleSettingsBtn = document.getElementById('toggleAttendanceSettings');
+        const closeSettingsBtn = document.getElementById('closeAttendanceSettings');
+        const saveSettingsBtn = document.getElementById('saveAttendanceSettings');
+        const settingsPanel = document.getElementById('attendanceSettings');
+        
+        toggleSettingsBtn.addEventListener('click', () => {
+            settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        closeSettingsBtn.addEventListener('click', () => {
             settingsPanel.style.display = 'none';
-        }
-    });
-    
-    // Add event listener for refresh attendance button
-    const refreshAttendanceBtn = document.getElementById('refreshAttendance');
-    refreshAttendanceBtn.addEventListener('click', updateAttendance);
+        });
+        
+        saveSettingsBtn.addEventListener('click', () => {
+            if (attendanceManager.saveSettings()) {
+                showToast('Attendance settings saved', 'success');
+                settingsPanel.style.display = 'none';
+            }
+        });
+        
+        // Add event listener for refresh attendance button
+        const refreshAttendanceBtn = document.getElementById('refreshAttendance');
+        refreshAttendanceBtn.addEventListener('click', updateAttendance);
+    } catch (err) {
+        console.error('Error initializing AttendanceManager:', err);
+        window.showToast('Error initializing attendance system', 'error');
+    }
 });
 
 // Process face data into attendance format - Modified to use the AttendanceManager
 async function updateAttendance() {
     try {
+        // Initialize the manager if not already done
+        if (!attendanceManager) {
+            console.log('Attendance manager not initialized, creating new instance');
+            attendanceManager = new AttendanceManager();
+        }
+        
         // Set today's date in the header - use current date dynamically
         const today = new Date();
         const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -1782,6 +1832,64 @@ async function updateAttendance() {
         attendanceManager.updateAttendanceUI();
     } catch (err) {
         console.error('Error updating attendance:', err);
-        showToast('Error updating attendance data', 'error');
+        window.showToast('Error updating attendance data', 'error');
     }
 }
+
+/**
+ * Update the attendance chart/progress bar with the given values
+ * @param {number} presentCount - Number of present attendees
+ * @param {number} absentCount - Number of absent attendees
+ */
+function updateAttendanceChart(presentCount, absentCount) {
+    const totalCount = presentCount + absentCount;
+    const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
+    
+    // Update progress bar
+    const progressBar = document.getElementById('attendanceProgressBar');
+    const progressText = document.getElementById('attendanceProgressText');
+    
+    if (progressBar && progressText) {
+        progressBar.style.width = `${attendanceRate}%`;
+        progressText.textContent = `${attendanceRate}%`;
+        
+        // Change color based on attendance rate
+        if (attendanceRate < 40) {
+            progressBar.style.backgroundColor = 'var(--danger-color)';
+        } else if (attendanceRate < 70) {
+            progressBar.style.backgroundColor = 'var(--warning-color)';
+        } else {
+            progressBar.style.backgroundColor = 'var(--success-color)';
+        }
+    }
+}
+
+// Make showToast globally accessible (it might be defined inside a scope)
+window.showToast = function(message, type = 'info') {
+    const toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    toastContainer.appendChild(toast);
+    
+    // Trigger reflow to enable transition
+    toast.offsetHeight;
+    
+    // Show toast
+    toast.classList.add('show');
+    
+    // Auto-hide toast after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        
+        // Remove toast from DOM after transition
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toastContainer.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+};

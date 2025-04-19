@@ -50,6 +50,7 @@ dependencies:
   path: ^1.9.1
   fl_chart: ^0.70.2
   table_calendar: ^3.0.9
+  file_picker: ^5.5.0  # Add this dependency
 
 dev_dependencies:
   flutter_test:

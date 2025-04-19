@@ -560,6 +560,72 @@ class FaceManagementService {
     await _facesRepository.removeExpectedAttendee(faceId);
   }
 
+  /// Import a face directly with given features and name
+  Future<bool> importFace({
+    required List<double> features,
+    required String personName,
+    Uint8List? faceThumbnail,
+  }) async {
+    try {
+      final now = DateTime.now();
+
+      // Check if this person already exists
+      String targetFaceId = '';
+      bool personExists = false;
+
+      // First check if person with this name already exists
+      for (final entry in trackedFaces.entries) {
+        if (entry.value.name == personName) {
+          targetFaceId = entry.key;
+          personExists = true;
+          break;
+        }
+      }
+
+      if (personExists) {
+        // Add as another feature for existing person
+        final trackedFace = trackedFaces[targetFaceId]!;
+
+        // Update the person's data with new facial features
+        await _facesRepository.addFacialFeature(
+          parentFaceId: targetFaceId,
+          features: features,
+          timestamp: now,
+          thumbnail: faceThumbnail,
+        );
+
+        // Refresh from database
+        await _refreshFaceFromDatabase(targetFaceId);
+      } else {
+        // Create a new person
+        final newFaceId = "face_${_uuid.v4()}";
+
+        // Create the new face object
+        final newTrackedFace = TrackedFace(
+          id: newFaceId,
+          features: features,
+          name: personName, // Use provided name
+          firstSeen: now,
+          lastSeen: now,
+          lastSeenProvider: 'import', // Mark as imported
+          thumbnail: faceThumbnail,
+        );
+
+        // Save to database
+        await _facesRepository.saveTrackedFace(newTrackedFace);
+
+        // Refresh from database
+        await _refreshFaceFromDatabase(newFaceId);
+      }
+
+      _notifyStateChanged();
+      return true;
+    } catch (e) {
+      debugPrint('Error importing face: $e');
+      return false;
+    }
+  }
+
   void _notifyStateChanged() {
     onStateChanged?.call();
   }

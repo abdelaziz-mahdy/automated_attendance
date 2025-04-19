@@ -3,6 +3,7 @@
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:automated_attendance/utils/face_management_dialogs.dart';
+import 'package:automated_attendance/widgets/dialogs/face_import_dialog.dart';
 import 'package:automated_attendance/widgets/recognized_person_grid_card.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +35,27 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
       builder: (context, manager, child) {
         return CustomScrollView(
           slivers: [
+            // Add import faces button at the top
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _showImportDialog,
+                      icon: const Icon(Icons.file_upload),
+                      label: const Text('Import Faces'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // Add a header with X button when in merge mode
             if (_selectedForMerge != null)
               SliverToBoxAdapter(
@@ -86,6 +108,13 @@ class _RecognizedPeopleListState extends State<RecognizedPeopleList> {
           ],
         );
       },
+    );
+  }
+
+  void _showImportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => const FaceImportDialog(),
     );
   }
 

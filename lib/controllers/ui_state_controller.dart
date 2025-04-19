@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:automated_attendance/isolate/frame_processor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/models/face_match.dart';
@@ -283,6 +284,59 @@ class UIStateController with ChangeNotifier {
 
   // Get list of expected attendees
   List<String> get expectedAttendees => List.from(_expectedAttendees);
+
+  /// Import a face image and register it with a person name
+  Future<bool> importFaceImage({
+    required Uint8List imageBytes,
+    required String personName,
+    String? filePath,
+  }) async {
+    try {
+      // Decode the image
+      final IFrameProcessor processor =
+          useIsolates ? IsolateFrameProcessor() : MainIsolateFrameProcessor();
+
+      // Process the image to detect faces
+      final result = await processor.processFrame(imageBytes);
+      if (result == null) {
+        debugPrint('Failed to process image: ${filePath ?? "unknown"}');
+        return false;
+      }
+
+      // Check if any faces were detected
+      final List<dynamic> features = result['faceFeatures'];
+      final List<dynamic> thumbnails = result['faceThumbnails'];
+
+      if (features.isEmpty) {
+        debugPrint('No faces detected in image: ${filePath ?? "unknown"}');
+        return false;
+      }
+
+      // Use the first detected face
+      await _faceManagementService.importFace(
+        features: features[0] as List<double>,
+        personName: personName,
+        faceThumbnail: thumbnails[0] as Uint8List?,
+      );
+
+      // Notify listeners to update UI
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error importing face image: $e');
+      return false;
+    }
+  }
+
+  /// Refresh tracked faces from the database
+  Future<void> refreshTrackedFaces() async {
+    try {
+      await _faceManagementService.ensureDataLoaded();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing tracked faces: $e');
+    }
+  }
 
   @override
   void dispose() {

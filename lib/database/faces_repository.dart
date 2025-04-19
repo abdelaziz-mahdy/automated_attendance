@@ -4,6 +4,7 @@ import 'package:automated_attendance/database/database.dart';
 import 'package:automated_attendance/database/database_provider.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 /// Repository to handle tracked faces persistence using Drift database
@@ -565,5 +566,43 @@ class FacesRepository {
   Future<void> removeExpectedAttendee(String faceId) async {
     final database = await _databaseProvider.database;
     await database.removeExpectedAttendee(faceId);
+  }
+
+  /// Add facial features as a new alternative feature set for an existing face
+  Future<void> addFacialFeature({
+    required String parentFaceId,
+    required List<double> features,
+    required DateTime timestamp,
+    Uint8List? thumbnail,
+  }) async {
+    final database = await _databaseProvider.database;
+
+    try {
+      // Convert features to blob
+      final blob = _featuresToBlob(features);
+
+      // Create a unique ID for the merged face
+      final mergedFaceId = 'merged_${_uuid.v4()}';
+
+      // Create companion object for insertion
+      final companion = DBMergedFacesCompanion(
+        id: Value(mergedFaceId),
+        targetId: Value(parentFaceId),
+        sourceId: Value(
+            mergedFaceId), // Use same ID for source since this is just an alternative feature
+        features: Value(blob),
+        thumbnail: Value(thumbnail),
+        firstSeen: Value(timestamp),
+        lastSeen: Value(timestamp),
+      );
+
+      // Insert the new merged face
+      await database.insertMergedFace(companion);
+
+      debugPrint('Added facial feature to parent face $parentFaceId');
+    } catch (e) {
+      debugPrint('Error adding facial feature: $e');
+      rethrow;
+    }
   }
 }
