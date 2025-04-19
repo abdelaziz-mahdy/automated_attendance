@@ -302,11 +302,20 @@ fi
 [ "$VERBOSE" -eq 1 ] && echo "⏰ Setting up cron job for automatic startup..."
 CRON_JOB="@reboot $INSTALL_DIR/run_camera_server.sh"
 
-# Remove any existing cron jobs for this script
-crontab -l 2>/dev/null | grep -v "run_camera_server.sh\|run_opencv_camera.sh\|run_picamera_camera.sh\|run_picamera2_camera.sh" | crontab -
+# Remove any existing cron jobs for camera server scripts
+[ "$VERBOSE" -eq 1 ] && echo "Removing any existing camera server cron jobs..."
+(crontab -l 2>/dev/null | grep -v "run_camera_server.sh\|automated_attendance\|camera_server" || echo "") | crontab -
 
 # Add new cron job
+[ "$VERBOSE" -eq 1 ] && echo "Adding new cron job: $CRON_JOB"
 (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+
+# Verify cron job was added correctly
+if crontab -l 2>/dev/null | grep -q "$INSTALL_DIR/run_camera_server.sh"; then
+    [ "$VERBOSE" -eq 1 ] && echo "✅ Verified cron job was added correctly"
+else
+    [ "$VERBOSE" -eq 1 ] && echo "⚠️ Warning: Could not verify cron job. Please check 'crontab -l' manually."
+fi
 
 # Status message
 if [ "$UPDATE_MODE" -eq 1 ]; then

@@ -50,6 +50,10 @@ echo -e "\n${BLUE}[3/7] Checking virtual environment...${NC}"
 if [ -d "$INSTALL_DIR/.venv" ] && [ -f "$INSTALL_DIR/.venv/bin/activate" ]; then
     echo -e "${GREEN}✓ Virtual environment exists${NC}"
     
+    # List virtual environment contents
+    echo "  Virtual environment contents:"
+    ls -la "$INSTALL_DIR/.venv/bin" | head -10
+    
     # Check Python and pip in virtual environment
     if [ -f "$INSTALL_DIR/.venv/bin/python" ]; then
         echo -e "${GREEN}✓ Python executable exists in virtual environment${NC}"
@@ -69,7 +73,46 @@ else
     echo "  Run setup_and_run.sh to recreate the virtual environment"
 fi
 
-echo -e "\n${BLUE}[4/7] Checking camera type...${NC}"
+echo -e "\n${BLUE}[4/7] Checking installation directory...${NC}"
+echo "  Installation directory: $INSTALL_DIR"
+if [ -d "$INSTALL_DIR" ]; then
+    echo -e "${GREEN}✓ Installation directory exists${NC}"
+    echo "  Directory contents:"
+    ls -la "$INSTALL_DIR" | head -20
+    
+    # Check for key files
+    for file in main.py server.py camera_provider.py run_camera_server.sh setup_and_run.sh; do
+        if [ -f "$INSTALL_DIR/$file" ]; then
+            echo -e "  ${GREEN}✓ $file exists${NC}"
+        else
+            echo -e "  ${RED}✗ $file missing${NC}"
+        fi
+    done
+else
+    echo -e "${RED}✗ Installation directory does not exist${NC}"
+    echo "  Create it with: mkdir -p $INSTALL_DIR"
+fi
+
+echo -e "\n${BLUE}[5/7] Checking cron configuration...${NC}"
+if crontab -l 2>/dev/null | grep -q "run_camera_server.sh"; then
+    echo -e "${GREEN}✓ Cron job is set up for camera server${NC}"
+    echo "  Current cron configuration:"
+    crontab -l | grep -E "run_camera_server|camera_server|automated_attendance"
+    
+    # Check if the script exists at the path specified in cron
+    CRON_PATH=$(crontab -l | grep "run_camera_server.sh" | awk '{print $NF}')
+    if [ -n "$CRON_PATH" ] && [ -f "$CRON_PATH" ]; then
+        echo -e "  ${GREEN}✓ Script exists at path specified in cron: $CRON_PATH${NC}"
+    else
+        echo -e "  ${RED}✗ Script does not exist at path specified in cron: $CRON_PATH${NC}"
+        echo "  Run cron_setup.sh again to fix the path"
+    fi
+else
+    echo -e "${RED}✗ No cron job found for camera server${NC}"
+    echo "  Run cron_setup.sh to set up automatic startup"
+fi
+
+echo -e "\n${BLUE}[6/7] Checking camera type...${NC}"
 if [ -h "$INSTALL_DIR/run_camera_server.sh" ]; then
     CAMERA_SCRIPT=$(readlink "$INSTALL_DIR/run_camera_server.sh")
     echo "  Camera script: $CAMERA_SCRIPT"
@@ -116,36 +159,7 @@ else
     echo "  Run cron_setup.sh to set up the appropriate camera script"
 fi
 
-echo -e "\n${BLUE}[5/7] Checking camera permissions...${NC}"
-if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model"; then
-    # Check if user is in video group (for Pi camera access)
-    if groups | grep -q "video"; then
-        echo -e "${GREEN}✓ User is in video group (required for camera access)${NC}"
-    else
-        echo -e "${RED}✗ User is not in video group${NC}"
-        echo "  Run: sudo usermod -a -G video $USER"
-        echo "  Then log out and log back in for changes to take effect"
-    fi
-    
-    # Check camera module config
-    if grep -q "^start_x=1\|^camera_auto_detect=1" /boot/config.txt; then
-        echo -e "${GREEN}✓ Camera module is enabled in /boot/config.txt${NC}"
-    else
-        echo -e "${RED}✗ Camera module might not be enabled${NC}"
-        echo "  Add 'camera_auto_detect=1' or 'start_x=1' to /boot/config.txt and reboot"
-    fi
-else
-    # For non-Pi systems, check for video devices
-    if [ -d "/dev/video0" ]; then
-        echo -e "${GREEN}✓ Camera device found at /dev/video0${NC}"
-        ls -l /dev/video*
-    else
-        echo -e "${YELLOW}? No video devices found at /dev/video*${NC}"
-        echo "  If using USB webcam, ensure it's connected properly"
-    fi
-fi
-
-echo -e "\n${BLUE}[6/7] Checking log file...${NC}"
+echo -e "\n${BLUE}[7/7] Checking log file...${NC}"
 if [ -f "$LOG_FILE" ]; then
     echo -e "${GREEN}✓ Log file exists: $LOG_FILE${NC}"
     
@@ -169,15 +183,6 @@ if [ -f "$LOG_FILE" ]; then
 else
     echo -e "${YELLOW}? Log file not found: $LOG_FILE${NC}"
     echo "  The server might not have started yet or is logging elsewhere"
-fi
-
-echo -e "\n${BLUE}[7/7] Checking cron job...${NC}"
-if crontab -l 2>/dev/null | grep -q "run_camera_server.sh"; then
-    echo -e "${GREEN}✓ Cron job is set up for camera server${NC}"
-    crontab -l | grep "camera_server"
-else
-    echo -e "${RED}✗ No cron job found for camera server${NC}"
-    echo "  Run cron_setup.sh to set up automatic startup"
 fi
 
 echo -e "\n${BLUE}===================================${NC}"
