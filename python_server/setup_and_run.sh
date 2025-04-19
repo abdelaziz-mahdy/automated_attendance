@@ -129,13 +129,18 @@ else
 fi
 
 # Check if uv is installed
-if ! command -v uv &> /dev/null; then
-    echo "⚠️ uv is not installed"
-    echo "📦 Please install uv using one of the following methods:"
-    echo "  - Using pip: pip install uv"
-    echo "  - Using curl (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "  - For more options visit: https://github.com/astral-sh/uv"
-    exit 1
+if command -v uv &> /dev/null; then
+    [ "$VERBOSE" -eq 1 ] && echo "✅ Using uv package manager"
+    PIP_CMD="uv pip"
+else
+    [ "$VERBOSE" -eq 1 ] && echo "⚙️ Using standard pip (uv not found)"
+    # Try to find pip in different forms
+    if command -v pip3 &> /dev/null; then
+        PIP_CMD="pip3"
+    else
+        PIP_CMD="pip"
+    fi
+    [ "$VERBOSE" -eq 1 ] && echo "Using $PIP_CMD for package installation"
 fi
 
 # Create virtual environment if it doesn't exist
@@ -148,7 +153,11 @@ if [ ! -d ".venv" ]; then
         python3 -m venv --system-site-packages .venv
     else
         # For OpenCV, create a standard virtual environment
-        uv venv .venv
+        if command -v uv &> /dev/null; then
+            uv venv .venv
+        else
+            python3 -m venv .venv
+        fi
     fi
 else
     [ "$VERBOSE" -eq 1 ] && echo "✅ Virtual environment already exists"
@@ -178,10 +187,16 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
     fi
     
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for $CAMERA_TYPE..."
-    uv pip install --upgrade -r requirements-picamera.txt
+    $PIP_CMD install --upgrade -r requirements-picamera.txt || {
+        [ "$VERBOSE" -eq 1 ] && echo "⚠️ Failed with $PIP_CMD, trying with pip directly..."
+        pip install --upgrade -r requirements-picamera.txt
+    }
 else
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for OpenCV..."
-    uv pip install --upgrade -r requirements-opencv.txt
+    $PIP_CMD install --upgrade -r requirements-opencv.txt || {
+        [ "$VERBOSE" -eq 1 ] && echo "⚠️ Failed with $PIP_CMD, trying with pip directly..."
+        pip install --upgrade -r requirements-opencv.txt
+    }
 fi
 
 echo "===================================="

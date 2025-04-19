@@ -174,6 +174,19 @@ WRAPPER_SCRIPT="$INSTALL_DIR/run_camera_server.sh"
 cat > "$WRAPPER_SCRIPT" << EOF
 #!/bin/bash
 cd "$INSTALL_DIR"
+
+# Source profile files to get environment variables (important for cron jobs)
+for profile in /etc/profile ~/.bash_profile ~/.bashrc ~/.profile; do
+    if [ -f "\$profile" ]; then
+        echo "Sourcing \$profile" >> "\$LOG_FILE" 2>&1
+        . "\$profile" >> "\$LOG_FILE" 2>&1
+    fi
+done
+
+# Export PATH to include common locations
+export PATH="\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
+echo "PATH: \$PATH" >> "\$LOG_FILE"
+
 # Log file setup
 LOG_FILE="\$HOME/camera_server.log"
 
@@ -181,6 +194,25 @@ LOG_FILE="\$HOME/camera_server.log"
 echo "=========================================" >> "\$LOG_FILE"
 echo "\$(date) - Starting camera server ($CAMERA_TYPE)" >> "\$LOG_FILE"
 echo "=========================================" >> "\$LOG_FILE"
+
+# Check for required tools
+command -v python3 >/dev/null 2>&1 || { echo "Python3 not found in PATH: \$PATH" >> "\$LOG_FILE"; exit 1; }
+echo "Using Python: \$(command -v python3) \$(python3 --version 2>&1)" >> "\$LOG_FILE"
+
+# Check if we have pip installer available
+if command -v uv >/dev/null 2>&1; then
+    echo "Using uv: \$(command -v uv) \$(uv --version 2>&1)" >> "\$LOG_FILE" 
+    PIP_CMD="uv pip"
+elif command -v pip3 >/dev/null 2>&1; then
+    echo "Using pip3: \$(command -v pip3) \$(pip3 --version 2>&1)" >> "\$LOG_FILE"
+    PIP_CMD="pip3"
+elif command -v pip >/dev/null 2>&1; then
+    echo "Using pip: \$(command -v pip) \$(pip --version 2>&1)" >> "\$LOG_FILE"
+    PIP_CMD="pip"
+else
+    echo "ERROR: No pip installer found. Please install pip or uv." >> "\$LOG_FILE"
+    exit 1
+fi
 
 # Check if the server is already running
 if pgrep -f "python main.py --camera" > /dev/null; then
@@ -196,8 +228,42 @@ if [ -f "\$LOG_FILE" ] && [ \$(stat -c%s "\$LOG_FILE" 2>/dev/null || stat -f%z "
     echo "\$(date) - Log rotated, starting new log" > "\$LOG_FILE"
 fi
 
-# Run the setup_and_run script with the correct parameters
-./setup_and_run.sh -c $CAMERA_TYPE -n >> "\$LOG_FILE" 2>&1
+# Check virtual environment and create if needed
+if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
+    echo "Virtual environment missing or broken, creating new one..." >> "\$LOG_FILE"
+    rm -rf .venv
+    
+    if [ "$CAMERA_TYPE" = "picamera2" ] || [ "$CAMERA_TYPE" = "picamera" ]; then
+        echo "Creating virtual environment with system site packages..." >> "\$LOG_FILE"
+        python3 -m venv --system-site-packages .venv
+    else
+        echo "Creating standard virtual environment..." >> "\$LOG_FILE"
+        python3 -m venv .venv
+    fi
+fi
+
+# Activate virtual environment
+echo "Activating virtual environment..." >> "\$LOG_FILE"
+source .venv/bin/activate
+
+# Install or update dependencies
+if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
+    echo "Installing/updating picamera dependencies..." >> "\$LOG_FILE"
+    \$PIP_CMD install --upgrade -r requirements-picamera.txt >> "\$LOG_FILE" 2>&1 || {
+        echo "Failed to install with \$PIP_CMD, trying with pip directly..." >> "\$LOG_FILE"
+        pip install --upgrade -r requirements-picamera.txt >> "\$LOG_FILE" 2>&1
+    }
+else
+    echo "Installing/updating OpenCV dependencies..." >> "\$LOG_FILE"
+    \$PIP_CMD install --upgrade -r requirements-opencv.txt >> "\$LOG_FILE" 2>&1 || {
+        echo "Failed to install with \$PIP_CMD, trying with pip directly..." >> "\$LOG_FILE"
+        pip install --upgrade -r requirements-opencv.txt >> "\$LOG_FILE" 2>&1
+    }
+fi
+
+# Run the server
+echo "Starting camera server with $CAMERA_TYPE camera..." >> "\$LOG_FILE"
+python main.py --camera $CAMERA_TYPE >> "\$LOG_FILE" 2>&1
 
 # This code only runs if the server exits
 EXIT_CODE=\$?
@@ -208,7 +274,7 @@ if [ \$EXIT_CODE -ne 0 ]; then
     echo "Server crashed, waiting 10 seconds before restarting..." >> "\$LOG_FILE"
     sleep 10
     echo "\$(date) - Restarting server..." >> "\$LOG_FILE"
-    ./setup_and_run.sh -c $CAMERA_TYPE -n >> "\$LOG_FILE" 2>&1
+    python main.py --camera $CAMERA_TYPE >> "\$LOG_FILE" 2>&1
 fi
 EOF
 
