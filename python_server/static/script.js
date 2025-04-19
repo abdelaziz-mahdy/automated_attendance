@@ -1,3 +1,5 @@
+let faceThumbnails = {}; // Global declaration
+
 document.addEventListener('DOMContentLoaded', () => {
     // DOM elements
     const streamImage = document.getElementById('streamImage');
@@ -35,7 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let draggedFaceId = null;
     let faceData = {};
     let attendanceData = {};
-    let faceThumbnails = {}; // Store thumbnails for faces
+    // This line is no longer needed as we declared it globally
+    // let faceThumbnails = {}; // Store thumbnails for faces
     let droppedFaces = []; // Store faces dropped into the merge area
     let thumbnailCleanupInterval = null; // Interval for cleaning up thumbnails
     
@@ -1461,16 +1464,26 @@ class AttendanceManager {
             const data = await response.json();
             
             // Add all known faces to the set
-            this.knownPeople = new Set(data.known_faces || []);
+            this.knownPeople = new Set(data.known_faces_list || []);
             
             return this.knownPeople;
         } catch (err) {
             console.error('Error fetching known people:', err);
             // Fall back to using face thumbnails as a source of known people
-            this.knownPeople = new Set(Object.keys(faceThumbnails || {}).filter(id => {
-                // Consider only named faces (those without UUID-like patterns)
-                return !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(id);
-            }));
+            // Ensure faceThumbnails is defined before using it
+            if (typeof faceThumbnails === 'undefined') {
+                // Initialize as empty object if undefined
+                window.faceThumbnails = {};
+                faceThumbnails = {};
+            }
+            
+            // Create a set from keys, check that object exists first
+            this.knownPeople = new Set(
+                Object.keys(faceThumbnails || {}).filter(id => {
+                    // Consider only named faces (those without UUID-like patterns)
+                    return !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(id);
+                })
+            );
             
             return this.knownPeople;
         }
@@ -1761,41 +1774,52 @@ class AttendanceManager {
 }
 
 // Initialize the attendance manager
-let attendanceManager;
+let attendanceManager = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize attendance manager
-    attendanceManager = new AttendanceManager();
-    
-    // Add event listeners for attendance settings
-    const toggleSettingsBtn = document.getElementById('toggleAttendanceSettings');
-    const closeSettingsBtn = document.getElementById('closeAttendanceSettings');
-    const saveSettingsBtn = document.getElementById('saveAttendanceSettings');
-    const settingsPanel = document.getElementById('attendanceSettings');
-    
-    toggleSettingsBtn.addEventListener('click', () => {
-        settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
-    });
-    
-    closeSettingsBtn.addEventListener('click', () => {
-        settingsPanel.style.display = 'none';
-    });
-    
-    saveSettingsBtn.addEventListener('click', () => {
-        if (attendanceManager.saveSettings()) {
-            showToast('Attendance settings saved', 'success');
+    try {
+        attendanceManager = new AttendanceManager();
+        
+        // Add event listeners for attendance settings
+        const toggleSettingsBtn = document.getElementById('toggleAttendanceSettings');
+        const closeSettingsBtn = document.getElementById('closeAttendanceSettings');
+        const saveSettingsBtn = document.getElementById('saveAttendanceSettings');
+        const settingsPanel = document.getElementById('attendanceSettings');
+        
+        toggleSettingsBtn.addEventListener('click', () => {
+            settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        closeSettingsBtn.addEventListener('click', () => {
             settingsPanel.style.display = 'none';
-        }
-    });
-    
-    // Add event listener for refresh attendance button
-    const refreshAttendanceBtn = document.getElementById('refreshAttendance');
-    refreshAttendanceBtn.addEventListener('click', updateAttendance);
+        });
+        
+        saveSettingsBtn.addEventListener('click', () => {
+            if (attendanceManager.saveSettings()) {
+                showToast('Attendance settings saved', 'success');
+                settingsPanel.style.display = 'none';
+            }
+        });
+        
+        // Add event listener for refresh attendance button
+        const refreshAttendanceBtn = document.getElementById('refreshAttendance');
+        refreshAttendanceBtn.addEventListener('click', updateAttendance);
+    } catch (err) {
+        console.error('Error initializing AttendanceManager:', err);
+        window.showToast('Error initializing attendance system', 'error');
+    }
 });
 
 // Process face data into attendance format - Modified to use the AttendanceManager
 async function updateAttendance() {
     try {
+        // Initialize the manager if not already done
+        if (!attendanceManager) {
+            console.log('Attendance manager not initialized, creating new instance');
+            attendanceManager = new AttendanceManager();
+        }
+        
         // Set today's date in the header - use current date dynamically
         const today = new Date();
         const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
