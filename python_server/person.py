@@ -251,5 +251,25 @@ class Person:
         if 'thumbnails' in data and isinstance(data['thumbnails'], list):
             self.thumbnails = data['thumbnails']
             self.thumbnail_count = len(self.thumbnails)
+            
+            # Make sure thumbnails directory is initialized
+            if self.thumbnails_dir:
+                self.person_thumbnails_dir = os.path.join(self.thumbnails_dir, self._get_safe_id())
+                os.makedirs(self.person_thumbnails_dir, exist_ok=True)
+                
+                # Validate thumbnail files exist
+                valid_thumbnails = []
+                for thumbnail in self.thumbnails:
+                    thumbnail_path = os.path.join(self.person_thumbnails_dir, thumbnail)
+                    if os.path.exists(thumbnail_path):
+                        valid_thumbnails.append(thumbnail)
+                    else:
+                        logger.warning(f"Thumbnail file not found for {self.id}: {thumbnail_path}")
+                
+                # Update thumbnails list with only valid thumbnails
+                if len(valid_thumbnails) != len(self.thumbnails):
+                    logger.warning(f"Some thumbnails missing for {self.id}: Found {len(valid_thumbnails)}/{len(self.thumbnails)}")
+                    self.thumbnails = valid_thumbnails
+                    self.thumbnail_count = len(self.thumbnails)
         elif 'thumbnail_count' in data:
             self.thumbnail_count = data['thumbnail_count']

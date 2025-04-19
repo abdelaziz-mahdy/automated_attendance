@@ -187,7 +187,9 @@ class CameraProviderServer:
                 'first_seen': self.face_processor.get_first_seen_time(person_id),
                 'last_seen': self.face_processor.get_last_seen_time(person_id),
                 'timestamp': current_time,
-                'thumbnail_url': person.get_thumbnail_url()  # Use URL path instead of base64 data
+                'thumbnail_url': person.get_thumbnail_url(),  # Use URL path instead of base64 data
+                'thumbnail_count': person.thumbnail_count,    # Add thumbnail count for debugging
+                'has_thumbnails': len(person.thumbnails) > 0  # Add flag to check if person has thumbnails
             }
             for person_id, person in people.items()
         }
@@ -360,7 +362,6 @@ class CameraProviderServer:
         self._request_count += 1
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received IMPORT_FACES_BATCH request from {request.remote}")
-
         try:
             # Check content type
             content_type = request.content_type
@@ -436,7 +437,6 @@ class CameraProviderServer:
                         success, face_id = await asyncio.get_event_loop().run_in_executor(
                             None, self.face_processor.process_imported_face_image, img, person_name
                         )
-
                         processed_count += 1
                         if success:
                             detected_faces += 1
@@ -447,7 +447,6 @@ class CameraProviderServer:
                             # Add more specific error if possible, otherwise generic
                             if f"No face detected in image for {person_name}" not in str(result["errors"]): # Avoid duplicate no-face errors
                                 result["errors"].append(f"Processing failed for {filename} (e.g., no face or low confidence)")
-
                     except Exception as img_err:
                         logger.error(f"Error processing image {filename}: {img_err}", exc_info=True)
                         result["failed_images"].append(filename)
@@ -462,7 +461,6 @@ class CameraProviderServer:
                     result["success"] = False
                     if not result["errors"]: # Add a generic error if none specific were added
                          result["errors"].append(f"No faces successfully processed for {person_name}")
-
             finally:
                 # Cleanup temp files and directory
                 logger.info(f"Cleaning up temp directory: {temp_dir}")
@@ -472,7 +470,6 @@ class CameraProviderServer:
                             os.remove(file_path)
                     except Exception as e:
                         logger.error(f"Error removing temp file {file_path}: {e}")
-
                 try:
                     if os.path.exists(temp_dir):
                         os.rmdir(temp_dir)
@@ -482,7 +479,6 @@ class CameraProviderServer:
             # Return results
             elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"[Request #{self._request_count}] Processed batch import for '{person_name}' in {elapsed:.2f}ms - {result['faces_detected']}/{result['images_processed']} faces detected/processed.")
-
             return web.json_response(result)
 
         except Exception as e:
@@ -497,7 +493,7 @@ class CameraProviderServer:
                 "errors": [f"Server error during import: {str(e)}"]
             }
             return web.json_response(error_result, status=500)
-
+    
     def _is_valid_image_filename(self, filename):
         """Check if filename has a valid image extension."""
         valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
@@ -555,6 +551,21 @@ class CameraProviderServer:
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_SAVE_STATUS request in {elapsed:.2f}ms")
         return response
 
+    async def _handle_request_save(self, request):
+        """Handle manual save requests."""
+        self._request_count += 1
+        start_time = datetime.datetime.now()
+        logger.info(f"[Request #{self._request_count}] Received REQUEST_SAVE request from {request.remote}")
+        
+        # Request a save from face memory
+        self.face_processor.memory.request_save()
+        
+        response = web.Response(status=200, text="Save requested")
+        
+        elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"[Request #{self._request_count}] Successfully handled REQUEST_SAVE request in {elapsed:.2f}ms")
+        return response
+
     async def start(self):
         try:
             logger.info("Starting Camera Provider Server...")
@@ -598,6 +609,7 @@ class CameraProviderServer:
             app.router.add_post('/import_faces_batch', self._handle_import_faces_batch)
             app.router.add_get('/thumbnails/{person_id}/{filename}', self._handle_thumbnail)
             app.router.add_get('/get_save_status', self._handle_get_save_status)
+            app.router.add_post('/request_save', self._handle_request_save)
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             

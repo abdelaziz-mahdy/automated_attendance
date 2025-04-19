@@ -25,6 +25,9 @@ class FaceProcessor:
         
         # Get the local timezone for accurate timestamp tracking
         self.local_timezone = self._get_local_timezone()
+        
+        # Add instance variable for tracking save request time
+        self._last_save_request_time = 0
     
     def _get_local_timezone(self):
         """Get the local timezone for accurate timestamp tracking."""
@@ -243,6 +246,9 @@ class FaceProcessor:
         current_time = time.time()
         current_datetime = datetime.datetime.now(self.local_timezone)
         
+        # Track if we made any updates that require saving
+        made_updates = False
+        
         for face_info in faces[1]:
             # Extract face information
             box = list(map(int, face_info[:4]))
@@ -263,6 +269,9 @@ class FaceProcessor:
             # First, try to match with tracked faces to maintain consistent ID
             tracked_face_id, tracked_match_score = self._find_matching_tracked_face(face_feature, box)
             
+            # Create a thumbnail from the face region
+            thumbnail_img = self._create_thumbnail_from_face(frame, face_info)
+            
             # If we found a tracked face match, use that ID
             if tracked_face_id:
                 face_id = tracked_face_id
@@ -279,6 +288,12 @@ class FaceProcessor:
                     match_score=match_confidence,
                     increment_count=True
                 )
+                
+                # Add thumbnail to person if available
+                if thumbnail_img is not None and person:
+                    person.add_thumbnail(thumbnail_img)
+                    
+                made_updates = True
             else:
                 # If no tracked face matches, check against known faces in database
                 named_person = False
@@ -295,7 +310,7 @@ class FaceProcessor:
                     match_confidence = match_scores[0]  # Cosine score
                     
                     # Update the known person
-                    self.memory.update_person(
+                    person = self.memory.update_person(
                         face_id, 
                         feature_vector=face_feature,
                         box=box,
@@ -303,6 +318,12 @@ class FaceProcessor:
                         match_score=match_confidence,
                         increment_count=True
                     )
+                    
+                    # Add thumbnail to person if available
+                    if thumbnail_img is not None and person:
+                        person.add_thumbnail(thumbnail_img)
+                        
+                    made_updates = True
                 
                 # If still no match, assign new face ID
                 if not face_id:
@@ -310,7 +331,7 @@ class FaceProcessor:
                     match_confidence = 0.0
                     
                     # Add new person to memory
-                    self.memory.add_person(
+                    person = self.memory.add_person(
                         face_id, 
                         feature_vector=face_feature,
                         is_named=False
@@ -323,6 +344,12 @@ class FaceProcessor:
                         confidence=confidence,
                         increment_count=False  # Already set to 1 when created
                     )
+                    
+                    # Add thumbnail to the new person
+                    if thumbnail_img is not None and person:
+                        person.add_thumbnail(thumbnail_img)
+                        
+                    made_updates = True
             
             # Get the person for UI display
             person = self.memory.get_person(face_id)
@@ -367,14 +394,23 @@ class FaceProcessor:
                 'appearance_count': appearance_count,
                 'last_seen': current_time,  # Add timestamp to sort by recency
                 'first_seen': self.get_first_seen_time(face_id),
-                'last_seen_formatted': self.get_last_seen_time(face_id)
+                'last_seen_formatted': self.get_last_seen_time(face_id),
+                'thumbnail_url': person.get_thumbnail_url() if person else None
             })
         
         # Sort the recognized faces by recency (newest first)
         recognized_faces.sort(key=lambda face: face['last_seen'], reverse=True)
         
-        # Trigger a periodic save after processing faces
-        self.memory.request_save()
+        # Only request a save if we actually updated face data
+        # AND we detected at least one face to reduce save frequency
+        if made_updates and len(recognized_faces) > 0:
+            # Use instance variable instead of method attribute
+            current_time = time.time()
+            
+            # Only request a save every 30 seconds at most
+            if current_time - self._last_save_request_time > 30:
+                self.memory.request_save()
+                self._last_save_request_time = current_time
             
         return result_frame, recognized_faces
         

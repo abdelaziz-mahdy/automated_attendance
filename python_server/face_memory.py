@@ -87,7 +87,7 @@ class FaceMemory:
                     save_due_to_interval = (current_time >= self._next_scheduled_save)
                     save_needed = self._save_requested or save_due_to_interval
                     
-                    if save_needed:
+                    if save_needed and not self._save_in_progress:
                         # Set auto-save flag if triggered by interval
                         self._auto_save_in_progress = save_due_to_interval
                         self._manual_save_requested = self._save_requested
@@ -95,22 +95,20 @@ class FaceMemory:
                         # If a save is needed, perform it
                         self.save_to_storage()
                         self._save_requested = False
-                        self._last_save_time = current_time
-                        self._next_scheduled_save = current_time + self._save_interval
+                        
+                        # Don't update _last_save_time here - it will be updated in _save_completed
+                        # This allows the countdown to continue while save is in progress
                         
                         # Log the save with appropriate message
                         if self._auto_save_in_progress:
-                            logger.info(f"Auto-save completed at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
+                            logger.info(f"Auto-save initiated at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
                         else:
-                            logger.info(f"Manual save completed at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
-                        
-                        # Reset flags
-                        self._auto_save_in_progress = False
-                        self._manual_save_requested = False
+                            logger.info(f"Manual save initiated at {datetime.datetime.now().isoformat()}, {len(self.people)} people")
             except Exception as e:
                 logger.error(f"Error in periodic save worker: {e}", exc_info=True)
                 self._auto_save_in_progress = False
                 self._manual_save_requested = False
+                self._save_in_progress = False
             
             # Sleep briefly before checking again (checking more frequently than the save interval)
             time.sleep(5)  # Check every 5 seconds if a save is needed
@@ -118,9 +116,18 @@ class FaceMemory:
     def request_save(self):
         """Request a manual save operation to happen on next check."""
         with self._lock:
-            self._save_requested = True
-            self._manual_save_requested = True
-            logger.debug("Manual save requested")
+            # Only set save_requested if we're not already in a save operation
+            # and if it's been at least 10 seconds since last save was initiated
+            current_time = time.time()
+            min_time_between_saves = 10  # Minimum seconds between save requests
+            
+            if not self._save_in_progress and not self._save_requested and \
+               (current_time - self._last_save_time) > min_time_between_saves:
+                self._save_requested = True
+                self._manual_save_requested = True
+                logger.debug("Manual save requested")
+            else:
+                logger.debug("Save request ignored - too soon after previous save or save already in progress")
         
     def _load_from_storage(self):
         """Load face data from persistent storage into memory."""
@@ -251,10 +258,9 @@ class FaceMemory:
             # Clean up completed futures 
             self._save_results = [f for f in self._save_results if not f.done()]
             
-            # Update last save time after initiating save (not waiting for completion)
-            with self._lock:
-                self._last_save_time = time.time()
-                
+            # DON'T update last save time here - wait until save completes
+            # The _save_completed callback will update the timer when save is done
+            
             logger.info(f"Save operation for {people_count} people initiated in background")
             
         except Exception as e:
@@ -308,10 +314,13 @@ class FaceMemory:
                 self._auto_save_in_progress = False
                 self._manual_save_requested = False
                 
-            if result["success"]:
-                logger.info(f"Background save completed successfully at {result['path']}")
-            else:
-                logger.error(f"Background save failed during {result['stage']}: {result['error']}")
+                # Only update the last save time when the save actually completes
+                if result["success"]:
+                    self._last_save_time = time.time()
+                    self._next_scheduled_save = self._last_save_time + self._save_interval
+                    logger.info(f"Background save completed successfully at {result['path']}")
+                else:
+                    logger.error(f"Background save failed during {result['stage']}: {result['error']}")
                 
         except Exception as e:
             logger.error(f"Error in save completion callback: {e}")

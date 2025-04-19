@@ -251,7 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update face thumbnails in the UI
     function updateFaceThumbnails(faceElement, faceId) {
-        if (!faceThumbnails[faceId] || faceThumbnails[faceId].length === 0) return;
+        // First check if the face has a server-generated thumbnail URL
+        const faceData = window.faceData && window.faceData[faceId];
+        const serverThumbnail = faceData && faceData.thumbnail_url;
+        
+        // If we don't have any thumbnails (server or client-side), return early
+        if ((!faceThumbnails[faceId] || faceThumbnails[faceId].length === 0) && !serverThumbnail) return;
         
         // Find or create image container
         let imgContainer = faceElement.querySelector('.face-img-container');
@@ -260,16 +265,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clear existing content
         imgContainer.innerHTML = '';
         
-        // Use the latest thumbnail as the main image
-        const latestThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
-        const mainImg = document.createElement('img');
-        mainImg.className = 'face-img';
-        mainImg.src = latestThumbnail;
-        mainImg.alt = `Face ${faceId}`;
-        imgContainer.appendChild(mainImg);
+        // Use server thumbnail if available, otherwise use client-side thumbnails
+        if (serverThumbnail) {
+            const mainImg = document.createElement('img');
+            mainImg.className = 'face-img';
+            mainImg.src = serverThumbnail;
+            mainImg.alt = `Face ${faceId}`;
+            imgContainer.appendChild(mainImg);
+        } else if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 0) {
+            // Use the latest thumbnail as the main image
+            const latestThumbnail = faceThumbnails[faceId][faceThumbnails[faceId].length - 1];
+            const mainImg = document.createElement('img');
+            mainImg.className = 'face-img';
+            mainImg.src = latestThumbnail;
+            mainImg.alt = `Face ${faceId}`;
+            imgContainer.appendChild(mainImg);
+        }
         
         // Create thumbnails row if more than one thumbnail exists
-        if (faceThumbnails[faceId].length > 1) {
+        if (faceThumbnails[faceId] && faceThumbnails[faceId].length > 1) {
             let thumbnailsContainer = faceElement.querySelector('.face-thumbnails');
             if (!thumbnailsContainer) {
                 thumbnailsContainer = document.createElement('div');
@@ -291,7 +305,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 thumbImg.alt = `Thumbnail ${index + 1}`;
                 thumbImg.addEventListener('click', () => {
                     // When clicked, set this thumbnail as the main image
-                    mainImg.src = thumbnail;
+                    const mainImg = imgContainer.querySelector('.face-img');
+                    if (mainImg) {
+                        mainImg.src = thumbnail;
+                    }
                 });
                 thumbnailsContainer.appendChild(thumbImg);
             });
@@ -542,6 +559,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Get total number of unique faces
         const totalFaces = Object.keys(faceData).length;
         totalFacesCount.textContent = `Total Faces: ${totalFaces}`;
+        
+        // Store face data globally for other functions to use
+        window.faceData = faceData;
         
         if (totalFaces === 0) {
             // Show placeholder if no faces

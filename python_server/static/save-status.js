@@ -182,6 +182,14 @@ function updateSaveStatusUI(status) {
     const seconds = Math.floor(remaining % 60);
     const countdownText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     
+    // Remove force save button if a save is in progress
+    const saveInProgress = status.save_in_progress || status.auto_save_in_progress || status.manual_save_requested;
+    const forceSaveButton = document.getElementById('forceSaveButton');
+    
+    if (saveInProgress && forceSaveButton) {
+        forceSaveButton.remove();
+    }
+    
     // Update status text based on save state
     if (status.save_in_progress) {
         indicator.classList.add('saving');
@@ -194,6 +202,56 @@ function updateSaveStatusUI(status) {
         statusText.textContent = 'Manual save in progress...';
     } else {
         indicator.classList.remove('saving');
-        statusText.textContent = `Auto-save in: ${countdownText}`;
+        
+        // Show timer counting down
+        if (remaining < interval) {
+            statusText.textContent = `Auto-save in: ${countdownText}`;
+            
+            // Add option to force a save if not available and timer > 10s
+            if (!forceSaveButton && remaining > 10) {
+                const newForceSaveButton = document.createElement('button');
+                newForceSaveButton.id = 'forceSaveButton';
+                newForceSaveButton.className = 'save-now-button';
+                newForceSaveButton.textContent = 'Save Now';
+                newForceSaveButton.addEventListener('click', requestManualSave);
+                indicator.appendChild(newForceSaveButton);
+            }
+        } else {
+            statusText.textContent = 'Auto-save pending...';
+        }
+    }
+}
+
+/**
+ * Request a manual save operation
+ */
+async function requestManualSave() {
+    try {
+        // Show toast notification
+        if (window.showToast) {
+            window.showToast('Manual save requested...', 'info');
+        }
+        
+        // Request a save from the server
+        const response = await fetch('/request_save', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            if (window.showToast) {
+                window.showToast('Save requested successfully', 'success');
+            }
+            // Update save status immediately
+            updateSaveStatus();
+        } else {
+            if (window.showToast) {
+                window.showToast('Failed to request save', 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Error requesting save:', error);
+        if (window.showToast) {
+            window.showToast('Error requesting save', 'error');
+        }
     }
 }
