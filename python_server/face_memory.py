@@ -23,11 +23,11 @@ class FaceMemory:
         self.people = {}  # Maps ID to Person object - all data stays in memory
         self.storage_dir = storage_dir
         
-        # Save management
+        # Save management - increase intervals for resource-constrained environments
         self._save_requested = False
         self._last_save_time = 0  # Initialize to 0 to force initial save after loading
-        self._save_interval = 60  # Save every 60 seconds
-        self._min_save_cooldown = 30 # Minimum seconds between any save operations
+        self._save_interval = 120  # Save every 120 seconds (increased from 60)
+        self._min_save_cooldown = 45 # Minimum seconds between any save operations (increased from 30)
         self._lock = threading.RLock()  # Reentrant lock for thread safety
         
         # Save status tracking for UI
@@ -40,6 +40,10 @@ class FaceMemory:
         self._save_total_items = 0
         self._save_processed_items = 0
         self._save_current_step = "idle"
+        
+        # Add state variable for UI display
+        self._last_save_completed_time = 0
+        self._display_save_completed = False
         
         # Create storage directory if it doesn't exist
         if self.storage_dir and not os.path.exists(self.storage_dir):
@@ -366,6 +370,10 @@ class FaceMemory:
                 if result["success"]:
                     # Update last save time ONLY on successful completion
                     self._last_save_time = time.time()
+                    # Set flag to show completed status in UI for longer
+                    self._last_save_completed_time = time.time()
+                    self._display_save_completed = True
+                    
                     # Recalculate next scheduled save based on the new last save time
                     self._next_scheduled_save = self._last_save_time + self._save_interval
                     logger.info(f"Background save completed successfully at {result['path']}")
@@ -789,6 +797,19 @@ class FaceMemory:
             # Check if any save operation is in progress (background or foreground)
             save_in_progress = self._auto_save_in_progress or self._manual_save_requested or self._save_in_progress
             
+            # Keep showing "completed" status for at least 3 seconds
+            show_completed = (self._display_save_completed and 
+                             (current_time - self._last_save_completed_time) < 3.0)
+            
+            # If showing completed but another save is already in progress, don't show completed
+            if show_completed and save_in_progress:
+                show_completed = False
+                self._display_save_completed = False
+            
+            # If the completed display duration has ended, reset the flag
+            if self._display_save_completed and not show_completed:
+                self._display_save_completed = False
+            
             return {
                 'next_save_time': datetime.datetime.fromtimestamp(next_save_time).isoformat(),
                 'seconds_remaining': int(seconds_remaining),
@@ -797,8 +818,9 @@ class FaceMemory:
                 'save_in_progress': save_in_progress,
                 'save_interval': self._save_interval,
                 'save_progress': self._save_progress,
-                'save_step': self._save_current_step,
+                'save_step': self._save_current_step if save_in_progress or show_completed else "idle",
                 'total_items': self._save_total_items,
-                'processed_items': self._save_processed_items
+                'processed_items': self._save_processed_items,
+                'display_completed': show_completed
             }
 

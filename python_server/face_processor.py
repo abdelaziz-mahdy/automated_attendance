@@ -28,6 +28,10 @@ class FaceProcessor:
         
         # Add instance variable for tracking save request time
         self._last_save_request_time = 0
+        
+        # Add face count threshold to reduce save frequency
+        self._face_updates_since_save = 0
+        self._face_update_threshold = 10  # Only save after this many face updates
     
     def _get_local_timezone(self):
         """Get the local timezone for accurate timestamp tracking."""
@@ -401,16 +405,22 @@ class FaceProcessor:
         # Sort the recognized faces by recency (newest first)
         recognized_faces.sort(key=lambda face: face['last_seen'], reverse=True)
         
-        # Only request a save if we actually updated face data
-        # AND we detected at least one face to reduce save frequency
+        # Optimize save request logic to reduce system load
         if made_updates and len(recognized_faces) > 0:
-            # Use instance variable instead of method attribute
-            current_time = time.time()
+            # Increment counter for face updates
+            self._face_updates_since_save += 1
             
-            # Only request a save every 30 seconds at most
-            if current_time - self._last_save_request_time > 30:
+            # Only request a save under these conditions:
+            # 1. It's been at least 45 seconds since last save request (increased from 30)
+            # 2. OR we've accumulated enough face updates to justify a save
+            current_time = time.time()
+            time_since_last_save = current_time - self._last_save_request_time
+            
+            if (time_since_last_save > 45 or self._face_updates_since_save >= self._face_update_threshold):
+                logger.debug(f"Requesting save after {self._face_updates_since_save} updates and {time_since_last_save:.1f}s")
                 self.memory.request_save()
                 self._last_save_request_time = current_time
+                self._face_updates_since_save = 0  # Reset counter
             
         return result_frame, recognized_faces
         

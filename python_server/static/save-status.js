@@ -180,8 +180,8 @@ function addSaveStatusStyles() {
  * Start polling for save status
  */
 function startSaveStatusPolling() {
-    // Poll every 2 seconds
-    setInterval(updateSaveStatus, 2000);
+    // Poll less frequently to reduce server load
+    setInterval(updateSaveStatus, 3000);  // Changed from 2000 to 3000ms
     
     // Initial update
     updateSaveStatus();
@@ -218,7 +218,6 @@ function updateSaveStatusUI(status) {
     const remaining = status.seconds_remaining || 0;
     const progress = ((interval - remaining) / interval) * 100;
     
-    // Update countdown timer
     // Format countdown time
     const minutes = Math.floor(remaining / 60);
     const seconds = Math.floor(remaining % 60);
@@ -272,59 +271,48 @@ function updateSaveStatusUI(status) {
         const stepText = status.save_step ? status.save_step.charAt(0).toUpperCase() + status.save_step.slice(1) : '';
         progressInfo.textContent = `${stepText}: ${saveProgress.toFixed(0)}%`;
         
-    } else {
-        // Check if we just completed a save
-        if (status.save_step === 'completed') {
-            indicator.classList.add('completed');
-            progressBar.style.width = '100%';
-            statusText.textContent = 'Save completed';
-            progressInfo.textContent = 'All data saved successfully';
-            
-            // Hide after 3 seconds
-            setTimeout(() => {
-                if (document.getElementById('saveStatusText') && 
-                    document.getElementById('saveStatusText').textContent === 'Save completed') {
-                    // Update to timer mode
-                    statusText.textContent = `Auto-save in: ${countdownText}`;
-                    progressInfo.textContent = '';
-                    progressBar.style.width = `${progress}%`;
-                    indicator.classList.remove('completed');
-                }
-            }, 3000);
-            
-        } else if (status.save_step === 'error') {
-            indicator.classList.add('error');
-            progressBar.style.width = '100%';
-            statusText.textContent = 'Save failed';
-            progressInfo.textContent = 'Error saving data';
-            
-            // Hide after 5 seconds
-            setTimeout(() => {
-                if (document.getElementById('saveStatusText') && 
-                    document.getElementById('saveStatusText').textContent === 'Save failed') {
-                    // Update to timer mode
-                    statusText.textContent = `Auto-save in: ${countdownText}`;
-                    progressInfo.textContent = '';
-                    progressBar.style.width = `${progress}%`;
-                    indicator.classList.remove('error');
-                }
-            }, 5000);
-            
-        } else {
-            // Normal countdown mode
-            progressBar.style.width = `${progress}%`;
-            statusText.textContent = `Auto-save in: ${countdownText}`;
-            progressInfo.textContent = '';
-            
-            // Add option to force a save if not available and timer > 10s
-            if (!forceSaveButton && remaining > 10) {
-                const newForceSaveButton = document.createElement('button');
-                newForceSaveButton.id = 'forceSaveButton';
-                newForceSaveButton.className = 'save-now-button';
-                newForceSaveButton.textContent = 'Save Now';
-                newForceSaveButton.addEventListener('click', requestManualSave);
-                indicator.appendChild(newForceSaveButton);
+    } else if (status.display_completed || status.save_step === 'completed') {
+        // Important: display_completed flag from server takes precedence to avoid flickering
+        indicator.classList.add('completed');
+        progressBar.style.width = '100%';
+        statusText.textContent = 'Save completed';
+        progressInfo.textContent = 'All data saved successfully';
+        
+        // We don't need a timeout here as the server now controls the display duration
+        
+    } else if (status.save_step === 'error') {
+        indicator.classList.add('error');
+        progressBar.style.width = '100%';
+        statusText.textContent = 'Save failed';
+        progressInfo.textContent = 'Error saving data';
+        
+        // We leave error showing longer to ensure it's noticed
+        setTimeout(() => {
+            if (document.getElementById('saveStatusText') && 
+                document.getElementById('saveStatusText').textContent === 'Save failed') {
+                // Update to timer mode
+                statusText.textContent = `Auto-save in: ${countdownText}`;
+                progressInfo.textContent = '';
+                progressBar.style.width = `${progress}%`;
+                indicator.classList.remove('error');
             }
+        }, 5000);
+        
+    } else {
+        // Normal countdown mode
+        progressBar.style.width = `${progress}%`;
+        statusText.textContent = `Auto-save in: ${countdownText}`;
+        progressInfo.textContent = '';
+        
+        // Add option to force a save if not available and timer > 10s
+        // Only add if not already present
+        if (!forceSaveButton && remaining > 10) {
+            const newForceSaveButton = document.createElement('button');
+            newForceSaveButton.id = 'forceSaveButton';
+            newForceSaveButton.className = 'save-now-button';
+            newForceSaveButton.textContent = 'Save Now';
+            newForceSaveButton.addEventListener('click', requestManualSave);
+            indicator.appendChild(newForceSaveButton);
         }
     }
 }
