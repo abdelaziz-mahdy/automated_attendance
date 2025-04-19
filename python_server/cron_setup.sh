@@ -140,7 +140,7 @@ else
     fi
     
     echo "Creating virtual environment with uv..."
-    uv venv .venv
+    uv venv --python 3.9 .venv
     source .venv/bin/activate
     uv pip install -r requirements-opencv.txt
 fi
@@ -190,7 +190,7 @@ else
     fi
     
     echo "Creating virtual environment with uv..."
-    uv venv .venv
+    uv venv --python 3.9 .venv
     source .venv/bin/activate
     uv pip install -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
 fi
@@ -231,7 +231,7 @@ cd "$INSTALL_DIR"
 if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
     [ "$VERBOSE" -eq 1 ] && echo "Creating virtual environment..."
     rm -rf .venv
-    uv venv .venv
+    uv venv --python 3.9 .venv
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ]; then
         uv pip install -r requirements-picamera.txt

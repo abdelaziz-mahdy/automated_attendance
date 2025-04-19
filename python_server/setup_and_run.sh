@@ -97,7 +97,7 @@ fi
 # Create virtual environment if it doesn't exist
 if [ ! -d ".venv" ]; then
     [ "$VERBOSE" -eq 1 ] && echo "🔧 Creating virtual environment..."
-    uv venv .venv
+    uv venv --python 3.9 .venv
 else
     [ "$VERBOSE" -eq 1 ] && echo "✅ Virtual environment already exists"
 fi
