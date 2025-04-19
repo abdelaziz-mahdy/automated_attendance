@@ -118,6 +118,7 @@ if [ "$CAMERA_TYPE" = "picamera" ]; then
         #     python3-pip \
         #     python3-numpy  \
         #     python3-zeroconf
+        sudo apt install python3-picamera2
 
         # Set up camera permissions
         sudo usermod -a -G video $USER
