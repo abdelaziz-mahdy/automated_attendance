@@ -182,8 +182,7 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
             sudo apt install -y python3-picamera
         fi
 
-        # Set up camera permissions
-        sudo usermod -a -G video $USER
+
     fi
     
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for $CAMERA_TYPE..."
