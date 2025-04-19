@@ -15,10 +15,27 @@ CONFIG_FILE="$HOME/.automated_attendance_config"
 
 # Try to detect the installation directory
 # First check if we have it in the config file
-if [ -f "$CONFIG_FILE" ] && grep -q "INSTALL_DIR=" "$CONFIG_FILE"; then
-    source "$CONFIG_FILE"
-    echo -e "${BLUE}Found installation directory from config: $INSTALL_DIR${NC}"
+if [ -f "$CONFIG_FILE" ]; then
+    # Safely extract values from config file without sourcing it
+    INSTALL_DIR=$(grep "^INSTALL_DIR=" "$CONFIG_FILE" | cut -d'=' -f2)
+    CONFIG_CAMERA_TYPE=$(grep "^CAMERA_TYPE=" "$CONFIG_FILE" | cut -d'=' -f2)
+    
+    if [ -n "$INSTALL_DIR" ]; then
+        echo -e "${BLUE}Found installation directory from config: $INSTALL_DIR${NC}"
+        if [ -n "$CONFIG_CAMERA_TYPE" ]; then
+            echo -e "${BLUE}Found camera type from config: $CONFIG_CAMERA_TYPE${NC}"
+            CAMERA_TYPE="$CONFIG_CAMERA_TYPE"
+        fi
+    else
+        # Fallback if we couldn't parse the config file
+        INSTALL_DIR=""
+    fi
 else
+    INSTALL_DIR=""
+fi
+
+# If we couldn't get the directory from config, try to detect it
+if [ -z "$INSTALL_DIR" ]; then
     # If not in config file, try to find it from the script location
     SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
     if [ -f "$SCRIPT_DIR/main.py" ] && [ -f "$SCRIPT_DIR/camera_provider.py" ]; then
@@ -141,8 +158,7 @@ fi
 
 echo -e "\n${BLUE}[6/7] Checking camera type...${NC}"
 # Get camera type from config file or wrapper script
-if [ -f "$CONFIG_FILE" ] && grep -q "CAMERA_TYPE=" "$CONFIG_FILE"; then
-    source "$CONFIG_FILE"
+if [ -n "$CAMERA_TYPE" ]; then
     echo -e "  Camera type from config: ${GREEN}$CAMERA_TYPE${NC}"
 elif [ -f "$INSTALL_DIR/run_camera_server.sh" ]; then
     CAMERA_TYPE=$(grep "Starting camera server" "$INSTALL_DIR/run_camera_server.sh" | sed -E 's/.*camera server \(([^)]+)\).*/\1/')

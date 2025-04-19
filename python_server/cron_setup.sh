@@ -54,13 +54,6 @@ echo "Camera Server - Cron Setup"
 echo "===================================="
 [ "$VERBOSE" -eq 1 ] && echo "📂 Using script directory: $INSTALL_DIR"
 
-# Save the installation directory to config file for debugging
-echo "INSTALL_DIR=$INSTALL_DIR" > "$CONFIG_FILE"
-echo "CAMERA_TYPE=$CAMERA_TYPE" >> "$CONFIG_FILE"
-echo "SETUP_DATE=$(date)" >> "$CONFIG_FILE"
-chmod 600 "$CONFIG_FILE"
-[ "$VERBOSE" -eq 1 ] && echo "💾 Saved configuration to $CONFIG_FILE"
-
 # Function to auto-detect best available camera
 detect_camera_type() {
   # Check for Raspberry Pi
@@ -147,6 +140,13 @@ if [ "$CAMERA_TYPE" = "auto" ]; then
 else
     [ "$VERBOSE" -eq 1 ] && echo "Using camera type: $CAMERA_TYPE"
 fi
+
+# Save the installation directory to config file for debugging - MOVED HERE AFTER DETECTION
+echo "INSTALL_DIR=$INSTALL_DIR" > "$CONFIG_FILE"
+echo "CAMERA_TYPE=$CAMERA_TYPE" >> "$CONFIG_FILE"
+echo "SETUP_DATE=\"$(date)\"" >> "$CONFIG_FILE"  # Quote the date value to avoid shell interpretation
+chmod 600 "$CONFIG_FILE"
+[ "$VERBOSE" -eq 1 ] && echo "💾 Saved configuration to $CONFIG_FILE (with camera type: $CAMERA_TYPE)"
 
 # Create wrapper script for the cron job
 WRAPPER_SCRIPT="$INSTALL_DIR/run_camera_server.sh"
