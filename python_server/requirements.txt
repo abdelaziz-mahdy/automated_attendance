@@ -1,4 +1,4 @@
 aiohttp>=3.8.0
-numpy>=1.21.0
+numpy<1.24
 zeroconf>=0.70.0
 opencv-python>=4.8.0
