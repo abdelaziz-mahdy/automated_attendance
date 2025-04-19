@@ -82,8 +82,58 @@ class OpenCVCameraProvider(BaseCameraProvider):
         self.is_open = False
         logger.info("Camera closed")
 
+class PiCamera2Provider(BaseCameraProvider):
+    """Camera provider implementation using PiCamera2."""
+    
+    def __init__(self):
+        super().__init__()
+        self.camera = None
+        self._check_picamera2()
+        
+    def _check_picamera2(self):
+        try:
+            from picamera2 import Picamera2
+            self.Picamera2 = Picamera2
+        except ImportError:
+            raise ImportError("picamera2 is required for PiCamera2Provider")
+
+    async def open_camera(self):
+        try:
+            self.camera = self.Picamera2()
+            config = self.camera.create_still_configuration(main={"size": (640, 480)})
+            self.camera.configure(config)
+            self.camera.start()
+            self.is_open = True
+            logger.info("Successfully initialized PiCamera2")
+            return True
+        except Exception as e:
+            logger.error(f"Error initializing PiCamera2: {e}")
+            return False
+
+    async def get_frame(self):
+        if not self.is_open:
+            return None
+        try:
+            # Capture frame and convert to JPEG
+            frame = self.camera.capture_array()
+            
+            # We need OpenCV to encode the image
+            import cv2
+            _, jpeg_data = cv2.imencode('.jpg', frame)
+            return jpeg_data.tobytes()
+        except Exception as e:
+            logger.error(f"Error capturing frame: {e}")
+            return None
+
+    async def close_camera(self):
+        if self.camera:
+            self.camera.close()
+        self.is_open = False
+        logger.info("PiCamera2 closed")
+
+# Keep the old PiCamera class for backward compatibility
 class PiCameraProvider(BaseCameraProvider):
-    """Camera provider implementation using PiCamera."""
+    """Camera provider implementation using PiCamera (legacy)."""
     
     def __init__(self):
         super().__init__()
@@ -140,18 +190,27 @@ def create_camera_provider(camera_type='auto', camera_index=0):
     Factory function to create the appropriate camera provider.
     
     Args:
-        camera_type (str): Type of camera provider ('opencv', 'picamera', or 'auto')
+        camera_type (str): Type of camera provider ('opencv', 'picamera', 'picamera2', or 'auto')
         camera_index (int): Camera index for OpenCV provider
         
     Returns:
         BaseCameraProvider: An instance of the appropriate camera provider
     """
-    if camera_type == 'picamera':
+    if camera_type == 'picamera2':
+        return PiCamera2Provider()
+    elif camera_type == 'picamera':
         return PiCameraProvider()
     elif camera_type == 'opencv':
         return OpenCVCameraProvider(camera_index)
     else:  # auto detection
-        # Try PiCamera first on Raspberry Pi
+        # Try PiCamera2 first on Raspberry Pi
+        try:
+            if importlib.util.find_spec("picamera2"):
+                return PiCamera2Provider()
+        except ImportError:
+            pass
+            
+        # Then try PiCamera 
         try:
             if importlib.util.find_spec("picamera"):
                 return PiCameraProvider()
@@ -165,4 +224,4 @@ def create_camera_provider(camera_type='auto', camera_index=0):
         except ImportError:
             pass
             
-        raise ImportError("No suitable camera provider found. Please install either OpenCV or PiCamera.")
+        raise ImportError("No suitable camera provider found. Please install either OpenCV, PiCamera, or PiCamera2.")
