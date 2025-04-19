@@ -178,7 +178,7 @@ if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
     fi
     
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for $CAMERA_TYPE..."
-    uv pip install --upgrade -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple 
+    uv pip install --upgrade -r requirements-picamera.txt
 else
     [ "$VERBOSE" -eq 1 ] && echo "Installing Python dependencies for OpenCV..."
     uv pip install --upgrade -r requirements-opencv.txt
