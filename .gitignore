@@ -48,3 +48,5 @@ app.*.map.json
 */.venv/
 #ignore python cache
 */__pycache__/
+python_server/data/face_memory.json.tmp
+python_server/data/*

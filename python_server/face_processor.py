@@ -7,30 +7,28 @@ import uuid
 import datetime
 from constants import FaceRecognition as FR
 from face_comparison_service import FaceComparisonService
+from face_memory import FaceMemory
+from person import Person
 
 logger = logging.getLogger(__name__)
 
 class FaceProcessor:
     """Class for handling face detection and recognition using OpenCV and ONNX models."""
     
-    def __init__(self):
+    def __init__(self, storage_dir=None):
         self.detection_model = None
         self.recognition_model = None
         self.comparison_service = FaceComparisonService.get_instance()
-        self.known_faces = {}  # Dictionary to store known face embeddings
-        self.tracked_faces = {}  # Dictionary to track faces across frames
-        self.face_appearance_count = {}  # Dictionary to count face appearances
-        self.last_face_id = 0  # Counter for generating unique face IDs
         
-        # Timestamp tracking for attendance purposes
-        self.first_seen_times = {}  # Dictionary to track when faces were first seen
-        self.last_seen_times = {}   # Dictionary to track when faces were last seen
-        self.local_timezone = self._get_local_timezone()  # Get the local timezone
+        # Replace all dictionaries with FaceMemory
+        self.memory = FaceMemory(storage_dir=storage_dir or os.path.join(os.path.dirname(__file__), 'data'))
         
+        # Get the local timezone for accurate timestamp tracking
+        self.local_timezone = self._get_local_timezone()
+    
     def _get_local_timezone(self):
         """Get the local timezone for accurate timestamp tracking."""
         try:
-            # More reliable way to get local timezone using built-in Python
             local_timezone = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
             return local_timezone
         except Exception as e:
@@ -74,7 +72,6 @@ class FaceProcessor:
     
     def _get_next_face_id(self):
         """Generate a unique ID for new faces."""
-        # Generate a UUID and use a prefix to make it more user-friendly
         unique_id = str(uuid.uuid4())[:8]  # Use just the first 8 characters for brevity
         return f"Face_{unique_id}"
             
@@ -122,19 +119,20 @@ class FaceProcessor:
             
         return result_frame, detected_faces
     
-    def _find_matching_tracked_face(self, face_feature, face_box, now):
+    def _find_matching_tracked_face(self, face_feature, face_box):
         """Find if the current face matches any tracked face."""
         best_match_id = None
         best_match_score = 0.0
         
-        # Check for best match among tracked faces
-        for face_id, tracked_data in list(self.tracked_faces.items()):
-            # We're no longer skipping tracked faces based on timeout
-            
-            # Check similarity first
+        # Check all people in memory
+        for person_id, person in self.memory.get_all_people().items():
+            if person.feature_vector is None:
+                continue
+                
+            # Check similarity
             is_similar = self.comparison_service.are_features_similar(
                 face_feature, 
-                tracked_data['feature'],
+                person.feature_vector,
                 cosine_threshold=FR.COSINE_THRESHOLD,
                 norm_l2_threshold=FR.NORM_L2_THRESHOLD
             )
@@ -143,26 +141,29 @@ class FaceProcessor:
             if is_similar:
                 # Get the cosine score for ranking matches
                 cosine_score = self.comparison_service.calculate_cosine_distance(
-                    face_feature, tracked_data['feature'])
+                    face_feature, person.feature_vector)
                 
                 if cosine_score > best_match_score:
-                    best_match_id = face_id
+                    best_match_id = person_id
                     best_match_score = cosine_score
         
         return best_match_id, best_match_score
     
     def _find_matching_known_face(self, face_feature):
-        """Find if the current face matches any known face in database."""
+        """Find if the current face matches any named person in memory."""
         best_match_id = None
         best_cosine_score = 0.0
         best_norm_l2_score = float('inf')
         
-        # Check each known face for a match
-        for known_id, known_feature in self.known_faces.items():
+        # Check each named person for a match
+        for person_id, person in self.memory.get_all_people().items():
+            if not person.is_named or person.feature_vector is None:
+                continue
+                
             # Check similarity first
             is_similar = self.comparison_service.are_features_similar(
                 face_feature, 
-                known_feature,
+                person.feature_vector,
                 cosine_threshold=FR.COSINE_THRESHOLD,
                 norm_l2_threshold=FR.NORM_L2_THRESHOLD
             )
@@ -171,12 +172,12 @@ class FaceProcessor:
             if is_similar:
                 # Get the confidence scores for ranking matches
                 cosine_score = self.comparison_service.calculate_cosine_distance(
-                    face_feature, known_feature)
+                    face_feature, person.feature_vector)
                 norm_l2_score = self.comparison_service.calculate_norm_l2_distance(
-                    face_feature, known_feature)
+                    face_feature, person.feature_vector)
                 
                 if cosine_score > best_cosine_score:
-                    best_match_id = known_id
+                    best_match_id = person_id
                     best_cosine_score = cosine_score
                     best_norm_l2_score = norm_l2_score
         
@@ -184,130 +185,43 @@ class FaceProcessor:
     
     def get_face_counts(self):
         """Return the count of appearances for each tracked face."""
-        return self.face_appearance_count
+        result = {}
+        for person_id, person in self.memory.get_all_people().items():
+            result[person_id] = person.appearance_count
+        return result
     
     def get_first_seen_time(self, face_id):
         """Get the timestamp when face was first seen, or None if not tracked."""
-        if face_id in self.first_seen_times:
+        person = self.memory.get_person(face_id)
+        if person and person.first_seen:
             # Return as ISO formatted string for JSON compatibility
-            return self.first_seen_times[face_id].isoformat()
+            return person.first_seen.isoformat()
         return None
         
     def get_last_seen_time(self, face_id):
         """Get the timestamp when face was last seen, or None if not tracked."""
-        if face_id in self.last_seen_times:
+        person = self.memory.get_person(face_id)
+        if person and person.last_seen:
             # Return as ISO formatted string for JSON compatibility
-            return self.last_seen_times[face_id].isoformat()
+            return person.last_seen.isoformat()
         return None
     
     def get_known_faces(self):
-        """Return dictionary of known faces and their count.
-        
-        Returns:
-            dict: Dictionary with face IDs as keys and dicts with 'count' and 'feature' as values
-        """
+        """Return dictionary of known faces and their count."""
         result = {}
-        for face_id in self.known_faces:
-            result[face_id] = {
-                'count': self.face_appearance_count.get(face_id, 0),
-                'feature': self.known_faces[face_id].tolist(),  # Convert to list for JSON serialization
-                'first_seen': self.get_first_seen_time(face_id),
-                'last_seen': self.get_last_seen_time(face_id)
-            }
+        for person_id, person in self.memory.get_all_people().items():
+            if person.is_named:
+                result[person_id] = {
+                    'count': person.appearance_count,
+                    'feature': person.feature_vector.tolist() if person.feature_vector is not None else None,
+                    'first_seen': self.get_first_seen_time(person_id),
+                    'last_seen': self.get_last_seen_time(person_id)
+                }
         return result
         
     def merge_faces(self, source_face_id, target_face_id):
-        """Merge two face entries, combining their appearance counts and keeping the target face.
-        
-        Args:
-            source_face_id (str): ID of the source face to merge from
-            target_face_id (str): ID of the target face to merge into
-            
-        Returns:
-            bool: True if merge was successful, False otherwise
-        """
-        # Check if both faces exist - with better error handling
-        source_exists = source_face_id in self.known_faces
-        target_exists = target_face_id in self.known_faces
-        
-        if not source_exists and not target_exists:
-            logger.error(f"Cannot merge: both face IDs don't exist in known faces")
-            return False
-        
-        # If only one face exists, log but continue with available data
-        if not source_exists:
-            logger.warning(f"Source face ID '{source_face_id}' not found in known faces, attempting to find it in tracked faces")
-            # Try to find the source face in tracked faces
-            for tracked_id, tracked_data in list(self.tracked_faces.items()):
-                if tracked_id == source_face_id:
-                    # Add the tracked face to known faces so we can merge it
-                    self.known_faces[source_face_id] = tracked_data['feature']
-                    source_exists = True
-                    logger.info(f"Found source face '{source_face_id}' in tracked faces and added to known faces")
-                    break
-            
-            if not source_exists:
-                logger.error(f"Source face ID '{source_face_id}' not found in tracked faces either, cannot merge")
-                return False
-                
-        if not target_exists:
-            logger.warning(f"Target face ID '{target_face_id}' not found in known faces, attempting to find it in tracked faces")
-            # Try to find the target face in tracked faces
-            for tracked_id, tracked_data in list(self.tracked_faces.items()):
-                if tracked_id == target_face_id:
-                    # Add the tracked face to known faces so we can merge into it
-                    self.known_faces[target_face_id] = tracked_data['feature']
-                    target_exists = True
-                    logger.info(f"Found target face '{target_face_id}' in tracked faces and added to known faces")
-                    break
-            
-            if not target_exists:
-                logger.error(f"Target face ID '{target_face_id}' not found in tracked faces either, cannot merge")
-                return False
-            
-        # Transfer appearance count
-        if source_face_id in self.face_appearance_count:
-            if target_face_id not in self.face_appearance_count:
-                self.face_appearance_count[target_face_id] = self.face_appearance_count[source_face_id]
-            else:
-                self.face_appearance_count[target_face_id] += self.face_appearance_count[source_face_id]
-            
-            # Remove source face count
-            del self.face_appearance_count[source_face_id]
-        
-        # Merge timestamp data - keep the earliest first_seen time
-        if source_face_id in self.first_seen_times and target_face_id in self.first_seen_times:
-            # Keep the earlier first seen time
-            if self.first_seen_times[source_face_id] < self.first_seen_times[target_face_id]:
-                self.first_seen_times[target_face_id] = self.first_seen_times[source_face_id]
-        elif source_face_id in self.first_seen_times:
-            # If target doesn't have a first seen time, use the source's
-            self.first_seen_times[target_face_id] = self.first_seen_times[source_face_id]
-            
-        # For last_seen, keep the latest time
-        if source_face_id in self.last_seen_times and target_face_id in self.last_seen_times:
-            # Keep the later last seen time
-            if self.last_seen_times[source_face_id] > self.last_seen_times[target_face_id]:
-                self.last_seen_times[target_face_id] = self.last_seen_times[source_face_id]
-        elif source_face_id in self.last_seen_times:
-            # If target doesn't have a last seen time, use the source's
-            self.last_seen_times[target_face_id] = self.last_seen_times[source_face_id]
-            
-        # Clean up the source timestamps
-        if source_face_id in self.first_seen_times:
-            del self.first_seen_times[source_face_id]
-        if source_face_id in self.last_seen_times:
-            del self.last_seen_times[source_face_id]
-        
-        # Remove source face from known faces
-        del self.known_faces[source_face_id]
-        
-        # Also remove from tracked faces if present
-        if source_face_id in self.tracked_faces:
-            del self.tracked_faces[source_face_id]
-        
-        logger.info(f"Successfully merged face '{source_face_id}' into '{target_face_id}'")
-        return True
+        """Merge two face entries, combining their appearance counts and keeping the target face."""
+        return self.memory.merge_people(source_face_id, target_face_id)
     
     def recognize_faces(self, frame):
         """Detect and recognize faces in the frame."""
@@ -329,8 +243,6 @@ class FaceProcessor:
         current_time = time.time()
         current_datetime = datetime.datetime.now(self.local_timezone)
         
-        # We're no longer cleaning up expired tracked faces - they remain in memory
-        
         for face_info in faces[1]:
             # Extract face information
             box = list(map(int, face_info[:4]))
@@ -349,30 +261,24 @@ class FaceProcessor:
             face_feature = self.recognition_model.feature(aligned_face)
             
             # First, try to match with tracked faces to maintain consistent ID
-            tracked_face_id, tracked_match_score = self._find_matching_tracked_face(
-                face_feature, box, current_time)
+            tracked_face_id, tracked_match_score = self._find_matching_tracked_face(face_feature, box)
             
             # If we found a tracked face match, use that ID
             if tracked_face_id:
                 face_id = tracked_face_id
-                named_person = face_id in self.known_faces
+                person = self.memory.get_person(face_id)
+                named_person = person.is_named if person else False
                 match_confidence = tracked_match_score
                 
-                # Update the tracked face with new data
-                self.tracked_faces[face_id] = {
-                    'feature': face_feature,
-                    'box': box,
-                    'last_seen': current_time
-                }
-                
-                # Increment appearance count
-                if face_id not in self.face_appearance_count:
-                    self.face_appearance_count[face_id] = 1
-                else:
-                    self.face_appearance_count[face_id] += 1
-                    
-                # Update last seen time
-                self.last_seen_times[face_id] = current_datetime
+                # Update the person with new data
+                self.memory.update_person(
+                    face_id, 
+                    feature_vector=face_feature,
+                    box=box,
+                    confidence=confidence,
+                    match_score=match_confidence,
+                    increment_count=True
+                )
             else:
                 # If no tracked face matches, check against known faces in database
                 named_person = False
@@ -387,34 +293,42 @@ class FaceProcessor:
                     face_id = known_face_id
                     named_person = True
                     match_confidence = match_scores[0]  # Cosine score
+                    
+                    # Update the known person
+                    self.memory.update_person(
+                        face_id, 
+                        feature_vector=face_feature,
+                        box=box,
+                        confidence=confidence,
+                        match_score=match_confidence,
+                        increment_count=True
+                    )
                 
                 # If still no match, assign new face ID
                 if not face_id:
                     face_id = self._get_next_face_id()
                     match_confidence = 0.0
                     
-                    # This is a new face, set first seen time
-                    self.first_seen_times[face_id] = current_datetime
-                
-                # Add or update this face in tracking
-                self.tracked_faces[face_id] = {
-                    'feature': face_feature,
-                    'box': box,
-                    'last_seen': current_time
-                }
-                
-                # Initialize appearance count
-                if face_id not in self.face_appearance_count:
-                    self.face_appearance_count[face_id] = 1
-                    # This is the first time we're seeing this face, set first seen time
-                    if face_id not in self.first_seen_times:
-                        self.first_seen_times[face_id] = current_datetime
-                else:
-                    self.face_appearance_count[face_id] += 1
-                
-                # Always update last seen time
-                self.last_seen_times[face_id] = current_datetime
+                    # Add new person to memory
+                    self.memory.add_person(
+                        face_id, 
+                        feature_vector=face_feature,
+                        is_named=False
+                    )
+                    
+                    # Update with detection info
+                    self.memory.update_person(
+                        face_id,
+                        box=box,
+                        confidence=confidence,
+                        increment_count=False  # Already set to 1 when created
+                    )
             
+            # Get the person for UI display
+            person = self.memory.get_person(face_id)
+            if not person:
+                continue  # Skip if person not found (shouldn't happen)
+                
             # Color based on recognition status
             if named_person:
                 color = (0, 255, 0)  # Green for recognized named people
@@ -422,7 +336,7 @@ class FaceProcessor:
                 color = (0, 165, 255)  # Orange for tracked but unnamed faces
             
             # Get appearance count
-            appearance_count = self.face_appearance_count.get(face_id, 1)
+            appearance_count = person.appearance_count
             
             # Draw rectangle and label with more detailed information
             cv2.rectangle(result_frame, (x, y), (x + w, y + h), color, 2)
@@ -457,20 +371,15 @@ class FaceProcessor:
             })
         
         # Sort the recognized faces by recency (newest first)
-        # This ensures new faces appear first in the UI
         recognized_faces.sort(key=lambda face: face['last_seen'], reverse=True)
+        
+        # Trigger a periodic save after processing faces
+        self.memory.request_save()
             
         return result_frame, recognized_faces
         
     def detect_best_face(self, img):
-        """Detect the face with the highest confidence in an image.
-        
-        Args:
-            img: OpenCV image
-            
-        Returns:
-            tuple: (face_info, confidence) or (None, 0) if no face detected
-        """
+        """Detect the face with the highest confidence in an image."""
         if self.detection_model is None:
             logger.error("Detection model not loaded")
             return None, 0
@@ -499,15 +408,7 @@ class FaceProcessor:
         return best_face, best_confidence
     
     def extract_face_feature(self, img, face_info):
-        """Extract face features from aligned face.
-        
-        Args:
-            img: OpenCV image
-            face_info: Face information from detector
-            
-        Returns:
-            numpy.ndarray: Face feature vector or None if failed
-        """
+        """Extract face features from aligned face."""
         if self.recognition_model is None:
             logger.error("Recognition model not loaded")
             return None
@@ -520,35 +421,6 @@ class FaceProcessor:
         except Exception as e:
             logger.error(f"Error extracting face feature: {e}")
             return None
-    
-    def update_face_tracking_data(self, face_id, face_feature):
-        """Update tracking data for a face (timestamps, counts, etc).
-        
-        Args:
-            face_id: Identifier for the face
-            face_feature: Feature vector for the face
-        """
-        # Get current datetime with timezone
-        current_datetime = datetime.datetime.now(self.local_timezone)
-        
-        # Save or update feature in known faces
-        self.known_faces[face_id] = face_feature
-        
-        # Update timestamps
-        if face_id not in self.first_seen_times:
-            self.first_seen_times[face_id] = current_datetime
-            logger.info(f"First time seeing {face_id}")
-        
-        # Always update last seen time
-        self.last_seen_times[face_id] = current_datetime
-        
-        # Update appearance count
-        if face_id not in self.face_appearance_count:
-            self.face_appearance_count[face_id] = 1
-        else:
-            self.face_appearance_count[face_id] += 1
-            
-        logger.info(f"Updated tracking data for {face_id}. Total appearances: {self.face_appearance_count[face_id]}")
     
     def add_face(self, frame, face_id):
         """Add a face to the known faces database."""
@@ -576,46 +448,49 @@ class FaceProcessor:
             logger.info(f"Face similar to existing face '{matching_face_id}' with similarity {similarity_scores[0]:.2f}")
             # We'll continue adding it but notify caller about similarity
             
-        # Store the face feature and update tracking data  
-        self.known_faces[face_id] = face_feature
-        
-        # Update tracking timestamps and counts
-        current_datetime = datetime.datetime.now(self.local_timezone)
-        if face_id not in self.first_seen_times:
-            self.first_seen_times[face_id] = current_datetime
-        self.last_seen_times[face_id] = current_datetime
-        
-        # Initialize or update appearance count
-        if face_id not in self.face_appearance_count:
-            self.face_appearance_count[face_id] = 1
+        # If person already exists, update them, otherwise add new
+        existing_person = self.memory.get_person(face_id)
+        if existing_person:
+            self.memory.update_person(
+                face_id,
+                feature_vector=face_feature,
+                increment_count=True
+            )
         else:
-            self.face_appearance_count[face_id] += 1
-            
-        # Check if similar to tracked faces and merge if appropriate
-        for tracked_id, tracked_data in list(self.tracked_faces.items()):
-            if tracked_id.startswith("Face_"):  # Only update auto-generated IDs
-                is_similar = self.comparison_service.are_features_similar(
-                    face_feature, tracked_data['feature'],
-                    FR.COSINE_THRESHOLD, FR.NORM_L2_THRESHOLD)
+            self.memory.add_person(
+                face_id,
+                feature_vector=face_feature,
+                is_named=True  # This is a named person since we're adding it explicitly
+            )
+        
+        # Check if this face is similar to any existing tracked face
+        # and merge if appropriate - but only for unnamed faces
+        for person_id, person in self.memory.get_all_people().items():
+            if person.is_named or person_id == face_id:
+                continue  # Skip named people and the face we just added
                 
-                if is_similar:
-                    # Use the helper method for merging
-                    self._merge_face_data(tracked_id, face_id)
-                    logger.info(f"Updated tracking information for newly named face: {face_id}")
+            if person.feature_vector is None:
+                continue
+                
+            is_similar = self.comparison_service.are_features_similar(
+                face_feature, 
+                person.feature_vector,
+                FR.COSINE_THRESHOLD, 
+                FR.NORM_L2_THRESHOLD
+            )
+            
+            if is_similar:
+                logger.info(f"Merging similar unnamed face {person_id} into {face_id}")
+                self.memory.merge_people(person_id, face_id)
+        
+        # Save changes to disk
+        self.memory.request_save()
         
         logger.info(f"Successfully added face: {face_id}")
         return True
 
     def process_imported_face_image(self, img, person_name):
-        """Process a single face image for batch import and add to known faces.
-        
-        Args:
-            img: OpenCV image (numpy array)
-            person_name: Name of the person (used as face_id)
-            
-        Returns:
-            tuple: (success, face_id) - face_id will be person_name if successful
-        """
+        """Process a single face image for batch import and add to known faces."""
         try:
             # Ensure models are loaded
             if self.detection_model is None or self.recognition_model is None:
@@ -646,77 +521,59 @@ class FaceProcessor:
                 logger.error(f"Failed to extract face features for {person_name}")
                 return False, None
                 
-            # 3. Update tracking data (known faces, timestamps, counts)
-            # For imports, we may want to avoid incrementing the count too much
-            # Let's conditionally check if this is a new face or existing face
-            is_new_face = person_name not in self.known_faces
-            
-            # Store the face feature
-            self.known_faces[person_name] = face_feature
-            logger.info(f"{'Added' if is_new_face else 'Updated'} face with ID: {person_name}")
-            
-            # Update timestamps
-            current_datetime = datetime.datetime.now(self.local_timezone)
-            if person_name not in self.first_seen_times:
-                self.first_seen_times[person_name] = current_datetime
-            self.last_seen_times[person_name] = current_datetime
-            
-            # For imports, update count conservatively
-            if person_name not in self.face_appearance_count:
-                self.face_appearance_count[person_name] = 1
+            # 3. Update the person in memory
+            existing_person = self.memory.get_person(person_name)
+            if existing_person:
+                # Update existing person
+                self.memory.update_person(
+                    person_name,
+                    feature_vector=face_feature,
+                    box=[0, 0, 100, 100],  # Default box
+                    confidence=confidence,
+                    increment_count=True
+                )
+                logger.info(f"Updated existing person: {person_name}")
             else:
-                # When importing existing people, don't inflate their count artificially
-                # Just ensure it's at least 1
-                self.face_appearance_count[person_name] = max(1, self.face_appearance_count[person_name])
+                # Create new person
+                self.memory.add_person(
+                    person_name,
+                    feature_vector=face_feature,
+                    is_named=True
+                )
                 
-            # 4. Check if similar to any tracked faces and merge if appropriate
-            # This reuses logic from add_face
-            for tracked_id, tracked_data in list(self.tracked_faces.items()):
-                if tracked_id.startswith("Face_"):  # Only merge with auto-generated IDs
-                    is_similar = self.comparison_service.are_features_similar(
-                        face_feature, tracked_data['feature'],
-                        FR.COSINE_THRESHOLD, FR.NORM_L2_THRESHOLD)
+                # Update detection info
+                self.memory.update_person(
+                    person_name,
+                    box=[0, 0, 100, 100],  # Default box
+                    confidence=confidence,
+                    increment_count=False  # Already initialized to 1
+                )
+                logger.info(f"Added new person: {person_name}")
+                
+            # 4. Check for similar unnamed faces and merge them
+            for person_id, person in self.memory.get_all_people().items():
+                if person.is_named or person_id == person_name:
+                    continue  # Skip named people and the face we just added
+                
+                if person.feature_vector is None:
+                    continue
                     
-                    if is_similar:
-                        logger.info(f"Import: {person_name} is similar to tracked face {tracked_id}, merging data")
-                        self._merge_face_data(tracked_id, person_name)
-                        break
-                        
+                is_similar = self.comparison_service.are_features_similar(
+                    face_feature, 
+                    person.feature_vector,
+                    FR.COSINE_THRESHOLD, 
+                    FR.NORM_L2_THRESHOLD
+                )
+                
+                if is_similar:
+                    logger.info(f"Import: Merging similar unnamed face {person_id} into {person_name}")
+                    self.memory.merge_people(person_id, person_name)
+            
+            # Request save after import
+            self.memory.request_save()
+                    
             return True, person_name
             
         except Exception as e:
             logger.error(f"Error processing imported face image for {person_name}: {e}", exc_info=True)
             return False, None
-    
-    def _merge_face_data(self, source_id, target_id):
-        """Merge data from source face into target face (internal helper).
-        
-        Args:
-            source_id: ID of source face (typically auto-generated)
-            target_id: ID of target face (typically named by user)
-        """
-        # Transfer appearance count
-        if source_id in self.face_appearance_count:
-            if target_id not in self.face_appearance_count:
-                self.face_appearance_count[target_id] = self.face_appearance_count[source_id]
-            else:
-                self.face_appearance_count[target_id] += self.face_appearance_count[source_id]
-            del self.face_appearance_count[source_id]
-        
-        # Transfer first_seen time if earlier
-        if source_id in self.first_seen_times:
-            if target_id not in self.first_seen_times or self.first_seen_times[source_id] < self.first_seen_times[target_id]:
-                self.first_seen_times[target_id] = self.first_seen_times[source_id]
-            del self.first_seen_times[source_id]
-            
-        # Transfer last_seen time if later
-        if source_id in self.last_seen_times:
-            if target_id not in self.last_seen_times or self.last_seen_times[source_id] > self.last_seen_times[target_id]:
-                self.last_seen_times[target_id] = self.last_seen_times[source_id]
-            del self.last_seen_times[source_id]
-            
-        # Remove the source entry from tracked_faces if it exists
-        if source_id in self.tracked_faces:
-            del self.tracked_faces[source_id]
-            
-        logger.info(f"Merged data from {source_id} into {target_id}")

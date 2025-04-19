@@ -35,7 +35,9 @@ class CameraProviderServer:
         self._port = port
         self.camera_provider = None  # Will be initialized in start()
         self._request_count = 0
-        self.face_processor = FaceProcessor()
+        storage_dir = os.path.join(os.path.dirname(__file__), 'data')
+        os.makedirs(storage_dir, exist_ok=True)
+        self.face_processor = FaceProcessor(storage_dir=storage_dir)
         self.current_frame = None  # Store the latest frame
         
     async def _handle_test(self, request):
@@ -171,21 +173,22 @@ class CameraProviderServer:
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received GET_FACE_COUNTS request from {request.remote}")
         
-        face_counts = self.face_processor.get_face_counts()
+        # Use memory-based approach to get counts
+        people = self.face_processor.memory.get_all_people()
         
         # Get the current timestamp for reference
         current_time = datetime.datetime.now().isoformat()
         
         # Convert to a format suitable for JSON with timestamp information
         counts_data = {
-            face_id: {
-                'count': count,
-                'is_named': face_id in self.face_processor.known_faces,
-                'first_seen': self.face_processor.get_first_seen_time(face_id),
-                'last_seen': self.face_processor.get_last_seen_time(face_id),
+            person_id: {
+                'count': person.appearance_count,
+                'is_named': person.is_named,
+                'first_seen': self.face_processor.get_first_seen_time(person_id),
+                'last_seen': self.face_processor.get_last_seen_time(person_id),
                 'timestamp': current_time
             }
-            for face_id, count in face_counts.items()
+            for person_id, person in people.items()
         }
         
         response = web.json_response(counts_data)
@@ -200,9 +203,18 @@ class CameraProviderServer:
         start_time = datetime.datetime.now()
         logger.info(f"[Request #{self._request_count}] Received GET_KNOWN_FACES request from {request.remote}")
         
+        # Use the existing method that already uses memory
         known_faces = self.face_processor.get_known_faces()
         
-        response = web.json_response(known_faces)
+        # Additional information about known people
+        all_people = self.face_processor.memory.get_all_people()
+        known_face_ids = [person_id for person_id, person in all_people.items() if person.is_named]
+        
+        response = web.json_response({
+            'known_faces': known_faces,
+            'count': len(known_face_ids),
+            'known_faces_list': known_face_ids
+        })
         
         elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
         logger.info(f"[Request #{self._request_count}] Successfully handled GET_KNOWN_FACES request in {elapsed:.2f}ms")
@@ -283,10 +295,9 @@ class CameraProviderServer:
             logger.info(f"[Request #{self._request_count}] Old and new face IDs are the same, no action needed")
             return web.Response(text="No changes needed")
         
-        # Check if this is actually a merge (new_id already exists)
-        if new_face_id in self.face_processor.known_faces:
+        # Check if new ID already exists - this is a merge operation, not a rename
+        if self.face_processor.memory.get_person(new_face_id):
             logger.info(f"[Request #{self._request_count}] New face ID already exists, redirecting to merge operation")
-            # This is a merge operation, not a rename
             success = self.face_processor.merge_faces(old_face_id, new_face_id)
             if not success:
                 return web.Response(status=400, text="Failed to merge faces - one or both IDs may not exist")
@@ -295,44 +306,24 @@ class CameraProviderServer:
             logger.info(f"[Request #{self._request_count}] Successfully merged faces in {elapsed:.2f}ms")
             return web.Response(text=f"Successfully merged '{old_face_id}' into '{new_face_id}'")
         
-        # Check if old_face_id exists in tracked_faces but not in known_faces
-        # This handles the case of renaming a newly detected face
-        old_face_in_known = old_face_id in self.face_processor.known_faces
-        old_face_in_tracked = old_face_id in self.face_processor.tracked_faces
-        
-        if not old_face_in_known and not old_face_in_tracked:
-            logger.error(f"[Request #{self._request_count}] Face ID '{old_face_id}' not found in known or tracked faces")
+        # Check if old face exists
+        old_person = self.face_processor.memory.get_person(old_face_id)
+        if not old_person:
+            logger.error(f"[Request #{self._request_count}] Face ID '{old_face_id}' not found")
             return web.Response(status=400, text=f"Face ID '{old_face_id}' not found")
-            
-        # If face is only in tracked_faces, we need to move it to known_faces first
-        if not old_face_in_known and old_face_in_tracked:
-            logger.info(f"[Request #{self._request_count}] Moving face from tracked to known faces before renaming")
-            self.face_processor.known_faces[old_face_id] = self.face_processor.tracked_faces[old_face_id]['feature']
-            old_face_in_known = True
         
-        # This is a true rename operation
-        # Update the face entry directly in the processor's dictionaries
-        if old_face_in_known:
-            # Copy the face feature to the new ID
-            self.face_processor.known_faces[new_face_id] = self.face_processor.known_faces[old_face_id]
-            # Remove the old entry
-            del self.face_processor.known_faces[old_face_id]
+        # Use the memory's rename_person method for the rename operation
+        success = self.face_processor.memory.rename_person(old_face_id, new_face_id)
+        
+        if success:
+            # Request a save to persist the change
+            self.face_processor.memory.request_save()
             
-            # Update appearance counts
-            if old_face_id in self.face_processor.face_appearance_count:
-                self.face_processor.face_appearance_count[new_face_id] = self.face_processor.face_appearance_count[old_face_id]
-                del self.face_processor.face_appearance_count[old_face_id]
-            
-            # Update tracked faces if necessary
-            if old_face_id in self.face_processor.tracked_faces:
-                self.face_processor.tracked_faces[new_face_id] = self.face_processor.tracked_faces[old_face_id]
-                del self.face_processor.tracked_faces[old_face_id]
-                
             elapsed = (datetime.datetime.now() - start_time).total_seconds() * 1000
             logger.info(f"[Request #{self._request_count}] Successfully renamed face from '{old_face_id}' to '{new_face_id}' in {elapsed:.2f}ms")
             return web.Response(text=f"Successfully renamed '{old_face_id}' to '{new_face_id}'")
         else:
-            return web.Response(status=400, text=f"Failed to rename face - something unexpected happened")
+            return web.Response(status=400, text=f"Failed to rename face - please check logs for details")
     
     async def _handle_static_files(self, request):
         path = request.match_info.get('path', 'index.html')
@@ -442,13 +433,12 @@ class CameraProviderServer:
                         if success:
                             detected_faces += 1
                             # face_id should be the person_name if successful
-                            result["face_id"] = face_id # Store the confirmed face_id (person_name)
+                            result["face_id"] = face_id # Store the confirmed face_id
                         else:
                             result["failed_images"].append(filename)
                             # Add more specific error if possible, otherwise generic
                             if f"No face detected in image for {person_name}" not in str(result["errors"]): # Avoid duplicate no-face errors
                                 result["errors"].append(f"Processing failed for {filename} (e.g., no face or low confidence)")
-
 
                     except Exception as img_err:
                         logger.error(f"Error processing image {filename}: {img_err}", exc_info=True)
@@ -458,14 +448,12 @@ class CameraProviderServer:
                 # Update result
                 result["images_processed"] = processed_count
                 result["faces_detected"] = detected_faces
-                # face_id is already set if any face was detected successfully
 
                 # Check if overall success based on detected faces
                 if detected_faces == 0 and processed_count > 0:
                     result["success"] = False
                     if not result["errors"]: # Add a generic error if none specific were added
                          result["errors"].append(f"No faces successfully processed for {person_name}")
-
 
             finally:
                 # Cleanup temp files and directory
@@ -544,11 +532,11 @@ class CameraProviderServer:
             app.router.add_get('/get_image_with_recognition', self._handle_get_image_with_recognition)
             app.router.add_get('/add_face', self._handle_add_face)
             app.router.add_get('/get_face_counts', self._handle_get_face_counts)
-            app.router.add_get('/get_known_faces', self._handle_get_known_faces)  # New endpoint for known faces
-            app.router.add_get('/merge_faces', self._handle_merge_faces)  # New endpoint for merging faces
-            app.router.add_get('/get_face_data', self._handle_get_face_data)  # New endpoint for face data without image
-            app.router.add_get('/rename_face', self._handle_rename_face)  # New endpoint for renaming faces
-            app.router.add_post('/import_faces_batch', self._handle_import_faces_batch)  # New endpoint for batch import
+            app.router.add_get('/get_known_faces', self._handle_get_known_faces)
+            app.router.add_get('/merge_faces', self._handle_merge_faces)
+            app.router.add_get('/get_face_data', self._handle_get_face_data)
+            app.router.add_get('/rename_face', self._handle_rename_face)
+            app.router.add_post('/import_faces_batch', self._handle_import_faces_batch)
             app.router.add_get('/', self._handle_static_files)
             app.router.add_get('/{path:.*}', self._handle_static_files)
             
@@ -607,6 +595,11 @@ class CameraProviderServer:
     async def stop(self):
         logger.info("Stopping Camera Provider Server...")
         
+        # Shutdown face memory to ensure data is saved
+        if hasattr(self.face_processor, 'memory'):
+            logger.info("Shutting down face memory...")
+            self.face_processor.memory.shutdown()
+            
         if self._zeroconf and self._service_info:
             logger.info("Unregistering Zeroconf service...")
             await self._zeroconf.async_unregister_service(self._service_info)
