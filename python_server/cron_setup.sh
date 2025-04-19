@@ -197,7 +197,7 @@ if [ ! -d ".venv" ] || [ ! -f ".venv/bin/activate" ]; then
     
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
-        uv pip install -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
+        uv pip install -r requirements-picamera.txt 
     else
         uv pip install -r requirements-opencv.txt
     fi
@@ -205,7 +205,7 @@ else
     [ "$VERBOSE" -eq 1 ] && echo "Updating existing virtual environment..."
     source .venv/bin/activate
     if [ "$CAMERA_TYPE" = "picamera" ] || [ "$CAMERA_TYPE" = "picamera2" ]; then
-        uv pip install --upgrade -r requirements-picamera.txt --extra-index-url https://www.piwheels.org/simple
+        uv pip install --upgrade -r requirements-picamera.txt 
     else
         uv pip install --upgrade -r requirements-opencv.txt
     fi
