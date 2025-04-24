@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
@@ -15,26 +17,46 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
   final _dateFormat = DateFormat('MMM d, yyyy • h:mm a');
   bool _isLoading = true;
   List<Map<String, dynamic>> _activeVisits = [];
+  Timer? _refreshTimer;
+  DateTime _lastUpdateTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _loadActiveVisits();
+
+    // Setup auto-refresh timer (every 2 seconds)
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _loadActiveVisits(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadActiveVisits() async {
-    setState(() {
-      _isLoading = true;
-    });
+    // Only set loading state if we don't have data yet, to avoid flickering
+    if (_activeVisits.isEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       final controller = Provider.of<UIStateController>(context, listen: false);
       // Get active visits data
       final visits = await controller.getActiveVisits();
-      
+
+      // Always update the last update time and the state
+      // This ensures the timestamp is refreshed even if the visits don't change
       setState(() {
         _activeVisits = visits;
         _isLoading = false;
+        _lastUpdateTime = DateTime.now();
       });
     } catch (e) {
       setState(() {
@@ -99,10 +121,13 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _loadActiveVisits,
-                  tooltip: 'Refresh',
+                // Use the stored lastUpdateTime instead of now
+                Text(
+                  'Last updated: ${DateFormat('h:mm:ss a').format(_lastUpdateTime)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
                 ),
               ],
             ),
@@ -114,9 +139,11 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
                   final visit = _activeVisits[index];
                   final TrackedFace? person = visit['person'];
                   final DateTime entryTime = visit['entryTime'];
-                  final String cameraName = visit['cameraName'] ?? 'Unknown Camera';
-                  final Duration duration = DateTime.now().difference(entryTime);
-                  
+                  final String cameraName =
+                      visit['cameraName'] ?? 'Unknown Camera';
+                  final Duration duration =
+                      DateTime.now().difference(entryTime);
+
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
@@ -159,7 +186,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
       ),
     );
   }
-  
+
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {
       return '${duration.inDays}d ${duration.inHours.remainder(24)}h';
@@ -171,13 +198,13 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
       return '${duration.inSeconds}s';
     }
   }
-  
+
   void _showVisitDetails(BuildContext context, Map<String, dynamic> visit) {
     final TrackedFace? person = visit['person'];
     final DateTime entryTime = visit['entryTime'];
     final String cameraName = visit['cameraName'] ?? 'Unknown Camera';
     final Duration duration = DateTime.now().difference(entryTime);
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -201,7 +228,8 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              _infoRow(Icons.access_time, 'Entry Time', _dateFormat.format(entryTime)),
+              _infoRow(Icons.access_time, 'Entry Time',
+                  _dateFormat.format(entryTime)),
               _infoRow(Icons.timer, 'Duration', _formatDuration(duration)),
               _infoRow(Icons.videocam, 'Camera', cameraName),
               const SizedBox(height: 16),
@@ -215,7 +243,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
       ),
     );
   }
-  
+
   Widget _infoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),

@@ -182,8 +182,9 @@ class UIStateController with ChangeNotifier {
   void startInactiveVisitsCleanup() {
     _inactiveVisitsTimer?.cancel();
     _inactiveVisitsTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => _faceManagementService.cleanupInactiveVisits(5),
+      const Duration(seconds: 1), // Check every second instead of every minute
+      (_) => _faceManagementService.cleanupInactiveVisits(5,
+          useSeconds: true), // Use seconds instead of minutes
     );
   }
 

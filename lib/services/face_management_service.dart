@@ -268,17 +268,23 @@ class FaceManagementService {
     }
   }
 
-  // Close visits for faces not seen in the last timeoutMinutes minutes
-  Future<void> cleanupInactiveVisits(int timeoutMinutes) async {
+  // Close visits for faces not seen in the last timeoutMinutes minutes (or seconds if useSeconds is true)
+  Future<void> cleanupInactiveVisits(int timeout,
+      {bool useSeconds = false}) async {
     final now = DateTime.now();
     final List<String> facesToClose = [];
 
     for (var entry in trackedFaces.entries) {
       final face = entry.value;
-      if (face.lastSeen != null &&
-          _activeVisits.containsKey(face.id) &&
-          now.difference(face.lastSeen!).inMinutes > timeoutMinutes) {
-        facesToClose.add(face.id);
+      if (face.lastSeen != null && _activeVisits.containsKey(face.id)) {
+        final Duration inactiveTime = now.difference(face.lastSeen!);
+        final bool isInactive = useSeconds
+            ? inactiveTime.inSeconds > timeout
+            : inactiveTime.inMinutes > timeout;
+
+        if (isInactive) {
+          facesToClose.add(face.id);
+        }
       }
     }
 
@@ -653,7 +659,8 @@ class FaceManagementService {
 
       // Get the visit details from the database
       final visitDetails = await _facesRepository.getVisitDetails(visitId);
-      if (visitDetails != null) {
+      if (visitDetails != null && visitDetails.durationSeconds == null) {
+        // Only include truly active visits (durationSeconds is null)
         // Get the face details
         final face = trackedFaces[faceId];
 
@@ -663,10 +670,9 @@ class FaceManagementService {
           'faceId': faceId,
           'person': face,
           'entryTime': visitDetails.entryTime,
-          'lastSeen': visitDetails.exitTime,
+          'lastSeen': visitDetails.exitTime, // This is used as last seen time
           'cameraId': visitDetails.providerId,
-          'cameraName': visitDetails
-              .providerId, // We could get a better name if available
+          'cameraName': visitDetails.providerId, 
         });
       }
     }
