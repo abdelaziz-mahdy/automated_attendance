@@ -269,6 +269,19 @@ class FacesRepository {
     await database.insertVisit(companion);
   }
 
+  /// Get details for a specific visit by ID
+  Future<DBVisit?> getVisitDetails(String visitId) async {
+    final database = await _databaseProvider.database;
+    
+    // Query the visit by ID
+    final visits = await (database.select(database.dBVisits)
+          ..where((tbl) => tbl.id.equals(visitId)))
+        .get();
+        
+    // Return the visit or null if not found
+    return visits.isNotEmpty ? visits.first : null;
+  }
+
   /// Update the last seen time of an active visit
   Future<void> updateVisitLastSeen(String visitId, DateTime timestamp) async {
     final database = await _databaseProvider.database;

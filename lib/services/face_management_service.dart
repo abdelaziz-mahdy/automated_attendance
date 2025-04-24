@@ -641,6 +641,43 @@ class FaceManagementService {
     }
   }
 
+  // Get active visits with details
+  Future<List<Map<String, dynamic>>> getActiveVisits() async {
+    await ensureDataLoaded();
+
+    List<Map<String, dynamic>> result = [];
+
+    for (var entry in _activeVisits.entries) {
+      final faceId = entry.key;
+      final visitId = entry.value;
+
+      // Get the visit details from the database
+      final visitDetails = await _facesRepository.getVisitDetails(visitId);
+      if (visitDetails != null) {
+        // Get the face details
+        final face = trackedFaces[faceId];
+
+        // Add to result with face and visit details
+        result.add({
+          'visitId': visitId,
+          'faceId': faceId,
+          'person': face,
+          'entryTime': visitDetails.entryTime,
+          'lastSeen': visitDetails.exitTime,
+          'cameraId': visitDetails.providerId,
+          'cameraName': visitDetails
+              .providerId, // We could get a better name if available
+        });
+      }
+    }
+
+    // Sort by entry time, most recent first
+    result.sort((a, b) =>
+        (b['entryTime'] as DateTime).compareTo(a['entryTime'] as DateTime));
+
+    return result;
+  }
+
   void _notifyStateChanged() {
     onStateChanged?.call();
   }

@@ -353,6 +353,11 @@ class UIStateController with ChangeNotifier {
     notifyListeners();
   }
 
+  // Get active visits
+  Future<List<Map<String, dynamic>>> getActiveVisits() async {
+    return await _faceManagementService.getActiveVisits();
+  }
+
   @override
   void dispose() {
     _inactiveVisitsTimer?.cancel();
