@@ -64,7 +64,6 @@ class CapturedFacesGrid extends StatelessWidget {
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: () => _showFaceDetails(context, controller, face),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -144,115 +143,6 @@ class CapturedFacesGrid extends StatelessWidget {
           },
         );
       },
-    );
-  }
-
-  void _showFaceDetails(
-    BuildContext context,
-    UIStateController controller,
-    CapturedFace face,
-  ) {
-    final hasName = face.name != null && face.name!.isNotEmpty;
-    final dateFormat = DateFormat('MMMM d, yyyy • h:mm a');
-    final formattedDate = dateFormat.format(face.timestamp);
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Face image
-            ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.memory(
-                face.thumbnail,
-                fit: BoxFit.cover,
-                height: 200,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Person name with status
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        hasName ? Icons.person : Icons.person_outline,
-                        color: hasName ? Colors.green : Colors.grey,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        hasName ? face.name! : 'Unknown Person',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: hasName ? Colors.black87 : Colors.grey[700],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Time captured
-                  Row(
-                    children: [
-                      Icon(Icons.access_time,
-                          size: 18, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Captured: $formattedDate',
-                          style:
-                              TextStyle(fontSize: 14, color: Colors.grey[700]),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Provider info
-                  Row(
-                    children: [
-                      Icon(Icons.videocam, size: 18, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Camera: ${face.providerAddress}',
-                          style:
-                              TextStyle(fontSize: 14, color: Colors.grey[700]),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                    ),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
