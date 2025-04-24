@@ -7,10 +7,11 @@ import 'package:automated_attendance/camera_providers/remote_camera_provider.dar
 import 'package:automated_attendance/discovery/discovery_service.dart';
 import 'package:automated_attendance/discovery/service_info.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
+import 'package:automated_attendance/models/captured_face.dart';
 import 'package:automated_attendance/services/face_management_service.dart';
 
 typedef CameraManagerCallback = void Function();
-typedef FaceFeaturesCallback = void Function(
+typedef FaceFeaturesCallback = Future<Map<String, dynamic>?> Function(
     List<double> features, String providerAddress, Uint8List? thumbnail);
 
 /// Service responsible for discovery, connecting to, and managing camera providers.
@@ -23,7 +24,7 @@ class CameraManager {
   final Map<String, Uint8List> _lastFrames = {};
   final Map<String, Timer> _pollTimers = {};
   final Map<String, int> _providerFps = {};
-  final List<Uint8List> capturedFaces = [];
+  final List<CapturedFace> capturedFaces = [];
 
   bool _isListening = false;
   late SharedPreferences _prefs;
@@ -152,18 +153,28 @@ class CameraManager {
 
           // Process each detected face
           for (int i = 0; i < features.length; i++) {
-            // Notify about detected face features
-            onFaceFeaturesDetected?.call(
-              features[i] as List<double>,
-              address,
-              thumbnails[i] as Uint8List?,
-            );
+            final faceFeatures = features[i] as List<double>;
+            final faceThumbnail = thumbnails[i] as Uint8List?;
 
-            // Store captured face thumbnails
-            if (thumbnails[i] != null) {
-              capturedFaces.insert(0, thumbnails[i] as Uint8List);
-              if (capturedFaces.length > _maxFaces) {
-                capturedFaces.removeLast();
+            if (faceThumbnail != null) {
+              // Process face and get recognition results before adding to UI
+              final recognitionResult = await onFaceFeaturesDetected?.call(
+                  faceFeatures, address, faceThumbnail);
+
+              // Only add the face to capturedFaces after recognition
+              if (recognitionResult != null) {
+                final capturedFace = CapturedFace(
+                  thumbnail: faceThumbnail,
+                  name: recognitionResult['name'],
+                  timestamp: DateTime.now(),
+                  providerAddress: address,
+                  faceId: recognitionResult['faceId'],
+                );
+
+                capturedFaces.insert(0, capturedFace);
+                if (capturedFaces.length > _maxFaces) {
+                  capturedFaces.removeLast();
+                }
               }
             }
           }

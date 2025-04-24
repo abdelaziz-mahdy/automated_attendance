@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:automated_attendance/isolate/frame_processor.dart';
+import 'package:automated_attendance/models/captured_face.dart';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/models/face_match.dart';
@@ -32,9 +33,13 @@ class UIStateController with ChangeNotifier {
     // Initialize camera manager with face management service
     _cameraManager = CameraManager(_faceManagementService)
       ..onStateChanged = _onCameraStateChanged
-      ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) {
-        _faceManagementService.processFace(
+      ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) async {
+        // Process face and return recognition results
+        final faceResult = await _faceManagementService.processFace(
             features, providerAddress, thumbnail);
+
+        // Return the recognition results so CameraManager can create CapturedFace
+        return faceResult;
       };
     _initializeServices();
   }
@@ -76,7 +81,7 @@ class UIStateController with ChangeNotifier {
   // Public accessors that delegate to the appropriate service
   Map<String, TrackedFace> get trackedFaces =>
       _faceManagementService.trackedFaces;
-  List<Uint8List> get capturedFaces => _cameraManager.capturedFaces;
+  List<CapturedFace> get capturedFaces => _cameraManager.capturedFaces;
   Map<String, ICameraProvider> get activeProviders =>
       _cameraManager.activeProviders;
 
@@ -336,6 +341,16 @@ class UIStateController with ChangeNotifier {
     } catch (e) {
       debugPrint('Error refreshing tracked faces: $e');
     }
+  }
+
+  // Update the name of a captured face
+  void updateCapturedFaceName(String faceId, String name) {
+    for (var face in _cameraManager.capturedFaces) {
+      if (face.faceId == faceId) {
+        face.name = name;
+      }
+    }
+    notifyListeners();
   }
 
   @override

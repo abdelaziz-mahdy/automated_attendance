@@ -120,10 +120,12 @@ class FaceManagementService {
 
   /// Process a newly detected face and determine if it matches an existing face
   /// or if it's a new face that should be tracked
-  Future<void> processFace(List<double> features, String providerAddress,
-      Uint8List? faceThumbnail) async {
+  /// Returns a map with recognition results or null if processing failed
+  Future<Map<String, dynamic>?> processFace(List<double> features,
+      String providerAddress, Uint8List? faceThumbnail) async {
     bool isKnownFace = false;
     String? matchedFaceId;
+    String? personName;
     final now = DateTime.now();
 
     // Step 1: Match against existing faces in memory
@@ -154,6 +156,7 @@ class FaceManagementService {
       if (isSimilar) {
         isKnownFace = true;
         matchedFaceId = trackedFace.id;
+        personName = trackedFace.name; // Get the person's name
 
         try {
           // Update database first (source of truth)
@@ -198,6 +201,9 @@ class FaceManagementService {
 
         // Refresh from database to ensure consistency
         await _refreshFaceFromDatabase(newFaceId);
+
+        // Set the returned values
+        matchedFaceId = newFaceId;
       } catch (e) {
         debugPrint('Error creating new tracked face: $e');
       }
@@ -205,6 +211,15 @@ class FaceManagementService {
 
     // Notify listeners after all operations are complete
     _notifyStateChanged();
+
+    // Return the recognition results
+    return matchedFaceId != null
+        ? {
+            'faceId': matchedFaceId,
+            'isKnown': isKnownFace,
+            'name': personName ?? "",
+          }
+        : null;
   }
 
   // Handle visit tracking for a face
