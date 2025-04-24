@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/models/tracked_face.dart';
+import 'package:automated_attendance/services/visit_tracking_service.dart';
 import 'package:intl/intl.dart';
+import 'package:collection/collection.dart';
 
 class ActiveVisitsPage extends StatefulWidget {
   const ActiveVisitsPage({super.key});
@@ -15,178 +17,204 @@ class ActiveVisitsPage extends StatefulWidget {
 
 class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
   final _dateFormat = DateFormat('MMM d, yyyy • h:mm a');
-  bool _isLoading = true;
-  List<Map<String, dynamic>> _activeVisits = [];
-  Timer? _refreshTimer;
-  DateTime _lastUpdateTime = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadActiveVisits();
-
-    // Setup auto-refresh timer (every 2 seconds)
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _loadActiveVisits(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadActiveVisits() async {
-    // Only set loading state if we don't have data yet, to avoid flickering
-    if (_activeVisits.isEmpty) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
-
-    try {
-      final controller = Provider.of<UIStateController>(context, listen: false);
-      // Get active visits data
-      final visits = await controller.getActiveVisits();
-
-      // Always update the last update time and the state
-      // This ensures the timestamp is refreshed even if the visits don't change
-      setState(() {
-        _activeVisits = visits;
-        _isLoading = false;
-        _lastUpdateTime = DateTime.now();
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      debugPrint('Error loading active visits: $e');
-    }
-  }
-
+  
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (_activeVisits.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.people_alt_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              "No active visits",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "When people are detected, their visits will appear here",
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loadActiveVisits,
-              child: const Text("Refresh"),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadActiveVisits,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Use StreamBuilder instead of manual refresh timer for reactive updates
+    return StreamBuilder<List<ActiveVisit>>(
+      stream: Provider.of<UIStateController>(context).activeVisitsStream,
+      builder: (context, snapshot) {
+        // Show loading indicator while waiting for first data
+        if (!snapshot.hasData && !snapshot.hasError) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+        
+        // Show error message if stream has error
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                const SizedBox(height: 16),
                 Text(
-                  'Active Visits (${_activeVisits.length})',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                  "Error loading visits",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
                   ),
                 ),
-                // Use the stored lastUpdateTime instead of now
+                const SizedBox(height: 8),
                 Text(
-                  'Last updated: ${DateFormat('h:mm:ss a').format(_lastUpdateTime)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  snapshot.error.toString(),
+                  style: TextStyle(color: Colors.grey[600]),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _activeVisits.length,
-                itemBuilder: (context, index) {
-                  final visit = _activeVisits[index];
-                  final TrackedFace? person = visit['person'];
-                  final DateTime entryTime = visit['entryTime'];
-                  final String cameraName =
-                      visit['cameraName'] ?? 'Unknown Camera';
-                  final Duration duration =
-                      DateTime.now().difference(entryTime);
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      leading: person?.thumbnail != null
-                          ? CircleAvatar(
-                              backgroundImage: MemoryImage(person!.thumbnail!),
-                              radius: 24,
-                            )
-                          : const CircleAvatar(
-                              child: Icon(Icons.person),
-                              radius: 24,
-                            ),
-                      title: Text(
-                        person?.name ?? 'Unknown Person',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Entered: ${_dateFormat.format(entryTime)}'),
-                          Text('Camera: $cameraName'),
-                          Text(
-                            'Duration: ${_formatDuration(duration)}',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                      isThreeLine: true,
-                      trailing: IconButton(
-                        icon: const Icon(Icons.info_outline),
-                        onPressed: () => _showVisitDetails(context, visit),
-                      ),
+          );
+        }
+        
+        // Get active visits from snapshot
+        final visits = snapshot.data ?? [];
+        
+        // Show empty state when no visits
+        if (visits.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_alt_outlined, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                Text(
+                  "No active visits",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "When people are detected, their visits will appear here",
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+        
+        // Show the list of active visits
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Active Visits (${visits.length})',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                  );
-                },
+                  ),
+                  // Real-time updates with automatic refresh
+                  Text(
+                    'Last updated: ${DateFormat('h:mm:ss a').format(DateTime.now())}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              Expanded(
+                // Fix constructor with AnimatedBuilder widget
+                child: ListView.builder(
+                  itemCount: visits.length,
+                  itemBuilder: (context, index) {
+                    final visit = visits[index];
+                    final person = visit.person; // Use the person variable
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: visit.person.thumbnail != null
+                            ? CircleAvatar(
+                                backgroundImage: MemoryImage(visit.person.thumbnail!),
+                                radius: 24,
+                              )
+                            : const CircleAvatar(
+                                child: Icon(Icons.person),
+                                radius: 24,
+                              ),
+                        title: Text(
+                          visit.person.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Entered: ${_dateFormat.format(visit.entryTime)}'),
+                            Text('Camera: ${visit.cameraId}'),
+                            // Use AnimatedBuilder to constantly update duration
+                            AnimatedBuilder(
+                              animation:  AlwaysAnimatedModel(),
+                              builder: (context, _) {
+                                return Text(
+                                  'Duration: ${_formatDuration(visit.duration)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                );
+                              }
+                            ),
+                          ],
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.info_outline),
+                          onPressed: () => _showVisitDetails(context, visit),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  // Extract visit card to separate method for cleaner code
+  Widget _buildVisitCard(BuildContext context, ActiveVisit visit) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: visit.person.thumbnail != null
+            ? CircleAvatar(
+                backgroundImage: MemoryImage(visit.person.thumbnail!),
+                radius: 24,
+              )
+            : const CircleAvatar(
+                child: Icon(Icons.person),
+                radius: 24,
+              ),
+        title: Text(
+          visit.person.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Entered: ${_dateFormat.format(visit.entryTime)}'),
+            Text('Camera: ${visit.cameraId}'),
+            // Use AnimatedBuilder to constantly update duration
+            AnimatedBuilder(
+              animation:  AlwaysAnimatedModel(),
+              builder: (context, _) {
+                return Text(
+                  'Duration: ${_formatDuration(visit.duration)}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                );
+              }
             ),
           ],
+        ),
+        isThreeLine: true,
+        trailing: IconButton(
+          icon: const Icon(Icons.info_outline),
+          onPressed: () => _showVisitDetails(context, visit),
         ),
       ),
     );
   }
-
+  
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {
       return '${duration.inDays}d ${duration.inHours.remainder(24)}h';
@@ -199,11 +227,11 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
     }
   }
 
-  void _showVisitDetails(BuildContext context, Map<String, dynamic> visit) {
-    final TrackedFace? person = visit['person'];
-    final DateTime entryTime = visit['entryTime'];
-    final String cameraName = visit['cameraName'] ?? 'Unknown Camera';
-    final Duration duration = DateTime.now().difference(entryTime);
+  void _showVisitDetails(BuildContext context, ActiveVisit visit) {
+    final person = visit.person;
+    final DateTime entryTime = visit.entryTime;
+    final String cameraName = visit.cameraId;
+    final Duration duration = visit.duration;
 
     showDialog(
       context: context,
@@ -214,14 +242,14 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (person?.thumbnail != null)
+              if (person.thumbnail != null)
                 CircleAvatar(
-                  backgroundImage: MemoryImage(person!.thumbnail!),
+                  backgroundImage: MemoryImage(person.thumbnail!),
                   radius: 48,
                 ),
               const SizedBox(height: 16),
               Text(
-                person?.name ?? 'Unknown Person',
+                person.name,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -274,5 +302,21 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
         ],
       ),
     );
+  }
+}
+
+// Fix the AlwaysAnimatedModel class to use dart:async Timer
+class AlwaysAnimatedModel extends ChangeNotifier {
+  Timer? _timer;
+  
+  AlwaysAnimatedModel() {
+    // Update every second
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
+  }
+  
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 }

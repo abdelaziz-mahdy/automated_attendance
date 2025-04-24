@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:automated_attendance/database/faces_repository.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
 import 'package:automated_attendance/models/captured_face.dart';
+import 'package:automated_attendance/services/visit_tracking_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/models/face_match.dart';
@@ -15,6 +17,7 @@ class UIStateController with ChangeNotifier {
   late final FaceManagementService _faceManagementService;
   late final CameraManager _cameraManager;
   late final SettingsService _settingsService;
+  late final VisitTrackingService _visitTrackingService;
   Timer? _inactiveVisitsTimer;
 
   // Callbacks
@@ -30,6 +33,9 @@ class UIStateController with ChangeNotifier {
     _faceManagementService = FaceManagementService()
       ..onStateChanged = _onFaceManagementStateChanged;
 
+    // Initialize visit tracking service
+    _visitTrackingService = VisitTrackingService(FacesRepository());
+      
     // Initialize camera manager with face management service
     _cameraManager = CameraManager(_faceManagementService)
       ..onStateChanged = _onCameraStateChanged
@@ -37,7 +43,22 @@ class UIStateController with ChangeNotifier {
         // Process face and return recognition results
         final faceResult = await _faceManagementService.processFace(
             features, providerAddress, thumbnail);
-
+            
+        // If face recognized, update visit tracking
+        if (faceResult != null && faceResult['faceId'] != null) {
+          final faceId = faceResult['faceId'] as String;
+          final person = _faceManagementService.trackedFaces[faceId];
+          
+          if (person != null) {
+            // Handle visit in dedicated service
+            await _visitTrackingService.handleVisit(
+              faceId, 
+              providerAddress,
+              person
+            );
+          }
+        }
+        
         // Return the recognition results so CameraManager can create CapturedFace
         return faceResult;
       };
@@ -93,12 +114,13 @@ class UIStateController with ChangeNotifier {
   // Start all necessary services and monitoring
   Future<void> start() async {
     await _cameraManager.startListening();
-    startInactiveVisitsCleanup();
+    // No need for separate inactive visits timer as visit service handles it
   }
 
   // Clean up resources
   Future<void> stop() async {
     await _cameraManager.stopListening();
+    await _visitTrackingService.closeAllVisits();
     _inactiveVisitsTimer?.cancel();
   }
 
@@ -354,16 +376,16 @@ class UIStateController with ChangeNotifier {
     notifyListeners();
   }
 
-  // Get active visits
-  Future<List<Map<String, dynamic>>> getActiveVisits() async {
-    return await _faceManagementService.getActiveVisits();
-  }
+  // Expose the visit stream to widgets
+  Stream<List<ActiveVisit>> get activeVisitsStream => 
+      _visitTrackingService.activeVisitsStream;
 
   @override
   void dispose() {
     _inactiveVisitsTimer?.cancel();
     _cameraManager.dispose();
     _faceManagementService.dispose();
+    _visitTrackingService.dispose();
     stop();
     super.dispose();
   }
