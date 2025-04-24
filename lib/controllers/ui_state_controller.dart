@@ -35,7 +35,7 @@ class UIStateController with ChangeNotifier {
 
     // Initialize visit tracking service
     _visitTrackingService = VisitTrackingService(FacesRepository());
-      
+
     // Initialize camera manager with face management service
     _cameraManager = CameraManager(_faceManagementService)
       ..onStateChanged = _onCameraStateChanged
@@ -43,22 +43,19 @@ class UIStateController with ChangeNotifier {
         // Process face and return recognition results
         final faceResult = await _faceManagementService.processFace(
             features, providerAddress, thumbnail);
-            
+
         // If face recognized, update visit tracking
         if (faceResult != null && faceResult['faceId'] != null) {
           final faceId = faceResult['faceId'] as String;
           final person = _faceManagementService.trackedFaces[faceId];
-          
+
           if (person != null) {
             // Handle visit in dedicated service
             await _visitTrackingService.handleVisit(
-              faceId, 
-              providerAddress,
-              person
-            );
+                faceId, providerAddress, person);
           }
         }
-        
+
         // Return the recognition results so CameraManager can create CapturedFace
         return faceResult;
       };
@@ -220,7 +217,27 @@ class UIStateController with ChangeNotifier {
 
     // Get all available faces
     final availableFaces = await getAvailableFaces();
-
+    
+    // Create a set of all valid face IDs (both main and merged faces)
+    final Set<String> allValidFaceIds = {};
+    
+    // Add main face IDs
+    for (var face in availableFaces) {
+      allValidFaceIds.add(face['id'] as String);
+    }
+    
+    // Add merged face IDs
+    for (var trackedFace in trackedFaces.values) {
+      for (var mergedFace in trackedFace.mergedFaces) {
+        allValidFaceIds.add(mergedFace.id);
+      }
+    }
+    
+    // Filter expected attendees to only include those that exist in our database
+    final Set<String> validExpectedFaceIds = _expectedAttendees
+        .where((faceId) => allValidFaceIds.contains(faceId))
+        .toSet();
+    
     // Get visit statistics for today
     final stats = await getVisitStatistics(
       startDate: startOfDay,
@@ -231,13 +248,14 @@ class UIStateController with ChangeNotifier {
     final presentFaces = <Map<String, dynamic>>[];
     final absentFaces = <Map<String, dynamic>>[];
 
-    // Track unique faces for attendance calculation
-    final Set<String> uniqueExpectedFaceIds = Set.from(_expectedAttendees);
-    final Set<String> uniquePresentExpectedFaceIds = {};
+    // Track unique faces for attendance calculation - only use valid expected attendees
+    final uniquePresentExpectedFaceIds = <String>{};
 
     for (var face in availableFaces) {
+      final faceId = face['id'] as String;
+      
       // Get detailed visit info for this face today
-      final visits = await _faceManagementService.getVisitsForFace(face['id']);
+      final visits = await _faceManagementService.getVisitsForFace(faceId);
       final todayVisits = visits.where((visit) {
         final entryTime = visit['entryTime'] as DateTime?;
         return entryTime != null &&
@@ -257,10 +275,11 @@ class UIStateController with ChangeNotifier {
         presentFaces.add(face);
 
         // Track if this present face was an expected face
-        if (uniqueExpectedFaceIds.contains(face['id'])) {
-          uniquePresentExpectedFaceIds.add(face['id']);
+        if (validExpectedFaceIds.contains(faceId)) {
+          uniquePresentExpectedFaceIds.add(faceId);
         }
-      } else if (_expectedAttendees.contains(face['id'])) {
+      } else if (validExpectedFaceIds.contains(faceId)) {
+        // Only add to absent faces if it's a valid expected attendee
         absentFaces.add(face);
       }
     }
@@ -269,8 +288,8 @@ class UIStateController with ChangeNotifier {
     presentFaces.sort((a, b) =>
         (a['arrivalTime'] as DateTime).compareTo(b['arrivalTime'] as DateTime));
 
-    // Calculate attendance based on unique faces
-    final uniqueExpectedCount = uniqueExpectedFaceIds.length;
+    // Calculate attendance based on unique faces - using only valid expected attendees
+    final uniqueExpectedCount = validExpectedFaceIds.length;
     final uniquePresentCount = uniquePresentExpectedFaceIds.length;
     final attendanceRate = uniqueExpectedCount > 0
         ? (uniquePresentCount / uniqueExpectedCount * 100).toStringAsFixed(1)
@@ -377,7 +396,7 @@ class UIStateController with ChangeNotifier {
   }
 
   // Expose the visit stream to widgets
-  Stream<List<ActiveVisit>> get activeVisitsStream => 
+  Stream<List<ActiveVisit>> get activeVisitsStream =>
       _visitTrackingService.activeVisitsStream;
 
   @override

@@ -17,7 +17,7 @@ class ActiveVisitsPage extends StatefulWidget {
 
 class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
   final _dateFormat = DateFormat('MMM d, yyyy • h:mm a');
-  
+
   @override
   Widget build(BuildContext context) {
     // Use StreamBuilder instead of manual refresh timer for reactive updates
@@ -30,7 +30,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
             child: CircularProgressIndicator(),
           );
         }
-        
+
         // Show error message if stream has error
         if (snapshot.hasError) {
           return Center(
@@ -56,17 +56,18 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
             ),
           );
         }
-        
+
         // Get active visits from snapshot
         final visits = snapshot.data ?? [];
-        
+
         // Show empty state when no visits
         if (visits.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.people_alt_outlined, size: 64, color: Colors.grey[400]),
+                Icon(Icons.people_alt_outlined,
+                    size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
                   "No active visits",
@@ -85,7 +86,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
             ),
           );
         }
-        
+
         // Show the list of active visits
         return Padding(
           padding: const EdgeInsets.all(16.0),
@@ -120,13 +121,14 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
                   itemBuilder: (context, index) {
                     final visit = visits[index];
                     final person = visit.person; // Use the person variable
-                    
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         leading: visit.person.thumbnail != null
                             ? CircleAvatar(
-                                backgroundImage: MemoryImage(visit.person.thumbnail!),
+                                backgroundImage:
+                                    MemoryImage(visit.person.thumbnail!),
                                 radius: 24,
                               )
                             : const CircleAvatar(
@@ -140,18 +142,19 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Entered: ${_dateFormat.format(visit.entryTime)}'),
+                            Text(
+                                'Entered: ${_dateFormat.format(visit.entryTime)}'),
                             Text('Camera: ${visit.cameraId}'),
                             // Use AnimatedBuilder to constantly update duration
                             AnimatedBuilder(
-                              animation:  AlwaysAnimatedModel(),
-                              builder: (context, _) {
-                                return Text(
-                                  'Duration: ${_formatDuration(visit.duration)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
-                                );
-                              }
-                            ),
+                                animation: AlwaysAnimatedModel(),
+                                builder: (context, _) {
+                                  return Text(
+                                    'Duration: ${_formatDuration(visit.duration)}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w500),
+                                  );
+                                }),
                           ],
                         ),
                         isThreeLine: true,
@@ -170,7 +173,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
       },
     );
   }
-  
+
   // Extract visit card to separate method for cleaner code
   Widget _buildVisitCard(BuildContext context, ActiveVisit visit) {
     return Card(
@@ -196,14 +199,13 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
             Text('Camera: ${visit.cameraId}'),
             // Use AnimatedBuilder to constantly update duration
             AnimatedBuilder(
-              animation:  AlwaysAnimatedModel(),
-              builder: (context, _) {
-                return Text(
-                  'Duration: ${_formatDuration(visit.duration)}',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                );
-              }
-            ),
+                animation: AlwaysAnimatedModel(),
+                builder: (context, _) {
+                  return Text(
+                    'Duration: ${_formatDuration(visit.duration)}',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  );
+                }),
           ],
         ),
         isThreeLine: true,
@@ -214,7 +216,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
       ),
     );
   }
-  
+
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {
       return '${duration.inDays}d ${duration.inHours.remainder(24)}h';
@@ -308,12 +310,13 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
 // Fix the AlwaysAnimatedModel class to use dart:async Timer
 class AlwaysAnimatedModel extends ChangeNotifier {
   Timer? _timer;
-  
+
   AlwaysAnimatedModel() {
     // Update every second
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
+    _timer =
+        Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
   }
-  
+
   @override
   void dispose() {
     _timer?.cancel();

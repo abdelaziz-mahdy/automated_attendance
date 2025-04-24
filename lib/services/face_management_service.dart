@@ -196,7 +196,7 @@ class FaceManagementService {
         await _facesRepository.saveTrackedFace(newTrackedFace);
 
         // Visit handling moved to separate service
-        
+
         // Refresh from database to ensure consistency
         await _refreshFaceFromDatabase(newFaceId);
 
@@ -597,7 +597,7 @@ class FaceManagementService {
           'entryTime': visitDetails.entryTime,
           'lastSeen': visitDetails.exitTime, // This is used as last seen time
           'cameraId': visitDetails.providerId,
-          'cameraName': visitDetails.providerId, 
+          'cameraName': visitDetails.providerId,
         });
       }
     }
@@ -632,7 +632,8 @@ class FaceManagementService {
   }
 
   // Close visits for faces not seen in the last timeoutMinutes minutes (or seconds if useSeconds is true)
-  Future<void> cleanupInactiveVisits(int timeout, {bool useSeconds = false}) async {
+  Future<void> cleanupInactiveVisits(int timeout,
+      {bool useSeconds = false}) async {
     final now = DateTime.now();
     final List<String> facesToClose = [];
 

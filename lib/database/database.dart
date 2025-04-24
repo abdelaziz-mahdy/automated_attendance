@@ -71,19 +71,19 @@ class FacesDatabase extends _$FacesDatabase {
 
   // Visits methods
   Future<List<DBVisit>> getVisits() => select(dBVisits).get();
-  
+
   Future<List<DBVisit>> getVisitsForFace(String faceId) =>
       (select(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).get();
-      
+
   Future<List<DBVisit>> getActiveVisits() =>
       (select(dBVisits)..where((tbl) => tbl.durationSeconds.isNull())).get();
-      
-  Future<int> insertVisit(DBVisitsCompanion visit) => 
+
+  Future<int> insertVisit(DBVisitsCompanion visit) =>
       into(dBVisits).insert(visit);
-      
-  Future<bool> updateVisit(DBVisitsCompanion visit) => 
+
+  Future<bool> updateVisit(DBVisitsCompanion visit) =>
       update(dBVisits).replace(visit);
-      
+
   Future<int> deleteVisitsForFace(String faceId) =>
       (delete(dBVisits)..where((tbl) => tbl.faceId.equals(faceId))).go();
 
