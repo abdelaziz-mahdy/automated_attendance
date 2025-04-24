@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:automated_attendance/database/faces_repository.dart';
 import 'package:automated_attendance/isolate/frame_processor.dart';
+import 'package:automated_attendance/models/captured_face.dart';
+import 'package:automated_attendance/services/visit_tracking_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:automated_attendance/camera_providers/i_camera_provider.dart';
 import 'package:automated_attendance/models/face_match.dart';
@@ -14,6 +17,7 @@ class UIStateController with ChangeNotifier {
   late final FaceManagementService _faceManagementService;
   late final CameraManager _cameraManager;
   late final SettingsService _settingsService;
+  late final VisitTrackingService _visitTrackingService;
   Timer? _inactiveVisitsTimer;
 
   // Callbacks
@@ -29,12 +33,31 @@ class UIStateController with ChangeNotifier {
     _faceManagementService = FaceManagementService()
       ..onStateChanged = _onFaceManagementStateChanged;
 
+    // Initialize visit tracking service
+    _visitTrackingService = VisitTrackingService(FacesRepository());
+
     // Initialize camera manager with face management service
     _cameraManager = CameraManager(_faceManagementService)
       ..onStateChanged = _onCameraStateChanged
-      ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) {
-        _faceManagementService.processFace(
+      ..onFaceFeaturesDetected = (features, providerAddress, thumbnail) async {
+        // Process face and return recognition results
+        final faceResult = await _faceManagementService.processFace(
             features, providerAddress, thumbnail);
+
+        // If face recognized, update visit tracking
+        if (faceResult != null && faceResult['faceId'] != null) {
+          final faceId = faceResult['faceId'] as String;
+          final person = _faceManagementService.trackedFaces[faceId];
+
+          if (person != null) {
+            // Handle visit in dedicated service
+            await _visitTrackingService.handleVisit(
+                faceId, providerAddress, person);
+          }
+        }
+
+        // Return the recognition results so CameraManager can create CapturedFace
+        return faceResult;
       };
     _initializeServices();
   }
@@ -76,7 +99,7 @@ class UIStateController with ChangeNotifier {
   // Public accessors that delegate to the appropriate service
   Map<String, TrackedFace> get trackedFaces =>
       _faceManagementService.trackedFaces;
-  List<Uint8List> get capturedFaces => _cameraManager.capturedFaces;
+  List<CapturedFace> get capturedFaces => _cameraManager.capturedFaces;
   Map<String, ICameraProvider> get activeProviders =>
       _cameraManager.activeProviders;
 
@@ -88,12 +111,13 @@ class UIStateController with ChangeNotifier {
   // Start all necessary services and monitoring
   Future<void> start() async {
     await _cameraManager.startListening();
-    startInactiveVisitsCleanup();
+    // No need for separate inactive visits timer as visit service handles it
   }
 
   // Clean up resources
   Future<void> stop() async {
     await _cameraManager.stopListening();
+    await _visitTrackingService.closeAllVisits();
     _inactiveVisitsTimer?.cancel();
   }
 
@@ -177,8 +201,9 @@ class UIStateController with ChangeNotifier {
   void startInactiveVisitsCleanup() {
     _inactiveVisitsTimer?.cancel();
     _inactiveVisitsTimer = Timer.periodic(
-      const Duration(minutes: 1),
-      (_) => _faceManagementService.cleanupInactiveVisits(5),
+      const Duration(seconds: 1), // Check every second instead of every minute
+      (_) => _faceManagementService.cleanupInactiveVisits(5,
+          useSeconds: true), // Use seconds instead of minutes
     );
   }
 
@@ -192,7 +217,27 @@ class UIStateController with ChangeNotifier {
 
     // Get all available faces
     final availableFaces = await getAvailableFaces();
-
+    
+    // Create a set of all valid face IDs (both main and merged faces)
+    final Set<String> allValidFaceIds = {};
+    
+    // Add main face IDs
+    for (var face in availableFaces) {
+      allValidFaceIds.add(face['id'] as String);
+    }
+    
+    // Add merged face IDs
+    for (var trackedFace in trackedFaces.values) {
+      for (var mergedFace in trackedFace.mergedFaces) {
+        allValidFaceIds.add(mergedFace.id);
+      }
+    }
+    
+    // Filter expected attendees to only include those that exist in our database
+    final Set<String> validExpectedFaceIds = _expectedAttendees
+        .where((faceId) => allValidFaceIds.contains(faceId))
+        .toSet();
+    
     // Get visit statistics for today
     final stats = await getVisitStatistics(
       startDate: startOfDay,
@@ -203,13 +248,14 @@ class UIStateController with ChangeNotifier {
     final presentFaces = <Map<String, dynamic>>[];
     final absentFaces = <Map<String, dynamic>>[];
 
-    // Track unique faces for attendance calculation
-    final Set<String> uniqueExpectedFaceIds = Set.from(_expectedAttendees);
-    final Set<String> uniquePresentExpectedFaceIds = {};
+    // Track unique faces for attendance calculation - only use valid expected attendees
+    final uniquePresentExpectedFaceIds = <String>{};
 
     for (var face in availableFaces) {
+      final faceId = face['id'] as String;
+      
       // Get detailed visit info for this face today
-      final visits = await _faceManagementService.getVisitsForFace(face['id']);
+      final visits = await _faceManagementService.getVisitsForFace(faceId);
       final todayVisits = visits.where((visit) {
         final entryTime = visit['entryTime'] as DateTime?;
         return entryTime != null &&
@@ -229,10 +275,11 @@ class UIStateController with ChangeNotifier {
         presentFaces.add(face);
 
         // Track if this present face was an expected face
-        if (uniqueExpectedFaceIds.contains(face['id'])) {
-          uniquePresentExpectedFaceIds.add(face['id']);
+        if (validExpectedFaceIds.contains(faceId)) {
+          uniquePresentExpectedFaceIds.add(faceId);
         }
-      } else if (_expectedAttendees.contains(face['id'])) {
+      } else if (validExpectedFaceIds.contains(faceId)) {
+        // Only add to absent faces if it's a valid expected attendee
         absentFaces.add(face);
       }
     }
@@ -241,8 +288,8 @@ class UIStateController with ChangeNotifier {
     presentFaces.sort((a, b) =>
         (a['arrivalTime'] as DateTime).compareTo(b['arrivalTime'] as DateTime));
 
-    // Calculate attendance based on unique faces
-    final uniqueExpectedCount = uniqueExpectedFaceIds.length;
+    // Calculate attendance based on unique faces - using only valid expected attendees
+    final uniqueExpectedCount = validExpectedFaceIds.length;
     final uniquePresentCount = uniquePresentExpectedFaceIds.length;
     final attendanceRate = uniqueExpectedCount > 0
         ? (uniquePresentCount / uniqueExpectedCount * 100).toStringAsFixed(1)
@@ -338,11 +385,26 @@ class UIStateController with ChangeNotifier {
     }
   }
 
+  // Update the name of a captured face
+  void updateCapturedFaceName(String faceId, String name) {
+    for (var face in _cameraManager.capturedFaces) {
+      if (face.faceId == faceId) {
+        face.name = name;
+      }
+    }
+    notifyListeners();
+  }
+
+  // Expose the visit stream to widgets
+  Stream<List<ActiveVisit>> get activeVisitsStream =>
+      _visitTrackingService.activeVisitsStream;
+
   @override
   void dispose() {
     _inactiveVisitsTimer?.cancel();
     _cameraManager.dispose();
     _faceManagementService.dispose();
+    _visitTrackingService.dispose();
     stop();
     super.dispose();
   }

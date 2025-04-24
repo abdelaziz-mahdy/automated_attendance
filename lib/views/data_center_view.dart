@@ -1,10 +1,11 @@
 // lib/views/data_center_view.dart
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/views/data_center_pages/active_providers_grid.dart';
+import 'package:automated_attendance/views/data_center_pages/active_visits_page.dart';
 import 'package:automated_attendance/views/data_center_pages/captured_faces_grid.dart';
 import 'package:automated_attendance/views/data_center_pages/face_analytics_page.dart';
 import 'package:automated_attendance/views/data_center_pages/recognized_people_list.dart';
-import 'package:automated_attendance/views/data_center_pages/attendance_tracker_page.dart'; // Add this import
+import 'package:automated_attendance/views/data_center_pages/attendance_tracker_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -66,11 +67,16 @@ class _DataCenterViewState extends State<DataCenterView> {
                             selectedIcon: Icon(Icons.analytics),
                             label: Text('Analytics'),
                           ),
-                          // Add the new attendance navigation item
                           NavigationRailDestination(
                             icon: Icon(Icons.event_note_outlined),
                             selectedIcon: Icon(Icons.event_note),
                             label: Text('Attendance'),
+                          ),
+                          // Add the new active visits navigation item
+                          NavigationRailDestination(
+                            icon: Icon(Icons.people_alt_outlined),
+                            selectedIcon: Icon(Icons.people_alt),
+                            label: Text('Active Visits'),
                           ),
                         ],
                         trailing: Expanded(
@@ -215,7 +221,9 @@ class _DataCenterViewState extends State<DataCenterView> {
       case 3:
         return const FaceAnalyticsPage();
       case 4:
-        return const AttendanceTrackerPage(); // Add the new attendance page
+        return const AttendanceTrackerPage();
+      case 5:
+        return const ActiveVisitsPage(); // Add the new active visits page
       default:
         return const Center(child: Text("Unknown view"));
     }

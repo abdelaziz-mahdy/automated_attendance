@@ -120,10 +120,12 @@ class FaceManagementService {
 
   /// Process a newly detected face and determine if it matches an existing face
   /// or if it's a new face that should be tracked
-  Future<void> processFace(List<double> features, String providerAddress,
-      Uint8List? faceThumbnail) async {
+  /// Returns a map with recognition results or null if processing failed
+  Future<Map<String, dynamic>?> processFace(List<double> features,
+      String providerAddress, Uint8List? faceThumbnail) async {
     bool isKnownFace = false;
     String? matchedFaceId;
+    String? personName;
     final now = DateTime.now();
 
     // Step 1: Match against existing faces in memory
@@ -154,6 +156,7 @@ class FaceManagementService {
       if (isSimilar) {
         isKnownFace = true;
         matchedFaceId = trackedFace.id;
+        personName = trackedFace.name; // Get the person's name
 
         try {
           // Update database first (source of truth)
@@ -163,8 +166,7 @@ class FaceManagementService {
           // Then refresh from database to ensure consistency
           await _refreshFaceFromDatabase(trackedFace.id);
 
-          // Handle visit tracking
-          await _handleFaceVisit(trackedFace.id, providerAddress, now);
+          // Visit handling moved to separate service
         } catch (e) {
           debugPrint('Error updating recognized face: $e');
         }
@@ -193,11 +195,13 @@ class FaceManagementService {
         // Save to database first (source of truth)
         await _facesRepository.saveTrackedFace(newTrackedFace);
 
-        // Create a new visit record
-        await _handleFaceVisit(newFaceId, providerAddress, now);
+        // Visit handling moved to separate service
 
         // Refresh from database to ensure consistency
         await _refreshFaceFromDatabase(newFaceId);
+
+        // Set the returned values
+        matchedFaceId = newFaceId;
       } catch (e) {
         debugPrint('Error creating new tracked face: $e');
       }
@@ -205,76 +209,18 @@ class FaceManagementService {
 
     // Notify listeners after all operations are complete
     _notifyStateChanged();
+
+    // Return the recognition results
+    return matchedFaceId != null
+        ? {
+            'faceId': matchedFaceId,
+            'isKnown': isKnownFace,
+            'name': personName ?? "",
+          }
+        : null;
   }
 
-  // Handle visit tracking for a face
-  Future<void> _handleFaceVisit(
-      String faceId, String providerAddress, DateTime timestamp) async {
-    try {
-      // If there's no active visit for this face, create one
-      if (!_activeVisits.containsKey(faceId)) {
-        // Create a new visit
-        final visitId = "visit_${_uuid.v4()}";
-        await _facesRepository.createVisit(
-            id: visitId,
-            faceId: faceId,
-            providerId: providerAddress,
-            entryTime: timestamp);
-        _activeVisits[faceId] = visitId;
-      } else {
-        // Otherwise update the last seen time of the existing visit
-        await _facesRepository.updateVisitLastSeen(
-            _activeVisits[faceId]!, timestamp);
-      }
-    } catch (e) {
-      debugPrint('Error handling visit for face $faceId: $e');
-    }
-  }
-
-  // Close a visit for a specific face
-  Future<void> _closeVisit(String faceId, DateTime exitTime) async {
-    final visitId = _activeVisits[faceId];
-    if (visitId != null) {
-      await _facesRepository.updateVisitExit(visitId, exitTime);
-      _activeVisits.remove(faceId);
-    }
-  }
-
-  // Close all active visits in the database
-  Future<void> closeAllActiveVisits() async {
-    try {
-      final now = DateTime.now();
-      for (var entry in _activeVisits.entries) {
-        await _facesRepository.updateVisitExit(entry.value, now);
-      }
-      _activeVisits.clear();
-    } catch (e) {
-      debugPrint('Error closing active visits: $e');
-    }
-  }
-
-  // Close visits for faces not seen in the last timeoutMinutes minutes
-  Future<void> cleanupInactiveVisits(int timeoutMinutes) async {
-    final now = DateTime.now();
-    final List<String> facesToClose = [];
-
-    for (var entry in trackedFaces.entries) {
-      final face = entry.value;
-      if (face.lastSeen != null &&
-          _activeVisits.containsKey(face.id) &&
-          now.difference(face.lastSeen!).inMinutes > timeoutMinutes) {
-        facesToClose.add(face.id);
-      }
-    }
-
-    for (var faceId in facesToClose) {
-      await _closeVisit(faceId, now);
-    }
-
-    if (facesToClose.isNotEmpty) {
-      _notifyStateChanged();
-    }
-  }
+  // Remove other visit-related methods (moved to VisitTrackingService)
 
   // Update face name - updated to use DB as source of truth
   Future<void> updateTrackedFaceName(String faceId, String newName) async {
@@ -623,6 +569,94 @@ class FaceManagementService {
     } catch (e) {
       debugPrint('Error importing face: $e');
       return false;
+    }
+  }
+
+  // Get active visits with details
+  Future<List<Map<String, dynamic>>> getActiveVisits() async {
+    await ensureDataLoaded();
+
+    List<Map<String, dynamic>> result = [];
+
+    for (var entry in _activeVisits.entries) {
+      final faceId = entry.key;
+      final visitId = entry.value;
+
+      // Get the visit details from the database
+      final visitDetails = await _facesRepository.getVisitDetails(visitId);
+      if (visitDetails != null && visitDetails.durationSeconds == null) {
+        // Only include truly active visits (durationSeconds is null)
+        // Get the face details
+        final face = trackedFaces[faceId];
+
+        // Add to result with face and visit details
+        result.add({
+          'visitId': visitId,
+          'faceId': faceId,
+          'person': face,
+          'entryTime': visitDetails.entryTime,
+          'lastSeen': visitDetails.exitTime, // This is used as last seen time
+          'cameraId': visitDetails.providerId,
+          'cameraName': visitDetails.providerId,
+        });
+      }
+    }
+
+    // Sort by entry time, most recent first
+    result.sort((a, b) =>
+        (b['entryTime'] as DateTime).compareTo(a['entryTime'] as DateTime));
+
+    return result;
+  }
+
+  // Close a visit for a specific face
+  Future<void> _closeVisit(String faceId, DateTime exitTime) async {
+    final visitId = _activeVisits[faceId];
+    if (visitId != null) {
+      await _facesRepository.updateVisitExit(visitId, exitTime);
+      _activeVisits.remove(faceId);
+    }
+  }
+
+  // Close all active visits in the database
+  Future<void> closeAllActiveVisits() async {
+    try {
+      final now = DateTime.now();
+      for (var entry in _activeVisits.entries) {
+        await _facesRepository.updateVisitExit(entry.value, now);
+      }
+      _activeVisits.clear();
+    } catch (e) {
+      debugPrint('Error closing active visits: $e');
+    }
+  }
+
+  // Close visits for faces not seen in the last timeoutMinutes minutes (or seconds if useSeconds is true)
+  Future<void> cleanupInactiveVisits(int timeout,
+      {bool useSeconds = false}) async {
+    final now = DateTime.now();
+    final List<String> facesToClose = [];
+
+    for (var entry in trackedFaces.entries) {
+      final face = entry.value;
+      if (face.lastSeen != null && _activeVisits.containsKey(face.id)) {
+        final Duration inactiveTime = now.difference(face.lastSeen!);
+        final bool isInactive = useSeconds
+            ? inactiveTime.inSeconds > timeout
+            : inactiveTime.inMinutes > timeout;
+
+        if (isInactive) {
+          facesToClose.add(face.id);
+        }
+      }
+    }
+
+    for (var faceId in facesToClose) {
+      await _closeVisit(faceId, now);
+    }
+
+    if (facesToClose.isNotEmpty) {
+      _notifyStateChanged();
     }
   }
 

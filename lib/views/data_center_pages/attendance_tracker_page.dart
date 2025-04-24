@@ -6,6 +6,9 @@ import 'dart:async';
 import 'package:automated_attendance/controllers/ui_state_controller.dart';
 import 'package:automated_attendance/widgets/dialogs/expected_attendees_dialog.dart';
 
+// Enum for categorizing arrivals - moved to top level
+enum ArrivalCategory { early, onTime, late }
+
 class AttendanceTrackerPage extends StatefulWidget {
   const AttendanceTrackerPage({super.key});
 
@@ -18,6 +21,14 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
   bool _isLoading = true;
   Map<String, dynamic> _attendanceData = {};
   Timer? _refreshTimer;
+  TimeOfDay _scheduleTime = const TimeOfDay(hour: 9, minute: 0); // Default 9:00 AM
+  int _earlyMinutes = 15; // Early is 15 minutes before schedule
+  int _lateMinutes = 5; // Late is 5 minutes after schedule
+  
+  // State to track counts in each category
+  int _earlyCount = 0;
+  int _onTimeCount = 0;
+  int _lateCount = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -25,11 +36,12 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _loadAttendanceData();
 
     // Setup periodic refresh
     _refreshTimer = Timer.periodic(
-      const Duration(minutes: 1),
+      const Duration(seconds: 1),
       (_) => _loadAttendanceData(),
     );
 
@@ -38,6 +50,17 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
       final controller = Provider.of<UIStateController>(context, listen: false);
       controller.onAttendanceUpdated = _loadAttendanceData;
     });
+  }
+  
+  // Load saved attendance settings
+  Future<void> _loadSettings() async {
+    // In a real app, these would be loaded from SharedPreferences
+    // For now, we'll use defaults defined in the class
+  }
+  
+  // Save attendance settings
+  Future<void> _saveSettings() async {
+    // In a real app, these would be saved to SharedPreferences
   }
 
   @override
@@ -62,12 +85,70 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
 
     final controller = Provider.of<UIStateController>(context, listen: false);
     final data = await controller.getTodayAttendance();
-
+    
     if (mounted) {
+      // Reset attendance category counts
+      _earlyCount = 0;
+      _onTimeCount = 0;
+      _lateCount = 0;
+      
+      // Process present attendees to categorize by arrival time
+      final presentList = data['present'] as List<Map<String, dynamic>>;
+      
+      // Categorize each present person based on arrival time
+      for (var person in presentList) {
+        final arrivalTime = person['arrivalTime'] as DateTime;
+        final category = _categorizeArrival(arrivalTime);
+        
+        // Increment the appropriate counter
+        switch (category) {
+          case ArrivalCategory.early:
+            _earlyCount++;
+            person['arrivalCategory'] = 'early';
+            break;
+          case ArrivalCategory.onTime:
+            _onTimeCount++;
+            person['arrivalCategory'] = 'on-time';
+            break;
+          case ArrivalCategory.late:
+            _lateCount++;
+            person['arrivalCategory'] = 'late';
+            break;
+        }
+      }
+      
+      // Sort present list by arrival time
+      presentList.sort((a, b) => (a['arrivalTime'] as DateTime).compareTo(b['arrivalTime'] as DateTime));
+      
       setState(() {
         _attendanceData = data;
         _isLoading = false;
       });
+    }
+  }
+  
+  // Categorize an arrival time based on schedule settings
+  ArrivalCategory _categorizeArrival(DateTime arrivalTime) {
+    // Convert schedule time to a DateTime for comparison
+    final now = DateTime.now();
+    final scheduleDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _scheduleTime.hour,
+      _scheduleTime.minute,
+    );
+    
+    // Calculate early and late thresholds
+    final earlyThreshold = scheduleDateTime.subtract(Duration(minutes: _earlyMinutes));
+    final lateThreshold = scheduleDateTime.add(Duration(minutes: _lateMinutes));
+    
+    if (arrivalTime.isBefore(earlyThreshold)) {
+      return ArrivalCategory.early;
+    } else if (arrivalTime.isAfter(lateThreshold)) {
+      return ArrivalCategory.late;
+    } else {
+      return ArrivalCategory.onTime;
     }
   }
 
@@ -86,9 +167,15 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
     final today = DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now());
     final present = _attendanceData['present'] as List<Map<String, dynamic>>;
     final absent = _attendanceData['absent'] as List<Map<String, dynamic>>;
-    final attendanceRate = _attendanceData['attendance_rate'] as String;
+    
+    // Fix the attendance rate calculation - use the values directly from the data
     final presentCount = _attendanceData['presentCount'] as int;
     final expectedCount = _attendanceData['expectedCount'] as int;
+    
+    // Calculate the actual attendance rate
+    final attendanceRate = expectedCount > 0 
+        ? (presentCount / expectedCount * 100).toStringAsFixed(1)
+        : '0.0';
 
     return RefreshIndicator(
       onRefresh: _loadAttendanceData,
@@ -99,13 +186,121 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(
-                today, attendanceRate.toString(), presentCount, expectedCount),
+                today, attendanceRate, presentCount, expectedCount),
+            const SizedBox(height: 16),
+            _buildScheduleSettings(),
             const SizedBox(height: 24),
-            _buildAttendanceSummaryCards(present.length, absent.length),
+            _buildAttendanceStatusCards(),
             const SizedBox(height: 24),
             _buildPresentSection(present),
             const SizedBox(height: 24),
             _buildAbsentSection(absent),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildScheduleSettings() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Schedule Settings',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    title: const Text('Schedule Time'),
+                    subtitle: Text(
+                      _scheduleTime.format(context),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.access_time),
+                      onPressed: () async {
+                        final TimeOfDay? newTime = await showTimePicker(
+                          context: context,
+                          initialTime: _scheduleTime,
+                        );
+                        if (newTime != null && mounted) {
+                          setState(() {
+                            _scheduleTime = newTime;
+                          });
+                          _saveSettings();
+                          _loadAttendanceData(); // Recategorize attendees
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Early: '),
+                          Expanded(
+                            child: Slider(
+                              min: 5,
+                              max: 60,
+                              divisions: 11,
+                              value: _earlyMinutes.toDouble(),
+                              label: '$_earlyMinutes min',
+                              onChanged: (value) {
+                                setState(() {
+                                  _earlyMinutes = value.round();
+                                });
+                                _saveSettings();
+                                _loadAttendanceData(); // Recategorize attendees
+                              },
+                            ),
+                          ),
+                          Text('$_earlyMinutes min'),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Text('Late: '),
+                          Expanded(
+                            child: Slider(
+                              min: 1,
+                              max: 30,
+                              divisions: 29,
+                              value: _lateMinutes.toDouble(),
+                              label: '$_lateMinutes min',
+                              onChanged: (value) {
+                                setState(() {
+                                  _lateMinutes = value.round();
+                                });
+                                _saveSettings();
+                                _loadAttendanceData(); // Recategorize attendees
+                              },
+                            ),
+                          ),
+                          Text('$_lateMinutes min'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -227,32 +422,56 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
     if (rate >= 0.5) return Colors.orange;
     return Colors.red;
   }
-
-  Widget _buildAttendanceSummaryCards(int presentCount, int absentCount) {
-    return Row(
+  
+  Widget _buildAttendanceStatusCards() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _buildSummaryCard(
-            'Present',
-            presentCount.toString(),
-            Icons.check_circle,
-            Colors.green,
+        const Padding(
+          padding: EdgeInsets.only(left: 8, bottom: 8),
+          child: Text(
+            'Attendance Status',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildSummaryCard(
-            'Absent',
-            absentCount.toString(),
-            Icons.cancel,
-            Colors.red,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatusCard(
+                'Early',
+                _earlyCount.toString(),
+                Icons.arrow_upward,
+                Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildStatusCard(
+                'On Time',
+                _onTimeCount.toString(),
+                Icons.check_circle,
+                Colors.green,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildStatusCard(
+                'Late',
+                _lateCount.toString(),
+                Icons.warning,
+                Colors.orange,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildSummaryCard(
+  Widget _buildStatusCard(
       String title, String count, IconData icon, Color color) {
     return Card(
       elevation: 2,
@@ -261,17 +480,17 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 16),
+              style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 4),
             Text(
               count,
               style: const TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -314,6 +533,31 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
                     final person = present[index];
                     final arrivalTime = DateFormat('h:mm a')
                         .format(person['arrivalTime'] as DateTime);
+                    final category = person['arrivalCategory'] as String? ?? 'unknown';
+                    
+                    Color statusColor;
+                    IconData statusIcon;
+                    
+                    // Set icon and color based on arrival category
+                    switch (category) {
+                      case 'early':
+                        statusColor = Colors.blue;
+                        statusIcon = Icons.arrow_upward;
+                        break;
+                      case 'on-time':
+                        statusColor = Colors.green;
+                        statusIcon = Icons.check_circle;
+                        break;
+                      case 'late':
+                        statusColor = Colors.orange;
+                        statusIcon = Icons.warning;
+                        break;
+                      default:
+                        statusColor = Colors.grey;
+                        statusIcon = Icons.help_outline;
+                        break;
+                    }
+                    
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundImage: person['thumbnail'] != null
@@ -329,13 +573,13 @@ class _AttendanceTrackerPageState extends State<AttendanceTrackerPage>
                       ),
                       subtitle: Row(
                         children: [
-                          const Icon(
-                            Icons.access_time,
+                          Icon(
+                            statusIcon,
                             size: 14,
-                            color: Colors.green,
+                            color: statusColor,
                           ),
                           const SizedBox(width: 4),
-                          Text('Arrived at $arrivalTime'),
+                          Text('Arrived at $arrivalTime (${category.toUpperCase()})'),
                         ],
                       ),
                       trailing: _buildAttendanceActions(person),
