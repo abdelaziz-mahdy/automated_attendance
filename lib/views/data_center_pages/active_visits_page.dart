@@ -17,6 +17,11 @@ class ActiveVisitsPage extends StatefulWidget {
 
 class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
   final _dateFormat = DateFormat('MMM d, yyyy • h:mm a');
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,12 +29,7 @@ class _ActiveVisitsPageState extends State<ActiveVisitsPage> {
     return StreamBuilder<List<ActiveVisit>>(
       stream: Provider.of<UIStateController>(context).activeVisitsStream,
       builder: (context, snapshot) {
-        // Show loading indicator while waiting for first data
-        if (!snapshot.hasData && !snapshot.hasError) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+
 
         // Show error message if stream has error
         if (snapshot.hasError) {
